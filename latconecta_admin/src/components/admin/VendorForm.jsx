@@ -1,5 +1,5 @@
 /**
- * VendorForm Component - Bitel Admin
+ * VendorForm Component - Latconecta Admin
  * Formulario para crear y editar vendors
  * Fecha: 2025-12-12
  */

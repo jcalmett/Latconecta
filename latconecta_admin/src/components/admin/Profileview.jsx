@@ -32,9 +32,9 @@ const ProfileView = ({
       const countryCode = user?.user_phone_country_code || "";
       const phoneNumber = user?.user_phone_number || "";
       const fullPhone = countryCode && phoneNumber ? `${countryCode}${phoneNumber}` : "";
-      
+
       setPhoneValue(fullPhone);
-      
+
       setFormData({
         user_name: user?.name || "",
         user_email: user?.email || "",
@@ -64,11 +64,11 @@ const ProfileView = ({
   // Manejar cambio de teléfono
   const handlePhoneChange = (value, country) => {
     setPhoneValue(value);
-    
+
     // Extraer código de país y número
     const countryCode = `+${country.dialCode}`;
     const phoneNumber = value.substring(country.dialCode.length);
-    
+
     setFormData({
       ...formData,
       user_phone_country_code: countryCode,
@@ -126,7 +126,7 @@ const ProfileView = ({
         user_phone_country_code: formData.user_phone_country_code,
         user_phone_number: formData.user_phone_number
       };
-      localStorage.setItem('bitel_user', JSON.stringify(updatedUser));
+      localStorage.setItem('latconecta_user', JSON.stringify(updatedUser));
 
       setTimeout(() => setUpdateMessage(""), 3000);
     } catch (error) {
@@ -188,7 +188,7 @@ const ProfileView = ({
       setTimeout(() => setUpdateMessage(""), 3000);
     } catch (error) {
       console.error("Error al actualizar contraseña:", error);
-      
+
       // Manejar errores específicos del backend
       let message = "✗ Error al actualizar la contraseña";
       if (error.response?.data?.detail) {
@@ -198,7 +198,7 @@ const ProfileView = ({
       } else if (error.message) {
         message = `✗ ${error.message}`;
       }
-      
+
       setUpdateMessage(message);
       if (showNotification) showNotification(message, "error");
       setTimeout(() => setUpdateMessage(""), 3000);

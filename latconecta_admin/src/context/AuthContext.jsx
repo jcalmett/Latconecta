@@ -47,7 +47,7 @@ export const AuthProvider = ({ children }) => {
   const updateUser = (userData) => {
     const updatedUser = { ...user, ...userData };
     setUser(updatedUser);
-    localStorage.setItem('bitel_user', JSON.stringify(updatedUser));
+    localStorage.setItem('latconecta_user', JSON.stringify(updatedUser));
   };
 
   const value = {

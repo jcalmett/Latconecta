@@ -266,7 +266,7 @@ const VendorProductForm = ({ product, onClose, onSuccess, vendors }) => {
                   value={formData.vp_code}
                   onChange={handleChange}
                   disabled={!!product}
-                  placeholder="BITEL_20_PEN, topup-20, etc."
+                  placeholder="ENTEL_20_PEN, topup-20, etc."
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.vp_code ? 'border-red-500' : 'border-gray-300'
                   } ${product ? 'bg-gray-100 cursor-not-allowed' : ''}`}
@@ -289,7 +289,7 @@ const VendorProductForm = ({ product, onClose, onSuccess, vendors }) => {
                   name="vp_name"
                   value={formData.vp_name}
                   onChange={handleChange}
-                  placeholder="Recarga Bitel 20 PEN, TopUp 20 soles, etc."
+                  placeholder="Recarga ENTEL 20 PEN, TopUp 20 soles, etc."
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.vp_name ? 'border-red-500' : 'border-gray-300'
                   }`}
@@ -309,7 +309,7 @@ const VendorProductForm = ({ product, onClose, onSuccess, vendors }) => {
                   name="vp_skuid"
                   value={formData.vp_skuid}
                   onChange={handleChange}
-                  placeholder="SKU_BITEL_20, sku-001, etc."
+                  placeholder="SKU_CLARO_20, sku-001, etc."
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.vp_skuid ? 'border-red-500' : 'border-gray-300'
                   }`}
@@ -353,11 +353,11 @@ const VendorProductForm = ({ product, onClose, onSuccess, vendors }) => {
                   name="vp_operator"
                   value={formData.vp_operator}
                   onChange={handleChange}
-                  placeholder="Bitel, bitel, CLARO, movistar, etc."
+                  placeholder="Claro, Entel, movistar, etc."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Común: Bitel, Claro, Movistar, Entel, etc.
+                  Común: Claro, Movistar, Entel, etc.
                 </p>
               </div>
 
@@ -656,30 +656,3 @@ const VendorProductForm = ({ product, onClose, onSuccess, vendors }) => {
 };
 
 export default VendorProductForm;
-
-
-// =============================================================================
-// ✅ CAMBIOS REALIZADOS:
-// =============================================================================
-// 1. CAMPOS DE TEXTO LIBRE (sin selects):
-//    - vendor_code: Input text (bloqueado en edición)
-//    - vp_code: Input text (bloqueado en edición)
-//    - vp_country: Input text con sugerencias
-//    - vp_operator: Input text con sugerencias
-//    - vp_product_type: Input text con sugerencias
-//    - vp_currency: Input text con sugerencias
-//    - vp_amount_type: Input text (F/fixed, R/range, V/variable)
-//
-// 2. REGLAS DE ACTUALIZACIÓN:
-//    - vendor_code: BLOQUEADO en edición (disabled=true)
-//    - vp_code: BLOQUEADO en edición (disabled=true)
-//    - Alerta visual explicando que no se pueden cambiar
-//
-// 3. INFO BOX:
-//    - Relación Products ↔ Vendor_Products documentada
-//    - Campos de texto libre explicados
-//    - Regla de edición bloqueada explicada
-//
-// INSTALACIÓN:
-// Reemplazar: bitel_admin/src/components/admin/VendorProductForm.jsx
-// =============================================================================

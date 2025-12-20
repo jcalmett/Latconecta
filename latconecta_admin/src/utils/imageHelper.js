@@ -1,13 +1,13 @@
 /**
- * SISTEMA DE IMAGENES FALLBACK - BITEL
- * =====================================
- * 
+ * SISTEMA DE IMAGENES FALLBACK - LATCONECTA
+ * ==========================================
+ *
  * Este modulo maneja las imagenes fallback para todas las entidades del sistema.
  * Las imagenes fallback estan ubicadas en: public/assets/
- * 
+ *
  * USO:
  * import { getImageUrl, FALLBACK_IMAGES } from '../utils/imageHelper';
- * 
+ *
  * const imageUrl = getImageUrl(entity.photo_url, 'product');
  */
 
@@ -24,7 +24,7 @@ export const FALLBACK_IMAGES = {
 
 /**
  * Obtiene la URL de imagen correcta, usando fallback si es necesario
- * 
+ *
  * @param {string|null|undefined} imageUrl - URL de la imagen del backend o null
  * @param {string} entityType - Tipo de entidad: 'company', 'country', 'product', 'service', 'user', 'logo'
  * @returns {string} URL de la imagen (original o fallback)
@@ -38,7 +38,7 @@ export const getImageUrl = (imageUrl, entityType = 'default') => {
 
 /**
  * Obtiene la URL de imagen con prefijo del backend si es necesario
- * 
+ *
  * @param {string|null|undefined} imageUrl - URL de la imagen del backend
  * @param {string} entityType - Tipo de entidad
  * @param {string} backendUrl - URL base del backend
@@ -48,26 +48,26 @@ export const getImageUrlWithBackend = (imageUrl, entityType = 'default', backend
   if (!imageUrl || imageUrl.trim() === '') {
     return FALLBACK_IMAGES[entityType] || FALLBACK_IMAGES.default;
   }
-  
+
   if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
     return imageUrl;
   }
-  
+
   if (imageUrl.startsWith('/assets/')) {
     return imageUrl;
   }
-  
+
   if (imageUrl.startsWith('/uploads/')) {
     return `${backendUrl}${imageUrl}`;
   }
-  
+
   return `${backendUrl}${imageUrl}`;
 };
 
 /**
  * Hook para manejar errores de carga de imagenes
  * Retorna una funcion para usar en el atributo onError de img
- * 
+ *
  * @param {string} entityType - Tipo de entidad
  * @returns {function} Funcion onError
  */
@@ -80,7 +80,7 @@ export const useImageFallback = (entityType = 'default') => {
 
 /**
  * Valida si una URL de imagen es valida
- * 
+ *
  * @param {string} imageUrl - URL a validar
  * @returns {boolean} true si es valida, false si no
  */
@@ -88,16 +88,16 @@ export const isValidImageUrl = (imageUrl) => {
   if (!imageUrl || typeof imageUrl !== 'string') {
     return false;
   }
-  
+
   const url = imageUrl.trim();
-  
+
   if (url === '') {
     return false;
   }
-  
+
   const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
   const hasValidExtension = validExtensions.some(ext => url.toLowerCase().endsWith(ext));
-  
+
   return hasValidExtension;
 };
 
@@ -128,7 +128,7 @@ export const ENTITY_PHOTO_FIELDS = {
 
 /**
  * Obtiene la foto principal de una entidad
- * 
+ *
  * @param {object} entity - Objeto de la entidad
  * @param {string} entityType - Tipo de entidad
  * @returns {string} URL de la foto principal
@@ -137,13 +137,13 @@ export const getEntityMainPhoto = (entity, entityType) => {
   if (!entity) {
     return FALLBACK_IMAGES[entityType] || FALLBACK_IMAGES.default;
   }
-  
+
   const photoField = ENTITY_PHOTO_FIELDS[entityType]?.main;
-  
+
   if (!photoField) {
     return FALLBACK_IMAGES[entityType] || FALLBACK_IMAGES.default;
   }
-  
+
   const photoUrl = entity[photoField];
   return getImageUrl(photoUrl, entityType);
 };

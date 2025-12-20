@@ -1,7 +1,7 @@
 ﻿/**
- * Auth Service - Bitel Admin
+ * Auth Service - Latconecta Admin
  * Versión: CORREGIDA CON TRAILING SLASHES
- * Fecha: 2025-12-12
+ * Fecha: 2025-12-19
  *
  * Servicio de autenticación con logs extensivos para debugging
  * ✅ TODOS LOS ENDPOINTS CON TRAILING SLASH
@@ -83,15 +83,15 @@ const authService = {
       console.log(user);
 
       // Guardar en localStorage
-      console.log('💾 Guardando token en localStorage con key: "bitel_token"');
-      localStorage.setItem('bitel_token', access_token);
+      console.log('💾 Guardando token en localStorage con key: "latconecta_token"');
+      localStorage.setItem('latconecta_token', access_token);
 
-      console.log('💾 Guardando usuario en localStorage con key: "bitel_user"');
-      localStorage.setItem('bitel_user', JSON.stringify(user));
+      console.log('💾 Guardando usuario en localStorage con key: "latconecta_user"');
+      localStorage.setItem('latconecta_user', JSON.stringify(user));
 
       // Verificar que se guardaron correctamente
-      const tokenGuardado = localStorage.getItem('bitel_token');
-      const userGuardado = localStorage.getItem('bitel_user');
+      const tokenGuardado = localStorage.getItem('latconecta_token');
+      const userGuardado = localStorage.getItem('latconecta_user');
 
       console.log('═══════════════════════════════════════════');
       console.log('✅ VERIFICACIÓN POST-GUARDADO:');
@@ -130,8 +130,8 @@ const authService = {
    */
   logout: () => {
     console.log('🔵 Ejecutando logout...');
-    localStorage.removeItem('bitel_token');
-    localStorage.removeItem('bitel_user');
+    localStorage.removeItem('latconecta_token');
+    localStorage.removeItem('latconecta_user');
     console.log('✅ Token y usuario eliminados de localStorage');
   },
 
@@ -140,7 +140,7 @@ const authService = {
    * @returns {Object|null} Usuario actual o null
    */
   getCurrentUser: () => {
-    const userStr = localStorage.getItem('bitel_user');
+    const userStr = localStorage.getItem('latconecta_user');
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
@@ -160,7 +160,7 @@ const authService = {
    * @returns {string|null} Token o null
    */
   getToken: () => {
-    const token = localStorage.getItem('bitel_token');
+    const token = localStorage.getItem('latconecta_token');
     if (token) {
       console.log('🔍 Token desde localStorage:', token ? `${token.substring(0, 20)}...` : 'NO EXISTE');
     } else {
@@ -174,7 +174,7 @@ const authService = {
    * @returns {boolean} True si hay token
    */
   isAuthenticated: () => {
-    const hasToken = !!localStorage.getItem('bitel_token');
+    const hasToken = !!localStorage.getItem('latconecta_token');
     console.log('🔍 ¿Usuario autenticado?', hasToken ? 'SÍ' : 'NO');
     return hasToken;
   },
@@ -229,7 +229,7 @@ const authService = {
       const currentUser = authService.getCurrentUser();
       const updatedUser = { ...currentUser, ...response.data };
 
-      localStorage.setItem('bitel_user', JSON.stringify(updatedUser));
+      localStorage.setItem('latconecta_user', JSON.stringify(updatedUser));
       console.log('✅ Perfil actualizado:', updatedUser);
 
       return updatedUser;

@@ -1,5 +1,5 @@
 /**
- * VendorsTab Component - Bitel Admin
+ * VendorsTab Component - Latconecta Admin
  * Gestión de vendors con balance y conexiones
  * Fecha: 2025-12-12
  */
@@ -119,7 +119,7 @@ const VendorsTab = () => {
     if (!vendor.vendor_balance_amount) {
       return <span className="px-2 py-1 text-xs rounded bg-gray-100 text-gray-600">Sin balance</span>;
     }
-    
+
     const amount = parseFloat(vendor.vendor_balance_amount);
     if (amount < 1000) {
       return <span className="px-2 py-1 text-xs rounded bg-red-100 text-red-800">⚠️ Bajo</span>;
@@ -143,44 +143,20 @@ const VendorsTab = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Gestión de Vendors</h2>
-          <p className="text-gray-600">Administra proveedores y sus balances</p>
+          <h2 className="text-2xl font-bold text-[#008C96]">
+            Gestión de Vendors
+          </h2>
         </div>
         <button
           onClick={handleCreate}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+          className="bg-[#008C96] hover:bg-[#006B74] text-white px-6 py-2 rounded-lg font-medium transition-colors"
         >
           + Nuevo Vendor
         </button>
       </div>
 
-      {/* Balance Summary */}
-      {balanceSummary && (
-        <div className="bg-gradient-to-r from-blue-50 to-yellow-50 rounded-lg p-6 border border-blue-200">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Resumen de Balances</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <div className="text-sm text-gray-600">Total Vendors</div>
-              <div className="text-2xl font-bold text-blue-600">{balanceSummary.total_vendors}</div>
-            </div>
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <div className="text-sm text-gray-600">Con Balance</div>
-              <div className="text-2xl font-bold text-green-600">{balanceSummary.vendors_with_balance}</div>
-            </div>
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <div className="text-sm text-gray-600">Saldo Bajo</div>
-              <div className="text-2xl font-bold text-red-600">{balanceSummary.vendors_low_balance}</div>
-            </div>
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <div className="text-sm text-gray-600">Desactualizado</div>
-              <div className="text-2xl font-bold text-orange-600">{balanceSummary.vendors_stale_balance}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
+      <div className="bg-white rounded-lg shadow-sm p-4 border">
         <div className="flex gap-4 items-center">
           <label className="text-sm font-medium text-gray-700">Filtrar por estado:</label>
           <select
@@ -210,30 +186,30 @@ const VendorsTab = () => {
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-[#008C96] text-white">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Código
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Nombre
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Tipo
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Balance
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Estado
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Estado Balance
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Última Actualización
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">
                   Acciones
                 </th>
               </tr>
@@ -271,7 +247,7 @@ const VendorsTab = () => {
                     {getBalanceStatusBadge(vendor)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {vendor.vendor_balance_last_update 
+                    {vendor.vendor_balance_last_update
                       ? new Date(vendor.vendor_balance_last_update).toLocaleString()
                       : 'Nunca'
                     }
@@ -376,7 +352,7 @@ const BalanceModal = ({ vendor, onClose, onUpdate }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!amount || parseFloat(amount) < 0) {
       alert('Ingrese un monto válido');
       return;
@@ -405,7 +381,7 @@ const BalanceModal = ({ vendor, onClose, onUpdate }) => {
           <h3 className="text-xl font-bold">💰 Actualizar Balance</h3>
           <p className="text-green-100 text-sm mt-1">{vendor.vendor_name}</p>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

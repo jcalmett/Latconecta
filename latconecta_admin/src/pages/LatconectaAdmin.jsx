@@ -8,6 +8,7 @@ import servicesService from '../services/servicesService';
 import usersService from '../services/usersService';
 import companiesService from '../services/companiesService';
 import countriesService from '../services/countriesService';
+import latconectaService from '../services/latconectaService';
 import { getImageUrl, FALLBACK_IMAGES } from '../utils/imageHelper';
 import ProductsTab from '../components/admin/ProductsTab';
 import ServicesTab from '../components/admin/ServicesTab';
@@ -21,7 +22,7 @@ import VendorProductsTab from '../components/admin/VendorProductsTab';
 import LatconectaTab from '../components/admin/LatconectaTab';
 
 
-const BitelAdmin = () => {
+const LatconectaAdmin = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -168,6 +169,7 @@ const BitelAdmin = () => {
   // Estados de datos
   const [countries, setCountries] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [latconecta, setLatconecta] = useState(null);
   const [services, setServices] = useState([]);
   const [products, setProducts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -254,6 +256,16 @@ const BitelAdmin = () => {
     }
   }, [showNotification]);
 
+  const loadLatconecta = useCallback(async () => {
+    try {
+      const data = await latconectaService.get();
+      setLatconecta(data);
+    } catch (error) {
+      console.error('Error cargando Latconecta:', error);
+      showNotification('Error al cargar datos de Latconecta', 'error');
+    }
+  }, [showNotification]);
+
   const handleImageUpload = useCallback(async (e, callback, category = 'general') => {
     const file = e.target.files[0];
     if (!file) return;
@@ -305,6 +317,10 @@ const BitelAdmin = () => {
   useEffect(() => {
     loadCompanies();
   }, [loadCompanies]);
+
+  useEffect(() => {
+    loadLatconecta();
+  }, [loadLatconecta]);
 
   // Componentes UI
   const ConfirmDialog = () => {
@@ -369,8 +385,8 @@ const BitelAdmin = () => {
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-4">
               <img
-                src={getImageUrl(companies[0]?.company_logo, 'company')}
-                alt="Logo"
+                src={getImageUrl(latconecta?.latconecta_logo, 'companies')}
+                alt="Logo Latconecta"
                 onError={(e) => e.target.src = FALLBACK_IMAGES.company}
                 className="h-20 w-auto object-contain"
               />
@@ -421,43 +437,51 @@ const BitelAdmin = () => {
     <div className="bg-[#FFE709] text-gray-900 py-6 mt-12">
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          {/* COLUMNA 1: Logo + Lema 1 */}
           <div>
             <img
-              src={getImageUrl(companies[0]?.company_logo, 'company')}
-              alt="Logo"
+              src={getImageUrl(latconecta?.latconecta_logo, 'companies')}
+              alt="Logo Latconecta"
               onError={(e) => e.target.src = FALLBACK_IMAGES.company}
               className="h-12 w-auto object-contain mb-3"
             />
-            <p className="text-sm text-gray-800">
-              Plataforma de Servicios Digitales - Telefonía móvil para todos
+            <p className="text-sm text-gray-800 font-medium">
+              {latconecta?.latconecta_lema_1 || 'Conectando el futuro'}
             </p>
           </div>
 
+          {/* COLUMNA 2: Contacto */}
           <div>
             <h4 className="font-semibold mb-3 text-[#008C96]">Contacto</h4>
             <div className="space-y-2 text-sm">
-              <div className="flex items-center space-x-2">
-                <Mail size={16} />
-                <span>info@latconecta.com</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Phone size={16} />
-                <span>+51 999 999 999</span>
-              </div>
+              {latconecta?.latconecta_mail_comercial && (
+                <div className="flex items-center space-x-2">
+                  <Mail size={16} />
+                  <span>{latconecta.latconecta_mail_comercial}</span>
+                </div>
+              )}
+              {latconecta?.latconecta_mail_support && (
+                <div className="flex items-center space-x-2">
+                  <Mail size={16} />
+                  <span>{latconecta.latconecta_mail_support}</span>
+                </div>
+              )}
               <div className="flex items-center space-x-2">
                 <MapPin size={16} />
-                <span>Lima, Perú</span>
+                <span>Miami, FL, USA</span>
               </div>
             </div>
           </div>
 
+          {/* COLUMNA 3: Historia */}
           <div>
             <h4 className="font-semibold mb-3 text-[#008C96]">Historia</h4>
             <p className="text-sm text-gray-800">
-              Latconecta es líder en servicios de telecomunicaciones.
+              {latconecta?.latconecta_description || 'Plataforma de servicios digitales innovadora'}
             </p>
           </div>
 
+          {/* COLUMNA 4: Enlaces */}
           <div>
             <h4 className="font-semibold mb-3 text-[#008C96]">Enlaces</h4>
             <div className="space-y-2 text-sm">
@@ -474,7 +498,7 @@ const BitelAdmin = () => {
         </div>
 
         <div className="border-t border-gray-300 mt-6 pt-4 text-center text-sm text-gray-700">
-          © 2025 Latconecta. Todos los derechos reservados.
+          © 2025 {latconecta?.latconecta_name || 'Latconecta'}. Todos los derechos reservados.
         </div>
       </div>
     </div>
@@ -687,4 +711,4 @@ const BitelAdmin = () => {
   );
 };
 
-export default BitelAdmin;
+export default LatconectaAdmin;

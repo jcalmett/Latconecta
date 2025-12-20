@@ -3,28 +3,28 @@ import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import WelcomeView from './pages/WelcomeView';
-import BitelAdmin from './pages/BitelAdmin';
+import LatconectaAdmin from './pages/LatconectaAdmin';
 import { useState, useEffect } from 'react';
-import companiesService from './services/companiesService';
+import latconectaService from './services/latconectaService';
 
 function App() {
-  const [companyData, setCompanyData] = useState(null);
+  const [latconectaData, setLatconectaData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Cargar datos de la compañía
+  // Cargar datos de Latconecta
   useEffect(() => {
-    const loadCompany = async () => {
+    const loadLatconecta = async () => {
       try {
-        const data = await companiesService.getActive();
-        setCompanyData(data);
+        const data = await latconectaService.get();
+        setLatconectaData(data);
       } catch (error) {
-        console.error('Error cargando compañía:', error);
+        console.error('Error cargando Latconecta:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadCompany();
+    loadLatconecta();
   }, []);
 
   if (loading) {
@@ -44,9 +44,9 @@ function App() {
         <BrowserRouter>
           <Routes>
             {/* Ruta pública - Welcome */}
-            <Route 
-              path="/" 
-              element={<WelcomeView companyData={companyData} />} 
+            <Route
+              path="/"
+              element={<WelcomeView latconectaData={latconectaData} />}
             />
 
             {/* Ruta protegida - Admin Panel */}
@@ -54,7 +54,7 @@ function App() {
               path="/admin"
               element={
                 <ProtectedRoute requireAdmin>
-                  <BitelAdmin />
+                  <LatconectaAdmin />
                 </ProtectedRoute>
               }
             />

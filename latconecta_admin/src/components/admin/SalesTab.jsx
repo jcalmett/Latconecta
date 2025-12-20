@@ -1,5 +1,5 @@
 /**
- * SalesTab - Bitel Admin (CORREGIDO)
+ * SalesTab - Latconecta Admin (CORREGIDO)
  * Versión: 2.0
  * Correcciones:
  * - Inputs de filtros funcionan correctamente

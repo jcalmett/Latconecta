@@ -1,5 +1,5 @@
 /**
- * Purchases Service - Bitel Admin
+ * Purchases Service - Latconecta Admin
  * CORREGIDO: Agregados slashes finales en líneas 42 y 93
  */
 

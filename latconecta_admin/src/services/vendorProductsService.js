@@ -183,18 +183,3 @@ const vendorProductsService = {
 };
 
 export default vendorProductsService;
-
-
-// =============================================================================
-// ✅✅✅ CAMBIOS REALIZADOS EN FASE 3:
-// =============================================================================
-// LÍNEA 68-94: Agregado método getByKeys() para búsqueda por claves de relación
-//              - Parámetros: vendorCode, vpCode, vpSkuid
-//              - Endpoint: GET /vendor-products/by-keys/
-//              - Uso: Para obtener vendor_product asociado a un product
-//
-// INSTRUCCIONES DE INSTALACIÓN:
-// 1. Reemplazar archivo: bitel_admin/src/services/vendorProductsService.js
-// 2. Reiniciar dev server: npm run dev
-// 3. Verificar que no hay errores en consola
-// =============================================================================

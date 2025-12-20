@@ -97,7 +97,7 @@ const LoginForm = ({ onClose }) => {
               value={formData.email}
               onChange={handleChange}
               required
-              placeholder="admin@bitel.com.pe"
+              placeholder="admin@latconecta.com"
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#008C96] focus:border-[#008C96] transition-all"
               disabled={loading}
             />

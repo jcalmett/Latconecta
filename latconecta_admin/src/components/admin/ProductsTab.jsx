@@ -44,6 +44,7 @@ const ProductsTab = ({
   // Servicios y compañías filtrados para los selectores
   const [filteredServices, setFilteredServices] = useState([]);
   const [filteredCompanies, setFilteredCompanies] = useState([]);
+  const [filterStatus, setFilterStatus] = useState('');
 
   // ==================== CARGAR DATOS INICIALES ====================
   
@@ -326,6 +327,9 @@ const ProductsTab = ({
     if (filterCompany && product.company_id !== parseInt(filterCompany)) {
       return false;
     }
+    if (filterStatus && product.product_status !== filterStatus) {
+      return false;
+    }
     return true;
   });
 
@@ -389,7 +393,7 @@ const ProductsTab = ({
 
         {/* FILA 2: FILTROS JERÁRQUICOS EN CASCADA */}
         <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-[#FFE709]">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Filtro País */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -448,6 +452,23 @@ const ProductsTab = ({
                 ))}
               </select>
             </div>
+
+            {/* FiltroEstado */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                4. Estado:
+              </label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
+              >
+                <option value="">Todos los estados</option>
+                <option value="active">Activo</option>
+                <option value="inactive">Inactivo</option>
+              </select>
+            </div>
+
           </div>
 
           {/* Botón Limpiar Filtros */}
@@ -677,6 +698,9 @@ const ProductsTab = ({
                       ))}
                     </select>
                   </div>
+                  
+
+
                 </div>
               </div>
 
@@ -720,7 +744,7 @@ const ProductsTab = ({
                         })
                       }
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
-                      placeholder="Recarga Bitel"
+                      placeholder="Recarga Telefónica"
                       maxLength={100}
                       required
                     />
@@ -825,12 +849,12 @@ const ProductsTab = ({
                   </div>
                 </div>
 
-                {/* COLUMNA 2: DATOS BITEL + DATOS VENDOR (PARCIAL) */}
+                {/* COLUMNA 2: DATOS LATCONECTA + DATOS VENDOR (PARCIAL) */}
                 <div className="space-y-4">
-                  {/* SECCIÓN: DATOS BITEL */}
+                  {/* SECCIÓN: DATOS LATCONECTA */}
                   <div className="pb-2 border-b-2 border-[#FFE709]">
                     <h4 className="font-bold text-[#008C96] text-lg">
-                      Datos Bitel
+                      Datos Latconecta
                     </h4>
                   </div>
 
@@ -1092,12 +1116,12 @@ const ProductsTab = ({
                         })
                       }
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
-                      placeholder="Bitel"
+                      placeholder="Telefónica"
                       maxLength={50}
                       required
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Ejemplo: Bitel, Movistar, Claro
+                      Ejemplo: Entel, Movistar, Claro
                     </p>
                   </div>
 

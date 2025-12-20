@@ -1,5 +1,5 @@
 /**
- * Purchase Detail Modal - Bitel Admin
+ * Purchase Detail Modal - Latconecta Admin
  * Modal con 2 tabs para mostrar todos los detalles de una compra
  * Tab 1: Básicos + Estado + Delivery (Partes 1,2,3)
  * Tab 2: Vendor + Balance + Auditoría (Partes 4,5,6)

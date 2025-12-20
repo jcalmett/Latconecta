@@ -24,8 +24,8 @@ const CountriesTab = ({
   useEffect(() => {
     if (editingItem) {
       setFormData({
-        country_code: editingItem.country_code || "",
         country_name: editingItem.country_name || "",
+        country_code: editingItem.country_code || "",
         country_flag_photo: editingItem.country_flag_photo || "",
         country_photo: editingItem.country_photo || "",
         country_description: editingItem.country_description || "",
@@ -37,29 +37,27 @@ const CountriesTab = ({
 
   const handleSave = async () => {
     try {
-      if (!formData.country_code || !formData.country_name) {
+      if (!formData.country_name || !formData.country_code) {
         showNotification("Por favor complete los campos obligatorios", "error");
         return;
       }
 
-      // Validar código de país (2 o 3 caracteres)
       if (formData.country_code.length < 2 || formData.country_code.length > 3) {
-        showNotification("El código del país debe tener 2 o 3 caracteres", "error");
+        showNotification("El código debe tener 2-3 caracteres", "error");
         return;
       }
 
       const dataToSend = {
         ...formData,
-        country_code: formData.country_code.toUpperCase(),
         country_er_usd_pen: parseFloat(formData.country_er_usd_pen) || 3.75,
-        updated_by: user?.email || 'admin'
+        updated_by: user?.email || "admin",
       };
 
       if (editingItem) {
         await countriesService.update(editingItem.country_id, dataToSend);
         showNotification(`País "${formData.country_name}" actualizado`);
       } else {
-        dataToSend.created_by = user?.email || 'admin';
+        dataToSend.created_by = user?.email || "admin";
         await countriesService.create(dataToSend);
         showNotification(`País "${formData.country_name}" creado`);
       }
@@ -92,6 +90,10 @@ const CountriesTab = ({
     });
   };
 
+  // Calcular número de servicios y compañías (placeholder - necesita datos reales)
+  const getServicesCount = () => 0;
+  const getCompaniesCount = () => 0;
+
   return (
     <div>
       {loadingCountries && (
@@ -106,8 +108,8 @@ const CountriesTab = ({
         <button
           onClick={() => {
             setFormData({
-              country_code: "",
               country_name: "",
+              country_code: "",
               country_flag_photo: "",
               country_photo: "",
               country_description: "",
@@ -123,75 +125,92 @@ const CountriesTab = ({
         </button>
       </div>
 
-      {/* GRID DE PAÍSES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {countries.map((country) => (
-          <div
-            key={country.country_id}
-            className="bg-white rounded-lg shadow-md overflow-hidden border-t-4 border-[#FFE709] hover:shadow-lg transition-shadow"
-          >
-            {/* Bandera */}
-            <div className="relative h-32 bg-gray-100">
-              <img
-                src={getImageUrl(country.country_flag_photo, "country")}
-                alt={`Bandera ${country.country_name}`}
-                onError={(e) => (e.target.src = FALLBACK_IMAGES.country)}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute top-2 left-2 bg-white px-3 py-1 rounded-full font-bold text-[#008C96]">
-                {country.country_code}
-              </div>
-            </div>
-
-            <div className="p-6">
-              <h3 className="text-xl font-bold text-[#008C96] mb-2">
-                {country.country_name}
-              </h3>
-              <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                {country.country_description || "Sin descripción"}
-              </p>
-
-              {/* Tasa de Cambio */}
-              <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                <div className="text-xs text-gray-500">Tasa de Cambio USD/PEN</div>
-                <div className="text-lg font-bold text-[#008C96]">
-                  {parseFloat(country.country_er_usd_pen || 0).toFixed(2)}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    country.status === "active"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-red-100 text-red-700"
-                  }`}
-                >
-                  {country.status}
-                </span>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => {
-                      setEditingItem(country);
-                      setShowForm(true);
-                    }}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                    title="Editar"
-                  >
-                    <Edit2 size={18} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(country)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                    title="Eliminar"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
+      {/* TABLA DE PAÍSES */}
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-[#008C96] text-white">
+              <tr>
+                <th className="px-4 py-3 text-left">Código</th>
+                <th className="px-4 py-3 text-left">Bandera</th>
+                <th className="px-4 py-3 text-left">Nombre País</th>
+                <th className="px-4 py-3 text-right">Tipo Cambio</th>
+                <th className="px-4 py-3 text-center">Estado</th>
+                <th className="px-4 py-3 text-center">Nro Serv</th>
+                <th className="px-4 py-3 text-center">Nro Cías</th>
+                <th className="px-4 py-3 text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {countries.length === 0 ? (
+                <tr>
+                  <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                    {loadingCountries ? "Cargando..." : "No hay países registrados"}
+                  </td>
+                </tr>
+              ) : (
+                countries.map((country) => (
+                  <tr key={country.country_id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-mono text-sm font-semibold text-[#008C96]">
+                      {country.country_code}
+                    </td>
+                    <td className="px-4 py-3">
+                      <img
+                        src={getImageUrl(country.country_flag_photo, "country")}
+                        alt={`Bandera ${country.country_name}`}
+                        onError={(e) => (e.target.src = FALLBACK_IMAGES.country)}
+                        className="w-12 h-8 object-cover rounded border border-gray-200"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-gray-800">{country.country_name}</div>
+                      <div className="text-xs text-gray-500">{country.country_description}</div>
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-800">
+                      {parseFloat(country.country_er_usd_pen || 0).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                          country.status === "active"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {country.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm text-gray-600">
+                      {getServicesCount(country.country_id)}
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm text-gray-600">
+                      {getCompaniesCount(country.country_id)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center space-x-2">
+                        <button
+                          onClick={() => {
+                            setEditingItem(country);
+                            setShowForm(true);
+                          }}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(country)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* FORMULARIO MODAL */}
@@ -209,33 +228,8 @@ const CountriesTab = ({
 
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* COLUMNA 1 */}
+                {/* COLUMNA 1: DATOS */}
                 <div className="space-y-4">
-                  {/* Código País */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Código País (ISO) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.country_code}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          country_code: e.target.value.toUpperCase(),
-                        })
-                      }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
-                      placeholder="PER o PE"
-                      maxLength={3}
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      2 o 3 caracteres (PE, PER, MX, MEX, etc.)
-                    </p>
-                  </div>
-
-                  {/* Nombre País */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Nombre del País <span className="text-red-500">*</span>
@@ -253,7 +247,27 @@ const CountriesTab = ({
                     />
                   </div>
 
-                  {/* Descripción */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Código del País <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.country_code}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          country_code: e.target.value.toUpperCase(),
+                        })
+                      }
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
+                      placeholder="PE"
+                      maxLength={3}
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">2-3 caracteres (Ej: PE, PER)</p>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descripción
@@ -261,10 +275,7 @@ const CountriesTab = ({
                     <textarea
                       value={formData.country_description}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          country_description: e.target.value,
-                        })
+                        setFormData({ ...formData, country_description: e.target.value })
                       }
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       rows={3}
@@ -273,10 +284,9 @@ const CountriesTab = ({
                     />
                   </div>
 
-                  {/* Tasa de Cambio */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tasa de Cambio USD/PEN
+                      Tipo de Cambio USD
                     </label>
                     <input
                       type="number"
@@ -286,7 +296,7 @@ const CountriesTab = ({
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          country_er_usd_pen: e.target.value,
+                          country_er_usd_pen: parseFloat(e.target.value) || 0,
                         })
                       }
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
@@ -294,16 +304,13 @@ const CountriesTab = ({
                     />
                   </div>
 
-                  {/* Estado */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Estado
                     </label>
                     <select
                       value={formData.status}
-                      onChange={(e) =>
-                        setFormData({ ...formData, status: e.target.value })
-                      }
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                     >
                       <option value="active">Activo</option>
@@ -312,9 +319,8 @@ const CountriesTab = ({
                   </div>
                 </div>
 
-                {/* COLUMNA 2: FOTOS */}
+                {/* COLUMNA 2: IMÁGENES */}
                 <div className="space-y-4">
-                  {/* Bandera */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Bandera del País
@@ -341,7 +347,7 @@ const CountriesTab = ({
                       ) : (
                         <div className="flex flex-col items-center justify-center h-32 text-gray-400">
                           <Upload size={32} className="mb-2" />
-                          <p className="text-sm">Bandera del país</p>
+                          <p className="text-sm">Bandera (ratio 3:2)</p>
                         </div>
                       )}
                       <label className="mt-3 cursor-pointer bg-[#008C96] text-white px-4 py-2 rounded-lg hover:bg-[#006B74] flex items-center justify-center space-x-2 font-semibold">
@@ -354,10 +360,7 @@ const CountriesTab = ({
                             handleImageUpload(
                               e,
                               (url) => {
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  country_flag_photo: url,
-                                }));
+                                setFormData((prev) => ({ ...prev, country_flag_photo: url }));
                               },
                               "countries"
                             )
@@ -368,7 +371,6 @@ const CountriesTab = ({
                     </div>
                   </div>
 
-                  {/* Foto del País */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Foto del País
@@ -384,9 +386,7 @@ const CountriesTab = ({
                           />
                           <button
                             type="button"
-                            onClick={() =>
-                              setFormData({ ...formData, country_photo: "" })
-                            }
+                            onClick={() => setFormData({ ...formData, country_photo: "" })}
                             className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
                           >
                             <X size={16} />
@@ -394,7 +394,7 @@ const CountriesTab = ({
                         </div>
                       ) : (
                         <div className="flex flex-col items-center justify-center h-48 text-gray-400">
-                          <Upload size={48} className="mb-2" />
+                          <Upload size={32} className="mb-2" />
                           <p className="text-sm">Foto representativa</p>
                         </div>
                       )}
@@ -408,10 +408,7 @@ const CountriesTab = ({
                             handleImageUpload(
                               e,
                               (url) => {
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  country_photo: url,
-                                }));
+                                setFormData((prev) => ({ ...prev, country_photo: url }));
                               },
                               "countries"
                             )
@@ -425,7 +422,6 @@ const CountriesTab = ({
               </div>
             </div>
 
-            {/* BOTONES */}
             <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-end space-x-3">
               <button
                 onClick={resetForm}

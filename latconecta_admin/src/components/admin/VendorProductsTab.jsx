@@ -201,66 +201,19 @@ const VendorProductsTab = ({ userRole }) => {
       {/* Header con resumen */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">
-            📦 Productos de Vendors
+          <h2 className="text-2xl font-bold text-[#008C96]">
+            Gestión de Productos de Vendors
           </h2>
-          <p className="text-gray-600 mt-1">Gestión de productos disponibles de proveedores externos</p>
+
         </div>
         <button
           onClick={handleCreate}
-          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-lg hover:from-blue-700 hover:to-cyan-600 transition-all shadow-md flex items-center gap-2"
+          className="px-4 py-2 bg-[#008C96] hover:bg-[#006B74] text-white rounded-lg transition-all shadow-md flex items-center gap-2"
         >
           <Plus size={20} />
           Nuevo Producto
         </button>
       </div>
-
-      {/* Cards de resumen */}
-      {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-blue-600 font-medium">Total Productos</p>
-                <p className="text-2xl font-bold text-blue-900">{summary.total_products || 0}</p>
-              </div>
-              <Package className="text-blue-500" size={32} />
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-600 font-medium">Activos</p>
-                <p className="text-2xl font-bold text-green-900">{summary.active_products || 0}</p>
-              </div>
-              <Shield className="text-green-500" size={32} />
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-purple-600 font-medium">Inactivos</p>
-                <p className="text-2xl font-bold text-purple-900">{summary.inactive_products || 0}</p>
-              </div>
-              <Tag className="text-purple-500" size={32} />
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 p-4 rounded-lg border border-cyan-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-cyan-600 font-medium">Vendors</p>
-                <p className="text-2xl font-bold text-cyan-900">
-                  {summary.products_by_vendor ? Object.keys(summary.products_by_vendor).length : 0}
-                </p>
-              </div>
-              <DollarSign className="text-cyan-500" size={32} />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
@@ -361,16 +314,16 @@ const VendorProductsTab = ({ userRole }) => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+              <thead className="bg-[#008C96] text-white">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Código</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nombre</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Vendor</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Operador</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tipo</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Precio</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Estado</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Acciones</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Código</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Nombre</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Vendor</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Operador</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Tipo</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Precio</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Estado</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -452,7 +405,7 @@ const VendorProductsTab = ({ userRole }) => {
           {!filters.vendor_code && filters.vp_status === 'all' && !filters.vp_product_type && !filters.search && (
             <button
               onClick={handleCreate}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-lg hover:from-blue-700 hover:to-cyan-600 transition-all inline-flex items-center gap-2"
+              className="px-4 py-2 bg-[#008C96] hover:bg-[#006B74] text-white rounded-lg transition-all inline-flex items-center gap-2"
             >
               <Plus size={20} />
               Crear Primer Producto

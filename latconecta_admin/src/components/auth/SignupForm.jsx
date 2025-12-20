@@ -98,7 +98,7 @@ const SignupForm = ({ onSuccess, onCancel, redirectTo = "/users" }) => {
       );
 
       if (loginResult) {
-        success("¡Registro exitoso! Bienvenido a Bitel");
+        success("¡Registro exitoso! Bienvenido a Latconecta");
 
         if (onSuccess) {
           onSuccess(loginResult.user);
@@ -131,12 +131,12 @@ const SignupForm = ({ onSuccess, onCancel, redirectTo = "/users" }) => {
         {/* Logo y título */}
         <div className="text-center mb-6">
           <div className="w-20 h-20 bg-gradient-to-br from-[#FFC600] to-[#FFE709] rounded-full mx-auto mb-4 flex items-center justify-center">
-            <span className="text-3xl text-[#008C96] font-bold">B</span>
+            <span className="text-3xl text-[#008C96] font-bold">L</span>
           </div>
           <h2 className="text-3xl font-bold text-[#008C96] mb-2">
             Crear Cuenta
           </h2>
-          <p className="text-gray-600">Únete a Bitel</p>
+          <p className="text-gray-600">Únete a Latconecta</p>
         </div>
 
         {/* Formulario */}
