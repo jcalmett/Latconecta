@@ -1,273 +1,206 @@
 import React, { useState, useEffect } from 'react';
-import { Pencil, Trash2, Plus, RefreshCw, Search, AlertCircle, Package, DollarSign, Tag, Shield } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, RefreshCw, Filter } from 'lucide-react';
 import vendorProductsService from '../../services/vendorProductsService';
 import vendorsService from '../../services/vendorsService';
 import VendorProductForm from './VendorProductForm';
 
-const VendorProductsTab = ({ userRole }) => {
-  // Estados principales
+const VendorProductsTab = () => {
   const [vendorProducts, setVendorProducts] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [summary, setSummary] = useState(null);
-
-  // Estados de formulario y modal
   const [showForm, setShowForm] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
-
-  // Estados de filtros
+  const [editingVendorProduct, setEditingVendorProduct] = useState(null);
+  
+  // Filtros
   const [filters, setFilters] = useState({
-    vendor_code: '',
-    vp_status: 'all',
-    vp_product_type: '',
-    search: ''
+    vendor: 'all',
+    country: 'all',
+    status: 'all',
+    searchTerm: ''
   });
 
-  // Cargar datos iniciales
-  useEffect(() => {
-    loadVendorProducts();
-    loadVendors();
-    loadSummary();
-  }, [filters.vendor_code, filters.vp_status, filters.vp_product_type]);
-
+  // Cargar vendor products
   const loadVendorProducts = async () => {
     try {
       setLoading(true);
-      setError(null);
-
-      const params = {};
-      if (filters.vendor_code && filters.vendor_code !== '') params.vendor_code = filters.vendor_code;
-      if (filters.vp_status !== 'all') params.vp_status = filters.vp_status;
-      if (filters.vp_product_type) params.vp_product_type = parseInt(filters.vp_product_type);
-
-      const data = await vendorProductsService.getAll(params);
-      setVendorProducts(data);
-    } catch (err) {
-      console.error('Error loading vendor products:', err);
-      setError('Error al cargar los productos de vendors');
+      const data = await vendorProductsService.getAll();
+      console.log('[VendorProductsTab] Data received:', data);
+      console.log('[VendorProductsTab] Type:', typeof data);
+      console.log('[VendorProductsTab] Is array?', Array.isArray(data));
+      
+      // Asegurar que sea un array
+      if (Array.isArray(data)) {
+        setVendorProducts(data);
+      } else if (data && data.vendor_products) {
+        // Si viene en un objeto con propiedad vendor_products
+        setVendorProducts(data.vendor_products);
+      } else if (data && data.data) {
+        // Si viene en un objeto con propiedad data
+        setVendorProducts(data.data);
+      } else {
+        console.error('[VendorProductsTab] Data is not an array:', data);
+        setVendorProducts([]);
+      }
+    } catch (error) {
+      console.error('Error loading vendor products:', error);
+      alert('Error al cargar vendor products');
+      setVendorProducts([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // Cargar vendors para el filtro
   const loadVendors = async () => {
     try {
-      const data = await vendorsService.getAll({ status: 'active' });
+      const data = await vendorsService.getAll();
       setVendors(data);
-    } catch (err) {
-      console.error('Error loading vendors:', err);
+    } catch (error) {
+      console.error('Error loading vendors:', error);
     }
   };
 
-  const loadSummary = async () => {
-    try {
-      const data = await vendorProductsService.getSummary();
-      setSummary(data);
-    } catch (err) {
-      console.error('Error loading summary:', err);
-    }
-  };
-
-  const handleCreate = () => {
-    setEditingProduct(null);
-    setShowForm(true);
-  };
-
-  const handleEdit = (product) => {
-    setEditingProduct(product);
-    setShowForm(true);
-  };
-
-  const handleDelete = async (vpId, vpCode) => {
-    if (userRole !== 'superadmin') {
-      alert('❌ Solo los superadministradores pueden eliminar productos de vendors');
-      return;
-    }
-
-    if (!window.confirm(`¿Estás seguro de eliminar el producto ${vpCode}?`)) {
-      return;
-    }
-
-    try {
-      await vendorProductsService.delete(vpId);
-      alert('✅ Producto eliminado correctamente');
-      loadVendorProducts();
-      loadSummary();
-    } catch (err) {
-      console.error('Error deleting vendor product:', err);
-      alert(err.response?.data?.detail || '❌ Error al eliminar el producto');
-    }
-  };
-
-  const handleSyncProducts = async (vendorCode) => {
-    if (!window.confirm(`¿Sincronizar productos con el vendor ${vendorCode}?`)) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const result = await vendorProductsService.syncProducts(vendorCode);
-      alert(`✅ Sincronización completada:\n- Añadidos: ${result.added || 0}\n- Actualizados: ${result.updated || 0}\n- Errores: ${result.errors || 0}`);
-      loadVendorProducts();
-      loadSummary();
-    } catch (err) {
-      console.error('Error syncing products:', err);
-      alert(err.response?.data?.detail || '❌ Error al sincronizar productos');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFormSuccess = () => {
-    setShowForm(false);
-    setEditingProduct(null);
+  useEffect(() => {
     loadVendorProducts();
-    loadSummary();
+    loadVendors();
+  }, []);
+
+  // Crear nuevo vendor product
+  const handleCreate = () => {
+    setEditingVendorProduct(null);
+    setShowForm(true);
   };
 
-  const getStatusBadge = (status) => {
-    const styles = {
-      active: 'bg-green-100 text-green-800 border-green-300',
-      inactive: 'bg-gray-100 text-gray-800 border-gray-300',
-      suspended: 'bg-red-100 text-red-800 border-red-300',
-      out_of_stock: 'bg-yellow-100 text-yellow-800 border-yellow-300'
-    };
-
-    const labels = {
-      active: '✅ Activo',
-      inactive: '⏸️ Inactivo',
-      suspended: '🚫 Suspendido',
-      out_of_stock: '📦 Sin Stock'
-    };
-
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${styles[status] || styles.inactive}`}>
-        {labels[status] || status}
-      </span>
-    );
+  // Editar vendor product
+  const handleEdit = (vendorProduct) => {
+    setEditingVendorProduct(vendorProduct);
+    setShowForm(true);
   };
 
-  const getProductTypeBadge = (type) => {
-    // type es INTEGER: 1=bundle/paquete, 2=topup/recarga
-    const styles = {
-      1: 'bg-purple-100 text-purple-800',
-      2: 'bg-blue-100 text-blue-800'
-    };
+  // ✅ ELIMINAR vendor product
+  const handleDelete = async (vendorProduct) => {
+    const confirmMessage = `¿Está seguro de eliminar este Vendor Product?
 
-    const labels = {
-      1: '📦 Paquete',
-      2: '📱 TopUp'
-    };
+Vendor: ${vendorProduct.vendor_code}
+Código: ${vendorProduct.vp_code}
+Nombre: ${vendorProduct.vp_name || 'N/A'}
+SKU: ${vendorProduct.vp_skuid}
 
-    return (
-      <span className={`px-2 py-1 rounded text-xs font-medium ${styles[type] || 'bg-gray-100 text-gray-800'}`}>
-        {labels[type] || `Tipo ${type}`}
-      </span>
-    );
-  };
+Esta acción no se puede deshacer.`;
 
-  const getAmountDisplay = (product) => {
-    // Convertir a número porque BD devuelve strings
-    const parseAmount = (val) => {
-      if (!val) return '0.00';
-      const num = parseFloat(val);
-      return isNaN(num) ? '0.00' : num.toFixed(2);
-    };
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
 
-    if (product.vp_amount_type === 'range') {
-      return `${parseAmount(product.vp_minimum_amount)} - ${parseAmount(product.vp_maximum_amount)}`;
-    } else if (product.vp_amount_type === 'fixed') {
-      return parseAmount(product.vp_amount);
-    } else {
-      return 'Variable';
+    try {
+      await vendorProductsService.delete(vendorProduct.vp_id);
+      alert('✅ Vendor Product eliminado correctamente');
+      loadVendorProducts(); // Recargar lista
+    } catch (error) {
+      console.error('Error deleting vendor product:', error);
+      
+      if (error.response?.data?.detail) {
+        alert(`⛔ Error: ${error.response.data.detail}`);
+      } else {
+        alert(`⛔ Error al eliminar: ${error.message}`);
+      }
     }
   };
 
-  const filteredProducts = vendorProducts.filter(product => {
-    if (filters.search && filters.search.trim()) {
-      const search = filters.search.toLowerCase();
-      return (
-        product.vp_code?.toLowerCase().includes(search) ||
-        product.vp_name?.toLowerCase().includes(search) ||
-        product.vendor_code?.toLowerCase().includes(search)
-      );
-    }
-    return true;
+  // Filtrar vendor products
+  const filteredVendorProducts = (Array.isArray(vendorProducts) ? vendorProducts : []).filter(vp => {
+    const matchVendor = filters.vendor === 'all' || vp.vendor_code === filters.vendor;
+    const matchCountry = filters.country === 'all' || vp.vp_country === filters.country;
+    const matchStatus = filters.status === 'all' || vp.vp_status === filters.status;
+    const matchSearch = !filters.searchTerm || 
+      vp.vp_code?.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
+      vp.vp_name?.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
+      vp.vp_skuid?.toLowerCase().includes(filters.searchTerm.toLowerCase());
+
+    return matchVendor && matchCountry && matchStatus && matchSearch;
   });
+
+  // Obtener países únicos para filtro
+  const uniqueCountries = [...new Set((Array.isArray(vendorProducts) ? vendorProducts : []).map(vp => vp.vp_country).filter(Boolean))];
 
   return (
     <div className="space-y-6">
-      {/* Header con resumen */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#008C96]">
-            Gestión de Productos de Vendors
-          </h2>
-
+          <h2 className="text-2xl font-bold text-gray-900">Vendor Products</h2>
+          <p className="text-gray-600 mt-1">
+            Gestiona los productos disponibles en los vendors
+          </p>
         </div>
         <button
           onClick={handleCreate}
-          className="px-4 py-2 bg-[#008C96] hover:bg-[#006B74] text-white rounded-lg transition-all shadow-md flex items-center gap-2"
+          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-lg hover:from-blue-700 hover:to-cyan-600 transition-all flex items-center gap-2"
         >
           <Plus size={20} />
-          Nuevo Producto
+          Crear Vendor Product
         </button>
       </div>
 
       {/* Filtros */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter size={20} className="text-gray-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Filtros</h3>
+        </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Filtro por Vendor */}
+          {/* Filtro Vendor */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Vendor
             </label>
             <select
-              value={filters.vendor_code}
-              onChange={(e) => setFilters({ ...filters, vendor_code: e.target.value })}
+              value={filters.vendor}
+              onChange={(e) => setFilters({ ...filters, vendor: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="">Todos los vendors</option>
-              {vendors.map(vendor => (
-                <option key={vendor.vendor_code} value={vendor.vendor_code}>
-                  {vendor.vendor_name}
+              <option value="all">Todos los vendors</option>
+              {vendors.map(v => (
+                <option key={v.vendor_code} value={v.vendor_code}>
+                  {v.vendor_name}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Filtro por Estado */}
+          {/* Filtro País */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              País
+            </label>
+            <select
+              value={filters.country}
+              onChange={(e) => setFilters({ ...filters, country: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Todos los países</option>
+              {uniqueCountries.map(country => (
+                <option key={country} value={country}>
+                  {country}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro Estado */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Estado
             </label>
             <select
-              value={filters.vp_status}
-              onChange={(e) => setFilters({ ...filters, vp_status: e.target.value })}
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="all">Todos</option>
-              <option value="active">Activos</option>
-              <option value="inactive">Inactivos</option>
-              <option value="suspended">Suspendidos</option>
-              <option value="out_of_stock">Sin Stock</option>
-            </select>
-          </div>
-
-          {/* Filtro por Tipo */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tipo de Producto
-            </label>
-            <select
-              value={filters.vp_product_type}
-              onChange={(e) => setFilters({ ...filters, vp_product_type: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Todos los tipos</option>
-              <option value="1">📦 Bundle / Paquete</option>
-              <option value="2">📱 TopUp / Recarga</option>
+              <option value="active">Activo</option>
+              <option value="inactive">Inactivo</option>
             </select>
           </div>
 
@@ -277,153 +210,142 @@ const VendorProductsTab = ({ userRole }) => {
               Buscar
             </label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
                 type="text"
-                value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                placeholder="Código o nombre..."
+                placeholder="Código, nombre, SKU..."
+                value={filters.searchTerm}
+                onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
         </div>
+
+        {/* Contador */}
+        <div className="mt-3 text-sm text-gray-600">
+          Mostrando {filteredVendorProducts.length} de {Array.isArray(vendorProducts) ? vendorProducts.length : 0} vendor products
+        </div>
       </div>
 
-      {/* Mensaje de error */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="text-red-500 flex-shrink-0" size={20} />
-          <div>
-            <h3 className="font-semibold text-red-900">Error</h3>
-            <p className="text-sm text-red-700">{error}</p>
+      {/* Tabla */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center p-12">
+            <RefreshCw className="animate-spin text-blue-600" size={32} />
+            <span className="ml-3 text-gray-600">Cargando vendor products...</span>
           </div>
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading && (
-        <div className="flex justify-center items-center py-12">
-          <RefreshCw className="animate-spin text-blue-500" size={32} />
-          <span className="ml-3 text-gray-600">Cargando productos...</span>
-        </div>
-      )}
-
-      {/* Tabla de productos */}
-      {!loading && filteredProducts.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-[#008C96] text-white">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Código</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Nombre</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Vendor</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Operador</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Tipo</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Precio</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Estado</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase">Acciones</th>
+        ) : filteredVendorProducts.length === 0 ? (
+          <div className="text-center p-12">
+            <p className="text-gray-600">No se encontraron vendor products</p>
+          </div>
+        ) : (
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Vendor
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Código
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  SKU ID
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Nombre
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  País
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Operador
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Monto
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Estado
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredVendorProducts.map((vp) => (
+                <tr key={vp.vp_id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {vp.vendor_code}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                    {vp.vp_code}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                    {vp.vp_skuid}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-gray-900">
+                    {vp.vp_name || 'Sin nombre'}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                    {vp.vp_country || '-'}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                    {vp.vp_operator || '-'}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                    {vp.vp_currency} {vp.vp_amount || '0.00'}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      vp.vp_status === 'active' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {vp.vp_status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-right text-sm">
+                    <div className="flex items-center justify-end gap-2">
+                      {/* Botón Editar */}
+                      <button
+                        onClick={() => handleEdit(vp)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Editar Vendor Product"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      
+                      {/* ✅ Botón Eliminar */}
+                      <button
+                        onClick={() => handleDelete(vp)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Eliminar Vendor Product"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredProducts.map((product) => (
-                  <tr key={product.vp_id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-sm font-semibold text-blue-600">
-                        {product.vp_code}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-gray-900">{product.vp_name}</div>
-                      {product.vp_skuid && (
-                        <div className="text-xs text-gray-500">SKU: {product.vp_skuid}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-700 font-medium">{product.vendor_code}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-600">
-                        {product.vp_operator || '-'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {getProductTypeBadge(product.vp_product_type)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-semibold text-gray-900">
-                        {getAmountDisplay(product)}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {product.vp_currency || 'PEN'}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {getStatusBadge(product.vp_status)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => handleEdit(product)}
-                          className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          title="Editar"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        {userRole === 'superadmin' && (
-                          <button
-                            onClick={() => handleDelete(product.vp_id, product.vp_code)}
-                            className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
 
-      {/* Estado vacío */}
-      {!loading && filteredProducts.length === 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-          <Package className="mx-auto text-gray-400 mb-4" size={64} />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            No hay productos de vendors
-          </h3>
-          <p className="text-gray-600 mb-6">
-            {filters.vendor_code || filters.vp_status !== 'all' || filters.vp_product_type || filters.search
-              ? 'No se encontraron productos con los filtros aplicados'
-              : 'Comienza agregando productos de vendors'}
-          </p>
-          {!filters.vendor_code && filters.vp_status === 'all' && !filters.vp_product_type && !filters.search && (
-            <button
-              onClick={handleCreate}
-              className="px-4 py-2 bg-[#008C96] hover:bg-[#006B74] text-white rounded-lg transition-all inline-flex items-center gap-2"
-            >
-              <Plus size={20} />
-              Crear Primer Producto
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Modal de formulario */}
+      {/* Modal Formulario */}
       {showForm && (
         <VendorProductForm
-          product={editingProduct}
+          vendorProduct={editingVendorProduct}
           onClose={() => {
             setShowForm(false);
-            setEditingProduct(null);
+            setEditingVendorProduct(null);
           }}
-          onSuccess={handleFormSuccess}
-          vendors={vendors}
+          onSuccess={() => {
+            setShowForm(false);
+            setEditingVendorProduct(null);
+            loadVendorProducts();
+          }}
         />
       )}
     </div>

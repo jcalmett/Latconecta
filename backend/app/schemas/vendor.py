@@ -1,6 +1,6 @@
 """
-Schemas Pydantic para Vendor y VendorProduct (CORREGIDOS)
-Solo incluye columnas que existen en la BD
+Schemas Pydantic para Vendor y VendorProduct (ACTUALIZADOS)
+Incluye api_mapping_code en VendorProduct
 """
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -121,7 +121,7 @@ class VendorWithBalance(BaseModel):
 
 
 # =============================================================================
-# VENDOR_PRODUCT SCHEMAS (CORREGIDOS - Solo columnas que existen en BD)
+# VENDOR_PRODUCT SCHEMAS (ACTUALIZADOS CON API_MAPPING_CODE)
 # =============================================================================
 
 class VendorProductBase(BaseModel):
@@ -143,6 +143,8 @@ class VendorProductBase(BaseModel):
     vp_commission: Optional[Decimal] = None
     vp_cost: Optional[Decimal] = None
     vp_status: str = Field(default='active', max_length=20)
+    vp_fee_usd: Optional[Decimal] = Field(default=Decimal('0.00000'))
+    api_mapping_code: Optional[str] = Field(None, max_length=5, description="Código del API mapping a usar")  # ✅ NUEVO
 
 
 class VendorProductCreate(VendorProductBase):
@@ -166,6 +168,8 @@ class VendorProductUpdate(BaseModel):
     vp_commission: Optional[Decimal] = None
     vp_cost: Optional[Decimal] = None
     vp_status: Optional[str] = Field(None, max_length=20)
+    vp_fee_usd: Optional[Decimal] = None
+    api_mapping_code: Optional[str] = Field(None, max_length=5, description="Código del API mapping a usar")  # ✅ NUEVO
 
 
 class VendorProductPublic(VendorProductBase):

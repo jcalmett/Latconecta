@@ -1,5 +1,5 @@
 """
-Schemas Pydantic para Bitel
+Schemas Pydantic para Latconecta
 Validan y serializan datos de entrada/salida de la API
 """
 from .company import CompanyBase, CompanyCreate, CompanyUpdate, CompanyInDB
@@ -7,13 +7,13 @@ from .service import ServiceBase, ServiceCreate, ServiceUpdate, ServiceInDB
 from .product import ProductBase, ProductCreate, ProductUpdate, ProductInDB
 from .user import UserBase, UserCreate, UserUpdate, UserInDB, UserPublic
 from .purchase import (
-    PurchaseBase,
+    PurchaseBaseSchema,  # ✅ CORREGIDO: era PurchaseBase
     PurchaseCreate,
     PurchaseUpdate,
     PurchaseInDB,
     PurchaseListResponse,
-    PurchaseStats,
-    PurchaseSummary
+    PurchaseStatsResponse  # ✅ CORREGIDO: era PurchaseStats
+    # ✅ ELIMINADO: PurchaseSummary (no existe)
 )
 from .auth import Token, TokenData, LoginRequest
 from .vendor import (
@@ -28,8 +28,10 @@ from .vendor import (
     VendorProductUpdate
 )
 
-# Alias para compatibilidad con router que espera PurchasePublic
+# Alias para compatibilidad
 PurchasePublic = PurchaseInDB
+PurchaseBase = PurchaseBaseSchema  # ✅ AGREGADO: Alias para compatibilidad
+PurchaseStats = PurchaseStatsResponse  # ✅ AGREGADO: Alias para compatibilidad
 
 __all__ = [
     # Company schemas
@@ -54,14 +56,16 @@ __all__ = [
     "UserInDB",
     "UserPublic",
     # Purchase schemas
-    "PurchaseBase",
+    "PurchaseBase",  # Alias de PurchaseBaseSchema
+    "PurchaseBaseSchema",  # ✅ AGREGADO: Nombre real
     "PurchaseCreate",
     "PurchaseUpdate",
     "PurchaseInDB",
     "PurchasePublic",  # Alias de PurchaseInDB
     "PurchaseListResponse",
-    "PurchaseStats",
-    "PurchaseSummary",
+    "PurchaseStats",  # Alias de PurchaseStatsResponse
+    "PurchaseStatsResponse",  # ✅ AGREGADO: Nombre real
+    # ✅ ELIMINADO: PurchaseSummary (no existe)
     # Vendor schemas
     "VendorPublic",
     "VendorCreate",

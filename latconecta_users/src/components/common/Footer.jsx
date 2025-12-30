@@ -2,25 +2,25 @@ import { Link } from 'react-router-dom';
 import { Phone, Mail, MapPin } from 'lucide-react';
 import { getImageUrl, FALLBACK_IMAGES } from '../../utils/imageHelper';
 
-const Footer = ({ companyData }) => {
+const Footer = ({ latconectaData }) => {
   const currentYear = new Date().getFullYear();
 
   return (
     <footer className="bg-bitel-yellow mt-auto">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Columna 1: Logo + Información de la empresa */}
+          {/* Columna 1: Logo + Lema */}
           <div>
             <div className="mb-4">
               <img
-                src={getImageUrl(companyData?.company_logo, 'company')}
-                alt="Bitel Logo"
+                src={getImageUrl(latconectaData?.latconecta_logo, 'companies')}
+                alt="Latconecta Logo"
                 onError={(e) => e.target.src = FALLBACK_IMAGES.company}
                 className="h-12 w-auto object-contain"
               />
             </div>
             <p className="text-gray-700 mb-4 text-sm">
-              {companyData?.company_description5 || 'Plataforma de Servicios Digitales - Telefonía móvil para todos'}
+              {latconectaData?.latconecta_lema_1 || 'Plataforma de Servicios Digitales'}
             </p>
           </div>
 
@@ -30,15 +30,15 @@ const Footer = ({ companyData }) => {
             <div className="space-y-2">
               <div className="flex items-center text-gray-700 text-sm">
                 <Mail className="w-4 h-4 mr-2" />
-                <span>info@bitel.com.pe</span>
+                <span>{latconectaData?.latconecta_mail_comercial || 'comercial@latconecta.com'}</span>
               </div>
               <div className="flex items-center text-gray-700 text-sm">
-                <Phone className="w-4 h-4 mr-2" />
-                <span>+51 999 999 999</span>
+                <Mail className="w-4 h-4 mr-2" />
+                <span>{latconectaData?.latconecta_mail_support || 'support@latconecta.com'}</span>
               </div>
               <div className="flex items-center text-gray-700 text-sm">
                 <MapPin className="w-4 h-4 mr-2" />
-                <span>Lima, Perú</span>
+                <span>Miami, FL, USA</span>
               </div>
             </div>
           </div>
@@ -47,7 +47,7 @@ const Footer = ({ companyData }) => {
           <div>
             <h3 className="text-lg font-semibold mb-4 text-bitel-blue">Historia</h3>
             <p className="text-gray-700 text-sm">
-              Bitel es líder en servicios de telecomunicaciones en el Perú.
+              {latconectaData?.latconecta_description || 'Plataforma líder en servicios digitales.'}
             </p>
           </div>
 
@@ -79,7 +79,7 @@ const Footer = ({ companyData }) => {
         <div className="border-t border-yellow-600 mt-8 pt-6">
           <div className="text-center">
             <p className="text-gray-700 text-sm">
-              © {currentYear} Bitel. Todos los derechos reservados.
+              © {currentYear} {latconectaData?.latconecta_name || 'Latconecta'}. Todos los derechos reservados.
             </p>
           </div>
         </div>

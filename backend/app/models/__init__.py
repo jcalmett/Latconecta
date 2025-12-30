@@ -11,7 +11,7 @@ from .user import User
 from .purchase import Purchase
 from .vendor import Vendor
 from .vendor_product import VendorProduct
-
+from .vendor_api_mapping import VendorApiMapping
 __all__ = [
     "Company",
     "Country",
@@ -20,5 +20,7 @@ __all__ = [
     "User",
     "Purchase",
     "Vendor",
-    "VendorProduct"
+    "VendorProduct",
+    "VendorApiMapping"
+    
 ]

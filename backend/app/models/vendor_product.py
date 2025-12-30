@@ -1,6 +1,6 @@
 """
-Modelo VendorProduct - Catálogo de productos de vendors (CORREGIDO)
-Solo incluye columnas que existen en la BD
+Modelo VendorProduct - Catálogo de productos de vendors (ACTUALIZADO)
+Incluye api_mapping_code para vincular con API mappings
 """
 from sqlalchemy import Column, Integer, String, Numeric, TIMESTAMP, Text, ForeignKey, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -17,6 +17,7 @@ class VendorProduct(Base):
     - Datos del servicio (operador, país, moneda)
     - Información de montos
     - Configuración y metadata
+    - Vinculación con API mapping
     """
     __tablename__ = "vendor_products"
 
@@ -32,6 +33,16 @@ class VendorProduct(Base):
         String(50),
         ForeignKey("vendors.vendor_code", ondelete="CASCADE"),
         nullable=False,
+        index=True
+    )
+
+    # =========================================================================
+    # FOREIGN KEY - Relación con API mapping (NUEVO)
+    # =========================================================================
+    api_mapping_code = Column(
+        String(5),
+        ForeignKey("vendor_api_mappings.mapping_code", ondelete="SET NULL", onupdate="CASCADE"),
+        nullable=True,
         index=True
     )
 
@@ -69,6 +80,7 @@ class VendorProduct(Base):
     # =========================================================================
     vp_commission = Column(Numeric(10, 2))    # Comisión del vendor
     vp_cost = Column(Numeric(10, 2))          # Costo real del vendor
+    vp_fee_usd = Column(Numeric(10, 5), default=0.00000, nullable=False)  # Fee en USD
 
     # =========================================================================
     # CONFIGURACIÓN
@@ -92,6 +104,7 @@ class VendorProduct(Base):
     # RELACIONES
     # =========================================================================
     vendor = relationship("Vendor", back_populates="vendor_products")
+    api_mapping = relationship("VendorApiMapping", foreign_keys=[api_mapping_code])  # ✅ NUEVO
 
     def __repr__(self):
         return (
@@ -100,6 +113,7 @@ class VendorProduct(Base):
             f"vendor={self.vendor_code}, "
             f"code={self.vp_code}, "
             f"operator={self.vp_operator}, "
+            f"mapping={self.api_mapping_code}, "
             f"status={self.vp_status}"
             f")>"
         )
@@ -122,6 +136,11 @@ class VendorProduct(Base):
         else:
             return f"{self.vp_amount} {self.vp_currency}"
 
+    @property
+    def has_mapping(self) -> bool:
+        """Verificar si tiene API mapping asignado"""
+        return self.api_mapping_code is not None
+
     def to_dict(self) -> dict:
         """Convertir a diccionario"""
         return {
@@ -137,7 +156,9 @@ class VendorProduct(Base):
             'vp_amount_type': self.vp_amount_type,
             'vp_product_type': self.vp_product_type,
             'vp_status': self.vp_status,
+            'api_mapping_code': self.api_mapping_code,  # ✅ NUEVO
             'is_active': self.is_active,
+            'has_mapping': self.has_mapping,  # ✅ NUEVO
             'display_amount': self.display_amount
         }
 
@@ -161,4 +182,24 @@ class VendorProduct(Base):
             'product_id': self.vp_code,
             'sku_id': self.vp_skuid or '',
             'service_type': self.vp_product_type
+        }
+
+    def get_api_mapping_info(self) -> dict:
+        """
+        Obtener información del API mapping asignado
+        
+        Returns:
+            dict: Info del mapping o None si no tiene asignado
+        """
+        if not self.has_mapping:
+            return {
+                'has_mapping': False,
+                'mapping_code': None,
+                'message': 'Producto sin API mapping asignado'
+            }
+        
+        return {
+            'has_mapping': True,
+            'mapping_code': self.api_mapping_code,
+            'message': f'Usa mapping {self.api_mapping_code}'
         }

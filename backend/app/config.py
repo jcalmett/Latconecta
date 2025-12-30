@@ -1,16 +1,18 @@
 """
-Configuración centralizada del proyecto Bitel
-Maneja todas las variables de entorno y configuraciones del sistema
+Configuración centralizada del proyecto Latconecta
+Variables de sistema únicamente - Datos de vendors están en BD
 """
+
 from pydantic_settings import BaseSettings
 from typing import Optional
 
 
 class Settings(BaseSettings):
     """
-    Configuración de la aplicación Bitel
+    Configuración de la aplicación Latconecta
     Lee variables de entorno desde el archivo .env
     """
+    
     # =========================================================================
     # CONFIGURACIÓN DE BASE DE DATOS
     # =========================================================================
@@ -26,7 +28,7 @@ class Settings(BaseSettings):
     # =========================================================================
     # CONFIGURACIÓN DE LA APLICACIÓN
     # =========================================================================
-    APP_NAME: str = "Bitel API"
+    APP_NAME: str = "Latconecta API"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     
@@ -34,22 +36,46 @@ class Settings(BaseSettings):
     # CONFIGURACIÓN CORS
     # =========================================================================
     CORS_ORIGINS: list = [
-        "http://localhost:5173",  # Bitel-Admin
+        "http://localhost:5173",  # Latconecta-Admin
         "http://127.0.0.1:5173",
-        "http://localhost:5174",  # Bitel-Users
+        "http://localhost:5174",  # Latconecta-Users
         "http://127.0.0.1:5174",
         "http://localhost:3000",  # React alternativo
         "http://127.0.0.1:3000",
     ]
     
     # =========================================================================
-    # CONFIGURACIÓN DE VENDORS (NUEVO)
+    # CONFIGURACIÓN DE AMBIENTE
     # =========================================================================
+    # Ambiente actual: development, uat, production
+    # - development: Usa mock universal interno
+    # - uat: Usa APIs reales de vendors (datos UAT en BD)
+    # - production: Usa APIs reales de vendors (datos PROD en BD)
+    ENVIRONMENT: str = "development"
     
-    # Modo de operación: 'mock' para desarrollo, 'real' para producción
-    VENDOR_MODE: str = "mock"
+    # =========================================================================
+    # CONFIGURACIÓN DE MOCK (Solo para DEVELOPMENT)
+    # =========================================================================
+    # Tasa de éxito de transacciones mock (0.0 a 1.0)
+    MOCK_SUCCESS_RATE: float = 0.95
     
-    # Configuración de Latcom
+    # Delay mínimo y máximo para simular latencia de red (segundos)
+    MOCK_DELAY_MIN: float = 0.5
+    MOCK_DELAY_MAX: float = 2.0
+    
+    # Forzar un tipo de error específico (None para aleatorio)
+    # Valores: insufficient_balance, invalid_phone, service_unavailable, timeout, invalid_product
+    MOCK_FORCED_ERROR: Optional[str] = None
+    
+    # =========================================================================
+    # CONFIGURACIÓN DE VENDORS (LEGACY - Mantener por compatibilidad)
+    # =========================================================================
+    # NOTA: Estos valores se mantienen para código legacy
+    # Los vendors nuevos se gestionan desde la BD (tabla vendors)
+    
+    VENDOR_MODE: str = "mock"  # mock/real (legacy)
+    
+    # Latcom (legacy - mantener por compatibilidad)
     LATCOM_URL: Optional[str] = "https://uatlat.mitopup.com"
     LATCOM_USERNAME: Optional[str] = None
     LATCOM_PASSWORD: Optional[str] = None
@@ -57,7 +83,7 @@ class Settings(BaseSettings):
     LATCOM_USER_UID: Optional[str] = None
     LATCOM_TIMEOUT: int = 45
     
-    # Configuración de Mock (para desarrollo sin vendor real)
+    # Mock legacy
     MOCK_MODE: str = "success"  # success, timeout, product_not_found, etc.
     MOCK_DELAY: float = 1.0  # Segundos de delay simulado
     
@@ -69,3 +95,175 @@ class Settings(BaseSettings):
 
 # Instancia global de configuración
 settings = Settings()
+
+
+# ============================================================================
+# FUNCIONES DE UTILIDAD
+# ============================================================================
+
+def is_development() -> bool:
+    """
+    Verifica si estamos en ambiente de desarrollo
+    En development, se usa el mock universal en vez de vendors reales
+    
+    Returns:
+        True si ENVIRONMENT == "development"
+    """
+    return settings.ENVIRONMENT == "development"
+
+
+def is_uat() -> bool:
+    """
+    Verifica si estamos en ambiente UAT
+    
+    Returns:
+        True si ENVIRONMENT == "uat"
+    """
+    return settings.ENVIRONMENT == "uat"
+
+
+def is_production() -> bool:
+    """
+    Verifica si estamos en ambiente de producción
+    
+    Returns:
+        True si ENVIRONMENT == "production"
+    """
+    return settings.ENVIRONMENT == "production"
+
+
+def get_mock_config() -> dict:
+    """
+    Obtiene la configuración del mock para development
+    
+    Returns:
+        Dict con configuración del mock
+    """
+    return {
+        "success_rate": settings.MOCK_SUCCESS_RATE,
+        "delay_min": settings.MOCK_DELAY_MIN,
+        "delay_max": settings.MOCK_DELAY_MAX,
+        "forced_error": settings.MOCK_FORCED_ERROR
+    }
+
+
+def get_environment_info() -> dict:
+    """
+    Obtiene información del ambiente actual
+    
+    Returns:
+        Dict con información del ambiente
+    """
+    return {
+        "environment": settings.ENVIRONMENT,
+        "app_name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "debug": settings.DEBUG,
+        "is_development": is_development(),
+        "is_uat": is_uat(),
+        "is_production": is_production(),
+        "uses_mock": is_development()
+    }
+
+
+def validate_environment():
+    """
+    Valida que el ambiente esté correctamente configurado
+    Imprime información al inicio del servidor
+    """
+    valid_environments = ["development", "uat", "production"]
+    
+    if settings.ENVIRONMENT not in valid_environments:
+        raise ValueError(
+            f"ENVIRONMENT debe ser uno de: {valid_environments}. "
+            f"Valor actual: {settings.ENVIRONMENT}"
+        )
+    
+    # Imprimir información
+    print("\n" + "="*60)
+    print("🚀 LATCONECTA - CONFIGURACIÓN")
+    print("="*60)
+    print(f"🌍 Ambiente: {settings.ENVIRONMENT.upper()}")
+    
+    if is_development():
+        print("🧪 Modo: DEVELOPMENT")
+        print("   → Usando MOCK UNIVERSAL (no vendors reales)")
+        print("   → Datos de BD son completos (vendors, products, mappings)")
+        print("   → Solo las llamadas HTTP van al mock")
+    elif is_uat():
+        print("🔬 Modo: UAT")
+        print("   → Usando APIs REALES de vendors (ambiente UAT)")
+        print("   → Datos de vendors leídos desde BD")
+        print("   → ⚠️  Acceso restringido")
+    else:
+        print("🏭 Modo: PRODUCTION")
+        print("   → Usando APIs REALES de vendors (ambiente PRODUCCIÓN)")
+        print("   → Datos de vendors leídos desde BD")
+        print("   → ⚠️  Acceso MUY restringido")
+    
+    print("="*60 + "\n")
+
+
+# Validar al importar
+validate_environment()
+
+
+# ============================================================================
+# BACKWARD COMPATIBILITY (mantiene código legacy funcionando)
+# ============================================================================
+
+def get_latcom_config() -> dict:
+    """
+    Obtiene configuración de LATCOM (backward compatibility)
+    Para código existente que usa LATCOM
+    
+    Returns:
+        Dict con configuración LATCOM
+    """
+    return {
+        "url": settings.LATCOM_URL,
+        "username": settings.LATCOM_USERNAME,
+        "password": settings.LATCOM_PASSWORD,
+        "api_key": settings.LATCOM_API_KEY,
+        "user_uid": settings.LATCOM_USER_UID,
+        "timeout": settings.LATCOM_TIMEOUT,
+        "mode": settings.VENDOR_MODE,
+        "mock_mode": settings.MOCK_MODE,
+        "mock_delay": settings.MOCK_DELAY
+    }
+
+
+# ============================================================================
+# EJEMPLO DE USO
+# ============================================================================
+
+if __name__ == "__main__":
+    print("\n" + "="*60)
+    print("CONFIGURACIÓN - LATCONECTA")
+    print("="*60 + "\n")
+    
+    info = get_environment_info()
+    for key, value in info.items():
+        print(f"{key}: {value}")
+    
+    print("\n" + "="*60)
+    print("CONFIGURACIÓN MOCK")
+    print("="*60 + "\n")
+    
+    if is_development():
+        mock_cfg = get_mock_config()
+        for key, value in mock_cfg.items():
+            print(f"{key}: {value}")
+    else:
+        print("Mock no disponible en este ambiente")
+    
+    print("\n" + "="*60)
+    print("CONFIGURACIÓN LATCOM (Legacy)")
+    print("="*60 + "\n")
+    
+    latcom = get_latcom_config()
+    for key, value in latcom.items():
+        if 'password' not in key.lower() and 'key' not in key.lower():
+            print(f"{key}: {value}")
+        else:
+            print(f"{key}: {'*' * 8 if value else 'None'}")

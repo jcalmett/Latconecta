@@ -1,197 +1,319 @@
 """
-Router de Purchases - SINCRONIZADO CON NUEVA ESTRUCTURA
-✅ PERMITE COMPRAS ANÓNIMAS (sin autenticación)
-✅ Compatible con purchase_vendor_cost y purchase_status
+Router de Purchases con integración al Sistema Universal de Vendors
+Mantiene toda la funcionalidad original + integración con vendors
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_, or_, desc
 from typing import List, Optional
 from datetime import datetime
-from app.database import get_db
 
-
-# =============================================================================
-# HELPER: Remover timezone de datetime
-# =============================================================================
-def remove_timezone(dt):
-    """Remover timezone de datetime para PostgreSQL TIMESTAMP WITHOUT TIME ZONE"""
-    if dt is None:
-        return None
-    if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
-        return dt.replace(tzinfo=None)
-    return dt
-from app.models import Purchase, User, Product
-from app.schemas.purchase import (
-    PurchaseInDB,
-    PurchaseCreate,
-    PurchaseUpdate,
+from ..database import get_db
+from ..models.purchase import Purchase
+from ..models.user import User
+from ..schemas.purchase import (
+    PurchaseCreate, 
+    PurchaseUpdate, 
+    PurchaseInDB, 
     PurchaseListResponse,
-    PurchaseStats
+    PurchaseStatsResponse
 )
-from app.utils.dependencies import get_current_user_optional, get_current_active_user
+from ..dependencies import (
+    get_current_user_optional,
+    get_current_user_required,
+    get_current_admin_user
+)
 
-router = APIRouter()
+# ✅ INTEGRACIÓN CON SISTEMA UNIVERSAL DE VENDORS
+from ..services.universal_vendor_service import process_vendor_topup
+from ..models.product import Product
+from ..models.vendor_product import VendorProduct
 
+router = APIRouter(
+    prefix="/purchases",
+    tags=["purchases"]
+)
 
-# =============================================================================
-# HELPER: Detectar si compra es anónima
-# =============================================================================
-def is_anonymous_purchase(purchase_data: PurchaseCreate) -> bool:
-    """Detectar si es compra anónima"""
-    return purchase_data.purchase_user_id is None
+# ═══════════════════════════════════════════════════════════════
+# CREATE - POST /api/v1/purchases
+# ═══════════════════════════════════════════════════════════════
 
-
-# =============================================================================
-# CREATE PURCHASE - PERMITE ANÓNIMAS
-# =============================================================================
-@router.post("/", response_model=PurchaseInDB, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PurchaseInDB, status_code=201)
 async def create_purchase(
-    purchase_data: PurchaseCreate,
     request: Request,
+    purchase: PurchaseCreate,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
-    Crear nueva compra
+    Crear nueva compra (usuario autenticado o anónimo)
     
-    ✅ PERMITE COMPRAS ANÓNIMAS (purchase_user_id = NULL)
-    ✅ PERMITE COMPRAS CON USUARIO AUTENTICADO
-    
-    **Campos obligatorios:**
-    - purchase_reference
-    - purchase_phone_number
-    - purchase_product_id
-    - purchase_service_name
-    - purchase_product_name
-    - purchase_base_price
-    - purchase_total_amount
-    - purchase_payment_method
-    
-    **Nuevos campos opcionales:**
-    - purchase_vendor_cost
-    - purchase_status (default: 'Pending')
+    ✅ NUEVA FUNCIONALIDAD: Integración automática con vendors
+    - Obtiene configuración del producto
+    - Calcula montos y fees
+    - Procesa con vendor automáticamente
+    - Actualiza estado según respuesta
     """
-    
-    print("═══════════════════════════════════════")
-    print(f"📦 Nueva compra")
-    print(f"   Usuario: {current_user.user_email if current_user else 'ANÓNIMO'}")
-    print(f"   Ref: {purchase_data.purchase_reference}")
-    print(f"   Teléfono: {purchase_data.purchase_phone_number}")
-    print("═══════════════════════════════════════")
-    
-    # Validar producto existe
-    if purchase_data.purchase_product_id:
-        result = await db.execute(
-            select(Product).where(Product.product_id == purchase_data.purchase_product_id)
-        )
-        product = result.scalar_one_or_none()
-        
-        if not product:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Producto {purchase_data.purchase_product_id} no encontrado"
-            )
-    
-    # Crear purchase desde datos
-    purchase_dict = purchase_data.dict(exclude_unset=True)
-    
-    # Asegurar valores por defecto
-    if 'purchase_status' not in purchase_dict or not purchase_dict['purchase_status']:
-        purchase_dict['purchase_status'] = 'Pending'
-    
-    # ✅ NORMALIZAR TIMESTAMPS - Remover timezone
-    datetime_fields = [
-        'purchase_date',
-        'purchase_vendor_date_petition',
-        'purchase_vendor_date_response',
-        'purchase_date_sent_to_conciliation'
-    ]
-    
-    for field in datetime_fields:
-        if field in purchase_dict and purchase_dict[field] is not None:
-            purchase_dict[field] = remove_timezone(purchase_dict[field])
-    
-    # Establecer created_by
-    if current_user:
-        purchase_dict['created_by'] = current_user.user_email
-    else:
-        purchase_dict['created_by'] = 'anonymous'
-    
-    # Capturar IP si no viene en datos
-    if 'purchase_ip_petition' not in purchase_dict:
-        purchase_dict['purchase_ip_petition'] = request.client.host
-    
-    # Crear objeto Purchase
-    purchase = Purchase(**purchase_dict)
-    
-    db.add(purchase)
     
     try:
+        purchase_data = purchase.dict()
+        
+        # ────────────────────────────────────────────────────────
+        # 1. DATOS DE USUARIO Y AUDITORÍA
+        # ────────────────────────────────────────────────────────
+        
+        # Usuario: NULL si anónimo, user_id si registrado
+        purchase_data['purchase_user_id'] = current_user.user_id if current_user else None
+        
+        # IP automática
+        purchase_data['purchase_ip_petition'] = request.client.host
+        
+        # Auditoría
+        if current_user:
+            purchase_data['created_by'] = current_user.user_email
+        else:
+            purchase_data['created_by'] = 'anonymous'
+        
+        # Nombre entrega por defecto
+        if not purchase_data.get('purchase_delivery_name'):
+            if current_user:
+                purchase_data['purchase_delivery_name'] = current_user.user_name
+            else:
+                purchase_data['purchase_delivery_name'] = 'Cliente Anónimo'
+        
+        # ────────────────────────────────────────────────────────
+        # 2. ✅ NUEVA LÓGICA: OBTENER PRODUCTO Y VENDOR
+        # ────────────────────────────────────────────────────────
+        
+        product_id = purchase_data.get('purchase_product_id')
+        
+        if product_id:
+            # Obtener producto
+            product_query = await db.execute(
+                select(Product).where(Product.product_id == product_id)
+            )
+            product = product_query.scalar_one_or_none()
+            
+            if not product:
+                raise HTTPException(404, f"Producto {product_id} no encontrado")
+            
+            # Verificar que producto esté activo
+            if product.product_status != 'active':
+                raise HTTPException(400, "Producto no disponible")
+            
+            # ────────────────────────────────────────────────────────
+            # 3. ✅ CALCULAR MONTOS
+            # ────────────────────────────────────────────────────────
+            
+            # Determinar monto vendor según tipo de producto
+            if product.product_amount_type == 'F':  # Fijo
+                vendor_amount = product.product_base_price
+                
+            elif product.product_amount_type in ['R', 'V']:  # Rango o Variable
+                # Usuario debe haber enviado user_selected_amount
+                user_selected = purchase_data.get('user_selected_amount')
+                
+                if not user_selected:
+                    raise HTTPException(
+                        400, 
+                        "user_selected_amount requerido para productos variables"
+                    )
+                
+                vendor_amount = user_selected
+                
+                # Validar rango si es tipo R
+                if product.product_amount_type == 'R':
+                    min_amt = product.product_minimum_amount
+                    max_amt = product.product_maximum_amount
+                    
+                    if min_amt and vendor_amount < min_amt:
+                        raise HTTPException(
+                            400, 
+                            f"Monto mínimo: {min_amt}"
+                        )
+                    if max_amt and vendor_amount > max_amt:
+                        raise HTTPException(
+                            400, 
+                            f"Monto máximo: {max_amt}"
+                        )
+            else:
+                vendor_amount = product.product_base_price
+            
+            # Calcular fees
+            fee = 0
+            if product.product_fee_percentage:
+                fee += (vendor_amount * product.product_fee_percentage) / 100
+            if product.product_fee_fixed:
+                fee += product.product_fee_fixed
+            
+            # Validar total
+            expected_total = vendor_amount + fee
+            received_total = purchase_data.get('purchase_total_amount', 0)
+            
+            if abs(received_total - expected_total) > 0.01:
+                raise HTTPException(
+                    400,
+                    f"Total incorrecto. Esperado: {expected_total}, Recibido: {received_total}"
+                )
+            
+            # ────────────────────────────────────────────────────────
+            # 4. ✅ COMPLETAR DATOS DE PURCHASE CON INFO DEL PRODUCTO
+            # ────────────────────────────────────────────────────────
+            
+            purchase_data['purchase_vendor_code'] = product.product_vendor_code
+            purchase_data['purchase_vendpro_code'] = product.product_vendpro_code
+            purchase_data['purchase_vendor_skuid'] = product.product_vendpro_skuid
+            purchase_data['purchase_vendor_amount'] = vendor_amount  # SIN fees
+            purchase_data['purchase_vendor_currency'] = 'PEN'
+            purchase_data['purchase_fee'] = fee
+            purchase_data['purchase_service_name'] = product.service_id  # O nombre del servicio
+            purchase_data['purchase_product_name'] = product.product_name
+            
+            # Obtener vendor_product para datos adicionales
+            if product.product_vendpro_skuid:
+                vp_query = await db.execute(
+                    select(VendorProduct).where(
+                        and_(
+                            VendorProduct.vendor_code == product.product_vendor_code,
+                            VendorProduct.vp_skuid == product.product_vendpro_skuid
+                        )
+                    )
+                )
+                vendor_product = vp_query.scalar_one_or_none()
+                
+                if vendor_product:
+                    purchase_data['purchase_vendpro_country'] = vendor_product.vp_country
+                    purchase_data['purchase_vendpro_operator'] = vendor_product.vp_operator
+                    purchase_data['purchase_vendpro_product_type'] = vendor_product.vp_product_type
+        
+        # ────────────────────────────────────────────────────────
+        # 5. FIX TIMEZONE (mantener funcionalidad original)
+        # ────────────────────────────────────────────────────────
+        
+        datetime_fields = [
+            'purchase_date_sent_to_conciliation',
+            'purchase_vendor_date_petition',
+            'purchase_vendor_date_response'
+        ]
+        
+        for field in datetime_fields:
+            if field in purchase_data and purchase_data[field] is not None:
+                if hasattr(purchase_data[field], 'tzinfo') and purchase_data[field].tzinfo:
+                    purchase_data[field] = purchase_data[field].replace(tzinfo=None)
+        
+        # ────────────────────────────────────────────────────────
+        # 6. CREAR REGISTRO EN BD
+        # ────────────────────────────────────────────────────────
+        
+        # Generar referencia si no existe
+        if not purchase_data.get('purchase_reference'):
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            purchase_data['purchase_reference'] = f"LC-{timestamp}"
+        
+        # Fecha de compra
+        if not purchase_data.get('purchase_date'):
+            purchase_data['purchase_date'] = datetime.now()
+        
+        # Estados iniciales
+        purchase_data['purchase_payment_status'] = purchase_data.get('purchase_payment_status', 'Pending')
+        purchase_data['purchase_delivery_status'] = 'Pending'
+        
+        # Crear purchase
+        db_purchase = Purchase(**purchase_data)
+        db.add(db_purchase)
         await db.commit()
-        await db.refresh(purchase)
+        await db.refresh(db_purchase)
         
-        print(f"✅ Purchase creado: ID {purchase.purchase_id}")
-        print(f"   Estado: {purchase.purchase_status}")
-        print(f"   Vendor Cost: {purchase.purchase_vendor_cost}")
+        # ────────────────────────────────────────────────────────
+        # 7. ✅ PROCESAR CON VENDOR (SI HAY VENDOR CONFIGURADO)
+        # ────────────────────────────────────────────────────────
         
-        return purchase
+        if product_id and product.product_vendor_code:
+            try:
+                # Preparar datos para vendor (todo desde purchases)
+                vendor_data = {
+                    "purchase_phone_number": db_purchase.purchase_phone_number,
+                    "purchase_vendor_amount": db_purchase.purchase_vendor_amount,
+                    "purchase_vendor_currency": db_purchase.purchase_vendor_currency,
+                    "purchase_vendpro_skuid": db_purchase.purchase_vendor_skuid,
+                    "purchase_reference": db_purchase.purchase_reference,
+                    "purchase_vendpro_country": db_purchase.purchase_vendpro_country,
+                    "purchase_vendpro_operator": db_purchase.purchase_vendpro_operator,
+                }
+                
+                # Llamar al servicio universal
+                result = await process_vendor_topup(
+                    db=db,
+                    vendor_code=product.product_vendor_code,
+                    purchase_data=vendor_data,
+                    vendor_product_data={}  # Ya no necesario, todo en purchase_data
+                )
+                
+                # Actualizar purchase con resultado del vendor
+                if result["status"] == "success":
+                    db_purchase.purchase_delivery_status = "Success"
+                    db_purchase.purchase_vendor_purchase_id = result.get("purchase_vendor_purchase_id")
+                    db_purchase.purchase_vendor_response_code = "SUCCESS"
+                    db_purchase.purchase_vendor_date_response = datetime.now()
+                    db_purchase.purchase_payment_status = "Paid"
+                else:
+                    db_purchase.purchase_delivery_status = "Failed"
+                    db_purchase.purchase_vendor_response_code = result.get("error_code", "ERROR")
+                    db_purchase.purchase_vendor_response_description = result.get("error_message")
+                    db_purchase.purchase_vendor_date_response = datetime.now()
+                    db_purchase.purchase_payment_status = "Failed"
+                
+                await db.commit()
+                await db.refresh(db_purchase)
+                
+            except Exception as vendor_error:
+                # Si falla vendor, marcar purchase pero no fallar request
+                db_purchase.purchase_delivery_status = "Failed"
+                db_purchase.purchase_vendor_response_description = f"Error: {str(vendor_error)}"
+                db_purchase.requires_manual_intervention = True
+                await db.commit()
+                await db.refresh(db_purchase)
         
+        return db_purchase
+    
+    except HTTPException:
+        raise
     except Exception as e:
-        await db.rollback()
-        print(f"❌ Error al crear purchase: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al crear compra: {str(e)}"
-        )
+        raise HTTPException(500, f"Error al crear purchase: {str(e)}")
 
 
-# =============================================================================
-# LIST PURCHASES - REQUIERE AUTENTICACIÓN
-# =============================================================================
-@router.get("/", response_model=List[PurchaseListResponse])
-async def list_purchases(
+# ═══════════════════════════════════════════════════════════════
+# READ - GET ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("", response_model=List[PurchaseListResponse])
+async def get_all_purchases(
     skip: int = 0,
     limit: int = 100,
+    purchase_type: Optional[str] = None,
     payment_status: Optional[str] = None,
-    delivery_status: Optional[str] = None,
-    purchase_status: Optional[str] = None,
-    requires_intervention: Optional[bool] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user_required)
 ):
     """
-    Listar compras con filtros
-    
-    **Requiere autenticación**
-    
-    Filtros:
-    - payment_status: Paid, Pending, Reversed
-    - delivery_status: Success, Failed, Ordered, etc.
-    - purchase_status: Success, Failed, Pending
-    - requires_intervention: true/false
+    Listar todas las compras con filtros
+    Requiere: Usuario autenticado
     """
-    
     query = select(Purchase)
     
-    # Si no es admin, solo ve sus propias compras
-    if current_user.user_role not in ['admin', 'superadmin']:
-        query = query.where(Purchase.purchase_user_id == current_user.user_id)
+    # Filtro por tipo de compra
+    if purchase_type == 'registered':
+        query = query.where(Purchase.purchase_user_id.isnot(None))
+    elif purchase_type == 'anonymous':
+        query = query.where(Purchase.purchase_user_id.is_(None))
     
-    # Aplicar filtros
+    # Filtro por estado de pago
     if payment_status:
         query = query.where(Purchase.purchase_payment_status == payment_status)
     
-    if delivery_status:
-        query = query.where(Purchase.purchase_delivery_status == delivery_status)
-    
-    if purchase_status:
-        query = query.where(Purchase.purchase_status == purchase_status)
-    
-    if requires_intervention is not None:
-        query = query.where(Purchase.requires_manual_intervention == requires_intervention)
-    
-    query = query.offset(skip).limit(limit).order_by(Purchase.purchase_date.desc())
+    # Orden y paginación
+    query = query.order_by(desc(Purchase.purchase_date)).offset(skip).limit(limit)
     
     result = await db.execute(query)
     purchases = result.scalars().all()
@@ -199,82 +321,177 @@ async def list_purchases(
     return purchases
 
 
-# =============================================================================
-# GET PURCHASE BY ID - REQUIERE AUTENTICACIÓN
-# =============================================================================
 @router.get("/{purchase_id}", response_model=PurchaseInDB)
-async def get_purchase(
+async def get_purchase_by_id(
     purchase_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
-    Obtener detalle de una compra
-    
-    **Requiere autenticación**
+    Obtener compra por ID
+    Permisos: Admin ve todo, usuario ve su propia compra
     """
-    
-    result = await db.execute(
-        select(Purchase).where(Purchase.purchase_id == purchase_id)
-    )
+    query = select(Purchase).where(Purchase.purchase_id == purchase_id)
+    result = await db.execute(query)
     purchase = result.scalar_one_or_none()
     
     if not purchase:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Compra {purchase_id} no encontrada"
-        )
+        raise HTTPException(404, "Purchase no encontrada")
     
     # Verificar permisos
-    if current_user.user_role not in ['admin', 'superadmin']:
-        if purchase.purchase_user_id != current_user.user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para ver esta compra"
-            )
+    if current_user:
+        if current_user.user_role != 'admin':
+            if purchase.purchase_user_id != current_user.user_id:
+                raise HTTPException(403, "No autorizado para ver esta compra")
     
     return purchase
 
 
-# =============================================================================
-# UPDATE PURCHASE - SOLO ADMIN
-# =============================================================================
-@router.put("/{purchase_id}", response_model=PurchaseInDB)
-async def update_purchase(
-    purchase_id: int,
-    purchase_data: PurchaseUpdate,
+@router.get("/reference/{reference}", response_model=PurchaseInDB)
+async def get_purchase_by_reference(
+    reference: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
-    Actualizar compra
-    
-    **Requiere:** Admin o Superadmin
+    Obtener compra por referencia
+    Permisos: Admin ve todo, usuario ve su propia compra
     """
-    
-    if current_user.user_role not in ['admin', 'superadmin']:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo administradores pueden actualizar compras"
-        )
-    
-    result = await db.execute(
-        select(Purchase).where(Purchase.purchase_id == purchase_id)
-    )
+    query = select(Purchase).where(Purchase.purchase_reference == reference)
+    result = await db.execute(query)
     purchase = result.scalar_one_or_none()
     
     if not purchase:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Compra {purchase_id} no encontrada"
+        raise HTTPException(404, "Purchase no encontrada")
+    
+    # Verificar permisos
+    if current_user:
+        if current_user.user_role != 'admin':
+            if purchase.purchase_user_id != current_user.user_id:
+                raise HTTPException(403, "No autorizado")
+    
+    return purchase
+
+
+@router.get("/user/{user_id}", response_model=List[PurchaseListResponse])
+async def get_user_purchases(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Obtener compras de un usuario
+    Permisos: Admin ve todo, usuario solo sus compras
+    """
+    # Verificar permisos
+    if current_user.user_role != 'admin':
+        if user_id != current_user.user_id:
+            raise HTTPException(403, "No autorizado")
+    
+    query = select(Purchase).where(
+        Purchase.purchase_user_id == user_id
+    ).order_by(desc(Purchase.purchase_date))
+    
+    result = await db.execute(query)
+    purchases = result.scalars().all()
+    
+    return purchases
+
+
+@router.get("/my-purchases", response_model=List[PurchaseListResponse])
+async def get_my_purchases(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Obtener mis compras (usuario actual)
+    """
+    query = select(Purchase).where(
+        Purchase.purchase_user_id == current_user.user_id
+    ).order_by(desc(Purchase.purchase_date))
+    
+    result = await db.execute(query)
+    purchases = result.scalars().all()
+    
+    return purchases
+
+
+@router.get("/stats/summary", response_model=PurchaseStatsResponse)
+async def get_purchase_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Estadísticas generales de compras
+    Solo admin
+    """
+    # Total purchases
+    total_query = await db.execute(select(func.count(Purchase.purchase_id)))
+    total_purchases = total_query.scalar()
+    
+    # Registered purchases
+    registered_query = await db.execute(
+        select(func.count(Purchase.purchase_id)).where(
+            Purchase.purchase_user_id.isnot(None)
         )
+    )
+    registered_purchases = registered_query.scalar()
+    
+    # Anonymous purchases
+    anonymous_purchases = total_purchases - registered_purchases
+    
+    # Total amounts
+    amount_query = await db.execute(
+        select(
+            func.sum(Purchase.purchase_total_amount),
+            Purchase.purchase_currency
+        ).group_by(Purchase.purchase_currency)
+    )
+    amounts = amount_query.all()
+    
+    return {
+        "total_purchases": total_purchases,
+        "registered_purchases": registered_purchases,
+        "anonymous_purchases": anonymous_purchases,
+        "total_amounts": [
+            {"currency": currency, "amount": float(amount)} 
+            for amount, currency in amounts
+        ]
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# UPDATE - PUT /api/v1/purchases/{id}
+# ═══════════════════════════════════════════════════════════════
+
+@router.put("/{purchase_id}", response_model=PurchaseInDB)
+async def update_purchase(
+    purchase_id: int,
+    purchase_update: PurchaseUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Actualizar compra
+    Solo admin
+    """
+    # Buscar purchase
+    query = select(Purchase).where(Purchase.purchase_id == purchase_id)
+    result = await db.execute(query)
+    purchase = result.scalar_one_or_none()
+    
+    if not purchase:
+        raise HTTPException(404, "Purchase no encontrada")
     
     # Actualizar campos
-    update_data = purchase_data.dict(exclude_unset=True)
+    update_data = purchase_update.dict(exclude_unset=True)
+    
+    # Auditoría
+    update_data['updated_by'] = current_user.user_email
+    update_data['last_update_date'] = datetime.now()
+    
     for field, value in update_data.items():
         setattr(purchase, field, value)
-    
-    purchase.updated_by = current_user.user_email
     
     await db.commit()
     await db.refresh(purchase)
@@ -282,81 +499,28 @@ async def update_purchase(
     return purchase
 
 
-# =============================================================================
-# STATS - SOLO ADMIN
-# =============================================================================
-@router.get("/stats/summary", response_model=PurchaseStats)
-async def get_purchase_stats(
+# ═══════════════════════════════════════════════════════════════
+# DELETE - DELETE /api/v1/purchases/{id}
+# ═══════════════════════════════════════════════════════════════
+
+@router.delete("/{purchase_id}")
+async def delete_purchase(
+    purchase_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_admin_user)
 ):
     """
-    Estadísticas de compras
-    
-    **Requiere:** Admin o Superadmin
+    Eliminar compra
+    Solo admin
     """
+    query = select(Purchase).where(Purchase.purchase_id == purchase_id)
+    result = await db.execute(query)
+    purchase = result.scalar_one_or_none()
     
-    if current_user.user_role not in ['admin', 'superadmin']:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo administradores pueden ver estadísticas"
-        )
+    if not purchase:
+        raise HTTPException(404, "Purchase no encontrada")
     
-    # Total purchases
-    result = await db.execute(select(func.count(Purchase.purchase_id)))
-    total_purchases = result.scalar()
+    await db.delete(purchase)
+    await db.commit()
     
-    # Total amount
-    result = await db.execute(select(func.sum(Purchase.purchase_total_amount)))
-    total_amount = result.scalar() or 0
-    
-    # Registered vs Anonymous
-    result = await db.execute(
-        select(func.count(Purchase.purchase_id))
-        .where(Purchase.purchase_user_id.isnot(None))
-    )
-    registered_purchases = result.scalar()
-    
-    result = await db.execute(
-        select(func.count(Purchase.purchase_id))
-        .where(Purchase.purchase_user_id.is_(None))
-    )
-    anonymous_purchases = result.scalar()
-    
-    # Amounts
-    result = await db.execute(
-        select(func.sum(Purchase.purchase_total_amount))
-        .where(Purchase.purchase_user_id.isnot(None))
-    )
-    registered_amount = result.scalar() or 0
-    
-    result = await db.execute(
-        select(func.sum(Purchase.purchase_total_amount))
-        .where(Purchase.purchase_user_id.is_(None))
-    )
-    anonymous_amount = result.scalar() or 0
-    
-    return {
-        "total_purchases": total_purchases,
-        "total_amount": total_amount,
-        "registered_purchases": registered_purchases,
-        "anonymous_purchases": anonymous_purchases,
-        "registered_amount": registered_amount,
-        "anonymous_amount": anonymous_amount
-    }
-
-
-# =============================================================================
-# ✅ CAMBIOS REALIZADOS:
-# =============================================================================
-# 1. create_purchase: Ahora usa get_current_user_optional (permite anónimas)
-# 2. create_purchase: Maneja purchase_vendor_cost y purchase_status
-# 3. create_purchase: Establece created_by = 'anonymous' si no hay usuario
-# 4. list_purchases: Filtro adicional por purchase_status
-# 5. Todos los schemas actualizados a la nueva estructura
-# 6. Removida integración con VendorManager (no existe en el código actual)
-#
-# INSTALACIÓN:
-# Reemplazar: backend/app/routers/purchases.py
-# Reiniciar: uvicorn app.main:app --reload --port 8100
-# =============================================================================
+    return {"message": "Purchase eliminada exitosamente"}

@@ -1,12 +1,13 @@
 """
 LATCONECTA - Companies Router
 Endpoints para gestión de compañías
-Actualizado: 2025-12-17 - Migración a Latconecta con validaciones multi-país y multi-servicio
+Actualizado: 2025-12-20 - Agregado filtrado por país y servicio en GET /companies/
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
+from sqlalchemy.orm import selectinload
+from typing import List, Optional
 
 from app.database import get_db
 from app.models.company import Company
@@ -25,12 +26,12 @@ async def validate_company_consistency(
 ) -> None:
     """
     Valida que country_id y service_id existan en la BD
-    
+
     Args:
         country_id: ID del país
         service_id: ID del servicio
         db: Sesión de base de datos
-        
+
     Raises:
         HTTPException 404: Si el país o servicio no existen
     """
@@ -39,19 +40,19 @@ async def validate_company_consistency(
         select(Country).where(Country.country_id == country_id)
     )
     country = result.scalar_one_or_none()
-    
+
     if not country:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"País con ID {country_id} no existe"
         )
-    
+
     # Verificar que el servicio existe
     result = await db.execute(
         select(Service).where(Service.service_id == service_id)
     )
     service = result.scalar_one_or_none()
-    
+
     if not service:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -61,34 +62,77 @@ async def validate_company_consistency(
 
 @router.get("/", response_model=List[CompanyResponse])
 async def get_companies(
+    country: Optional[str] = None,
+    service: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Obtener lista de todas las compañías
+    Obtener lista de compañías con filtrado opcional
 
     Args:
+        country: Código de país para filtrar (ej: "PE", "CL") - OPCIONAL
+        service: Nombre de servicio para filtrar (ej: "TopUps") - OPCIONAL
         skip: Número de registros a saltar (paginación)
         limit: Límite de registros a retornar
         db: Sesión de base de datos
 
     Returns:
         Lista de compañías con todos sus campos incluyendo:
-        - country_id (NUEVO)
-        - service_id (NUEVO)
-        - company_mail_commercial_support (NUEVO)
+        - country_id, country_name, country_code (via relationship)
+        - service_id, service_name (via relationship)
+        - company_mail_commercial_support
         - company_credit_balance
         - company_date_balance
         - company_barcode_available
         - company_mail_customer_support
+
+    Examples:
+        GET /companies/ → Todas las compañías
+        GET /companies/?country=PE → Compañías en Perú
+        GET /companies/?service=TopUps → Compañías con servicio TopUps
+        GET /companies/?country=PE&service=TopUps → Compañías TopUps en Perú
     """
-    result = await db.execute(
-        select(Company)
-        .offset(skip)
-        .limit(limit)
+    # Construir query base con eager loading de relationships
+    query = select(Company).options(
+        selectinload(Company.country),
+        selectinload(Company.service)
     )
+
+    # Filtrar por país si se proporciona
+    if country:
+        # Obtener country_id del código de país
+        country_result = await db.execute(
+            select(Country.country_id).where(Country.country_code == country)
+        )
+        country_id = country_result.scalar_one_or_none()
+        if country_id:
+            query = query.where(Company.country_id == country_id)
+        else:
+            # Si no existe el país, retornar vacío
+            return []
+
+    # Filtrar por servicio si se proporciona
+    if service:
+        # Obtener service_id del nombre de servicio
+        service_result = await db.execute(
+            select(Service.service_id).where(Service.service_name == service)
+        )
+        service_id = service_result.scalar_one_or_none()
+        if service_id:
+            query = query.where(Company.service_id == service_id)
+        else:
+            # Si no existe el servicio, retornar vacío
+            return []
+
+    # Aplicar paginación
+    query = query.offset(skip).limit(limit)
+
+    # Ejecutar query
+    result = await db.execute(query)
     companies = result.scalars().all()
+
     return companies
 
 
@@ -111,7 +155,12 @@ async def get_company(
         HTTPException 404: Si la compañía no existe
     """
     result = await db.execute(
-        select(Company).where(Company.company_id == company_id)
+        select(Company)
+        .options(
+            selectinload(Company.country),
+            selectinload(Company.service)
+        )
+        .where(Company.company_id == company_id)
     )
     company = result.scalar_one_or_none()
 
@@ -150,7 +199,7 @@ async def create_company(
     - country_id debe existir en tabla countries
     - service_id debe existir en tabla services
     - company_name debe ser único por combinación (country_id, service_id)
-    
+
     Campos nuevos obligatorios:
     - country_id: ID del país donde opera
     - service_id: ID del servicio que ofrece
@@ -163,7 +212,7 @@ async def create_company(
             service_id=company_data.service_id,
             db=db
         )
-        
+
         # Crear nueva compañía
         new_company = Company(
             country_id=company_data.country_id,
@@ -230,7 +279,7 @@ async def update_company(
     VALIDACIONES LATCONECTA:
     - Si se actualiza country_id, debe existir en countries
     - Si se actualiza service_id, debe existir en services
-    
+
     Nota: Solo se actualizan los campos enviados (no None)
     """
     # Buscar compañía
@@ -248,12 +297,12 @@ async def update_company(
     try:
         # Obtener datos a actualizar
         update_data = company_data.model_dump(exclude_unset=True)
-        
+
         # VALIDACIÓN LATCONECTA: Si se actualizan country_id o service_id, validar
         if 'country_id' in update_data or 'service_id' in update_data:
             country_id_to_validate = update_data.get('country_id', company.country_id)
             service_id_to_validate = update_data.get('service_id', company.service_id)
-            
+
             await validate_company_consistency(
                 country_id=country_id_to_validate,
                 service_id=service_id_to_validate,

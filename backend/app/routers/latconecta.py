@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
-
 from app.database import get_db
 from app.models.latconecta import Latconecta
 from app.models.user import User
@@ -28,6 +27,7 @@ async def get_latconecta(
         raise HTTPException(status_code=404, detail="Registro de Latconecta no encontrado")
     
     return latconecta
+
 
 @router.put("", response_model=LatconectaInDB)
 async def update_latconecta(

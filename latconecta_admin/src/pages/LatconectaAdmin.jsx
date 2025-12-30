@@ -20,6 +20,7 @@ import SalesTab from '../components/admin/SalesTab';
 import VendorsTab from '../components/admin/VendorsTab';
 import VendorProductsTab from '../components/admin/VendorProductsTab';
 import LatconectaTab from '../components/admin/LatconectaTab';
+import APIMappingsTab from '../components/admin/APIMappingsTab';  // ✅ NUEVO
 
 
 const LatconectaAdmin = () => {
@@ -173,7 +174,7 @@ const LatconectaAdmin = () => {
   const [services, setServices] = useState([]);
   const [products, setProducts] = useState([]);
   const [users, setUsers] = useState([]);
-  
+
   // Estados de carga
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingServices, setLoadingServices] = useState(false);
@@ -513,7 +514,8 @@ const LatconectaAdmin = () => {
     { id: 'sales', label: 'Ventas' },
     { id: 'users', label: 'Usuarios' },
     { id: 'vendors', label: 'Vendors' },
-    { id: 'vendor-products', label: 'Productos Vendor' }
+    { id: 'vendor-products', label: 'Productos Vendor' },
+    { id: 'api-mappings', label: '🗺️ API Mappings' }  // ✅ NUEVO
   ];
 
   const renderTabContent = () => {
@@ -639,6 +641,12 @@ const LatconectaAdmin = () => {
 
       case 'vendor-products':
         return <VendorProductsTab userRole={user?.user_role} />;
+
+      case 'api-mappings':  // ✅ NUEVO
+        return <APIMappingsTab
+          showNotification={showNotification}
+          setConfirmDialog={setConfirmDialog}
+        />;
 
       default:
         return <CountriesTab

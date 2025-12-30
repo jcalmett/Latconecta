@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, ShoppingCart, CreditCard, Smartphone, Check, AlertCircle, Loader2, Download, FileText } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { X, ShoppingCart, CreditCard, Smartphone, Check, AlertCircle, Loader2, Download, FileText, ArrowLeft } from 'lucide-react';
 import servicesService from '../services/servicesService';
 import productsService from '../services/productsService';
 import purchasesService from '../services/purchasesService';
@@ -7,10 +8,16 @@ import apiSimulator from '../services/apiSimulatorService';
 import { getImageUrl, FALLBACK_IMAGES } from '../utils/imageHelper';
 import companiesService from '../services/companiesService';
 import PurchasePopup from '../components/PurchasePopup';
-import jsPDF from 'jspdf';  // ✅ SIN llaves
+import jsPDF from 'jspdf';
 import countriesService from '../services/countriesService';
 
 const ShopView = ({ user, showNotification }) => {
+  // 🆕 Leer parámetros de URL
+  const [searchParams] = useSearchParams();
+  const urlCountry = searchParams.get('country');    // "PER"
+  const urlService = searchParams.get('service');    // "Paquetes"
+  const urlCompany = searchParams.get('company');    // "Bitel - Paquetes"
+
   // Estados principales
   const [services, setServices] = useState([]);
   const [products, setProducts] = useState([]);
@@ -32,23 +39,23 @@ const ShopView = ({ user, showNotification }) => {
     accountNumber: '',
     isValidated: false,
     validationData: null,
-    
+
     // Tipo de producto
     productType: null,
-    
+
     // Monto (para transferencias y bill payment)
     transferAmount: '',
     transferTotalToPay: 0,
     billPaymentAmount: 0,
-    
+
     // Pago
     paymentMethod: null,
-    
+
     // Delivery (smartphones)
     deliveryName: '',
     deliveryPhone: '',
     deliveryAddress: '',
-    
+
     // Resultados
     payment_ref: null,
     provision_ref: null,
@@ -63,46 +70,91 @@ const ShopView = ({ user, showNotification }) => {
   // Cargar servicios y productos
   useEffect(() => {
     loadData();
-  }, []);
+  }, [urlCountry, urlService, urlCompany]);
 
- const loadData = async () => {
-  try {
-    setLoading(true);
-    
-    // Cargar company
-    const companyData = await companiesService.getActive();
-    setCompany(Array.isArray(companyData) ? companyData[0] : companyData);
-    
-    // Cargar country
-    const countryData = await countriesService.getActive();
-    setCountry(Array.isArray(countryData) ? countryData[0] : countryData);
-    
-    const servicesData = await servicesService.getAll();
+  const loadData = async () => {
+    try {
+      setLoading(true);
 
-    // Filtrar solo servicios activos
-    const activeServices = servicesData.filter(s => s.status === 'active');
-    setServices(activeServices);
+      // 🆕 Cargar país por código (si viene por URL)
+      if (urlCountry) {
+        const countriesData = await countriesService.get();
+        const countriesArray = Array.isArray(countriesData) ? countriesData : [countriesData];
+        const foundCountry = countriesArray.find(c => c.country_code === urlCountry);
+        setCountry(foundCountry || null);
+      } else {
+        // Fallback: primer país activo
+        const countryData = await countriesService.getActive();
+        setCountry(Array.isArray(countryData) ? countryData[0] : countryData);
+      }
 
-    if (activeServices.length > 0) {
-      setSelectedService(activeServices[0]);
-      await loadProducts(activeServices[0].service_id);
+      // 🆕 Cargar compañía específica por nombre (si viene por URL)
+      if (urlCompany) {
+        const companiesData = await companiesService.getAll();
+        const companiesArray = Array.isArray(companiesData) ? companiesData : [companiesData];
+        const foundCompany = companiesArray.find(c => c.company_name === urlCompany);
+        
+        if (foundCompany) {
+          setCompany(foundCompany);
+          console.log('🏢 Compañía seleccionada:', foundCompany.company_name);
+        } else {
+          console.warn('⚠️ Compañía no encontrada:', urlCompany);
+          // Fallback
+          const companyData = await companiesService.getActive();
+          setCompany(Array.isArray(companyData) ? companyData[0] : companyData);
+        }
+      } else {
+        // Fallback: primera compañía activa
+        const companyData = await companiesService.getActive();
+        setCompany(Array.isArray(companyData) ? companyData[0] : companyData);
+      }
+
+      // Cargar todos los servicios activos
+      const servicesData = await servicesService.getAll();
+      const activeServices = servicesData.filter(s => s.status === 'active');
+      setServices(activeServices);
+
+      // 🆕 Seleccionar servicio por nombre (si viene por URL)
+      if (urlService && activeServices.length > 0) {
+        const foundService = activeServices.find(s => s.service_name === urlService);
+        
+        if (foundService) {
+          setSelectedService(foundService);
+          await loadProducts(foundService.service_id);
+        } else {
+          // Fallback: primer servicio
+          setSelectedService(activeServices[0]);
+          await loadProducts(activeServices[0].service_id);
+        }
+      } else if (activeServices.length > 0) {
+        // Fallback: primer servicio
+        setSelectedService(activeServices[0]);
+        await loadProducts(activeServices[0].service_id);
+      }
+
+    } catch (error) {
+      console.error('Error al cargar datos:', error);
+      if (showNotification) {
+        showNotification('Error al cargar servicios', 'error');
+      }
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Error al cargar datos:', error);
-    if (showNotification) {
-      showNotification('Error al cargar servicios', 'error');
-    }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const loadProducts = async (serviceId) => {
     try {
       const productsData = await productsService.getByService(serviceId);
-      const activeProducts = Array.isArray(productsData) 
+      let activeProducts = Array.isArray(productsData)
         ? productsData.filter(p => p.product_status === 'active')
         : [];
+
+      // 🆕 Filtrar por compañía si está seleccionada
+      if (company && company.company_id) {
+        activeProducts = activeProducts.filter(p => p.company_id === company.company_id);
+        console.log(`🔍 Productos filtrados por compañía ${company.company_name}:`, activeProducts.length);
+      }
+
       setProducts(activeProducts);
     } catch (error) {
       console.error('Error al cargar productos:', error);
@@ -117,7 +169,7 @@ const ShopView = ({ user, showNotification }) => {
       }
       return;
     }
-    
+
     setSelectedService(service);
     await loadProducts(service.service_id);
   };
@@ -159,7 +211,7 @@ const ShopView = ({ user, showNotification }) => {
   const detectProductType = (product) => {
     const name = product.product_name?.toLowerCase() || '';
     const type = product.product_type?.toLowerCase() || '';
-    
+
     if (type === 'bill_payment' || name.includes('recibo') || name.includes('pago')) {
       return 'bill_payment';
     }
@@ -206,7 +258,7 @@ const ShopView = ({ user, showNotification }) => {
               account_holder: response.data.account_holder
             }
           }));
-          
+
           if (response.data.indicador === 'F' || response.data.indicador === 'T') {
             setPurchaseStep(3);
           } else {
@@ -296,7 +348,7 @@ const ShopView = ({ user, showNotification }) => {
   const processCardPayment = async () => {
     try {
       let amountToPay = parseFloat(selectedProduct.product_total_price);
-      
+
       if (purchaseData.productType === 'bill_payment' && purchaseData.validationData) {
         const montoAPagar = parseFloat(purchaseData.billPaymentAmount) || parseFloat(purchaseData.validationData.monto_base);
         const porcentajeDescuento = parseFloat(selectedProduct.product_discount_percentage) || 0;
@@ -308,7 +360,7 @@ const ShopView = ({ user, showNotification }) => {
       }
 
       let paymentResponse;
-      
+
       if (apiSimulator.isEnabled()) {
         paymentResponse = await apiSimulator.processCardPayment({
           amount: amountToPay,
@@ -333,7 +385,7 @@ const ShopView = ({ user, showNotification }) => {
       console.log('✅ Pago procesado:', payment_ref);
 
       let provisionResponse;
-      
+
       if (apiSimulator.isEnabled()) {
         switch (purchaseData.productType) {
           case 'topup':
@@ -342,21 +394,21 @@ const ShopView = ({ user, showNotification }) => {
               amount: amountToPay
             });
             break;
-            
+
           case 'bill_payment':
             provisionResponse = await apiSimulator.payBill({
               account: purchaseData.accountNumber,
               amount: amountToPay
             });
             break;
-            
+
           case 'transfer':
             provisionResponse = await apiSimulator.transferYape({
               phone: purchaseData.phoneNumber,
               amount: amountToPay
             });
             break;
-            
+
           case 'smartphone':
             provisionResponse = await apiSimulator.orderSmartphone({
               phone: purchaseData.phoneNumber,
@@ -368,7 +420,7 @@ const ShopView = ({ user, showNotification }) => {
               }
             });
             break;
-            
+
           default:
             throw new Error('Tipo de producto no soportado');
         }
@@ -378,7 +430,7 @@ const ShopView = ({ user, showNotification }) => {
 
       if (provisionResponse.status === 200) {
         console.log('✅ Provisión exitosa');
-        
+
         await savePurchase({
           payment_status: 'Paid',
           delivery_status: purchaseData.productType === 'smartphone' ? 'Ordered' : 'Success',
@@ -391,9 +443,9 @@ const ShopView = ({ user, showNotification }) => {
 
       } else {
         console.warn('⚠️ Provisión falló, revirtiendo...');
-        
+
         let reversalResponse;
-        
+
         if (apiSimulator.isEnabled()) {
           reversalResponse = await apiSimulator.reverseCardPayment(payment_ref);
         } else {
@@ -402,7 +454,7 @@ const ShopView = ({ user, showNotification }) => {
 
         if (reversalResponse.status === 200) {
           console.log('✅ Pago revertido');
-          
+
           await savePurchase({
             payment_status: 'Reversed',
             delivery_status: 'Failed',
@@ -416,7 +468,7 @@ const ShopView = ({ user, showNotification }) => {
 
         } else {
           console.error('🚨 ERROR CRÍTICO');
-          
+
           await savePurchase({
             payment_status: 'Paid',
             delivery_status: 'Failed',
@@ -439,7 +491,7 @@ const ShopView = ({ user, showNotification }) => {
   const processBarcodePayment = async () => {
     try {
       let amountToPay = parseFloat(selectedProduct.product_total_price);
-      
+
       if (purchaseData.productType === 'bill_payment' && purchaseData.validationData) {
         const montoAPagar = parseFloat(purchaseData.billPaymentAmount) || parseFloat(purchaseData.validationData.monto_base);
         const porcentajeDescuento = parseFloat(selectedProduct.product_discount_percentage) || 0;
@@ -451,13 +503,13 @@ const ShopView = ({ user, showNotification }) => {
       }
 
       let barcodeResponse;
-      
+
       if (apiSimulator.isEnabled()) {
         barcodeResponse = await apiSimulator.generateBarcode({
           amount: amountToPay,
           purchase_id: Date.now()
         });
-        
+
         if (barcodeResponse.status === 200 && barcodeResponse.data.barcode_image) {
           barcodeResponse.data.barcode_image = 'http://127.0.0.1:8100/uploads/test/Barcode.jpg';
         }
@@ -477,7 +529,7 @@ const ShopView = ({ user, showNotification }) => {
       }
 
       console.log('✅ Barcode generado');
-      
+
       await savePurchase({
         payment_status: 'Pending',
         delivery_status: null,
@@ -500,19 +552,19 @@ const ShopView = ({ user, showNotification }) => {
    */
 
 /**
- * ═══════════════════════════════════════════════════════════════════════
+ * ╔══════════════════════════════════════════════════════════╗
  * ✅ VERSIÓN MEJORADA: generateAndUploadReceiptPDF
- * ═══════════════════════════════════════════════════════════════════════
- * 
+ * ╚══════════════════════════════════════════════════════════╝
+ *
  * MEJORAS IMPLEMENTADAS:
  * 1. ✅ Imagen del barcode se carga y muestra en el PDF
  * 2. ✅ Espaciado reducido para que smartphones + barcode quepan
  * 3. ✅ Ajuste dinámico según tipo de producto
- * 
+ *
  * IMPORT REQUERIDO (al inicio de ShopView.jsx):
  *   import jsPDF from 'jspdf';
- * 
- * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ╚══════════════════════════════════════════════════════════╝
  */
 
 const generateAndUploadReceiptPDF = async (receiptData) => {
@@ -527,7 +579,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
     // Determinar etiqueta y destinatario
     let labelDestinatario = '';
     let destinatario = '';
-    
+
     if (receiptData.productType === 'bill_payment') {
       labelDestinatario = 'CUENTA PAGADA';
       destinatario = receiptData.accountNumber || 'N/A';
@@ -563,7 +615,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
 
     // Configurar fuente
     doc.setFont('courier');
-    
+
     let y = 8; // Posición Y inicial (reducida de 10 a 8)
 
     // HEADER
@@ -571,7 +623,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
     doc.setFont('courier', 'bold');
     doc.text('COMPROBANTE DE COMPRA', 52.5, y, { align: 'center' });
     y += 4;
-    
+
     doc.setFontSize(10);
     doc.text('BITEL TELECOM', 52.5, y, { align: 'center' });
     y += 6;
@@ -584,7 +636,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
     // DATOS GENERALES
     doc.setFontSize(8);
     doc.setFont('courier', 'normal');
-    
+
     doc.text(`Fecha: ${new Date(receiptData.date).toLocaleString('es-PE')}`, 12, y);
     y += spacing.medium;
     doc.text(`Referencia: ${receiptData.reference}`, 12, y);
@@ -602,11 +654,11 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
     doc.setFont('courier', 'bold');
     doc.text('PRODUCTO', 12, y);
     y += spacing.medium;
-    
+
     doc.setFont('courier', 'normal');
     doc.text(receiptData.productName, 12, y);
     y += spacing.medium;
-    
+
     doc.setFontSize(7);
     doc.text(`Servicio: ${receiptData.serviceName}`, 12, y);
     y += spacing.large;
@@ -624,7 +676,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
 
     doc.setFontSize(8);
     doc.setFont('courier', 'normal');
-    
+
     // Monto a pagar
     doc.text('Monto a pagar:', 12, y);
     doc.text(`${receiptData.currency} ${receiptData.montoPagar.toFixed(2)}`, 93, y, { align: 'right' });
@@ -710,44 +762,44 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
       // ✅ CARGAR Y AGREGAR IMAGEN DEL BARCODE
       try {
         console.log('📷 Cargando imagen del barcode...');
-        
+
         const img = new Image();
         img.crossOrigin = 'anonymous';
-        
+
         await new Promise((resolve, reject) => {
           img.onload = () => {
             console.log('✅ Imagen del barcode cargada');
-            
+
             // Calcular dimensiones proporcionales
             const maxWidth = 75; // mm
             const maxHeight = 20; // mm
             let imgWidth = maxWidth;
             let imgHeight = (img.height / img.width) * maxWidth;
-            
+
             if (imgHeight > maxHeight) {
               imgHeight = maxHeight;
               imgWidth = (img.width / img.height) * maxHeight;
             }
-            
+
             // Centrar horizontalmente
             const x = (105 - imgWidth) / 2;
-            
+
             // Agregar imagen al PDF
             doc.addImage(img, 'JPEG', x, y, imgWidth, imgHeight);
             y += imgHeight + 2;
-            
+
             resolve();
           };
-          
+
           img.onerror = (error) => {
             console.warn('⚠️ No se pudo cargar imagen del barcode:', error);
             y += 2; // Espacio mínimo si falla
             resolve(); // Continuar sin imagen
           };
-          
+
           img.src = receiptData.barcodeImage;
         });
-        
+
       } catch (error) {
         console.warn('⚠️ Error al cargar barcode:', error);
         y += 2;
@@ -772,13 +824,13 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
 
       doc.setFontSize(7);
       doc.setFont('courier', 'normal');
-      
+
       doc.text(`Tel: ${receiptData.deliveryPhone || 'N/A'}`, 12, y);
       y += spacing.small;
-      
+
       doc.text(`Nombre: ${receiptData.deliveryName || 'N/A'}`, 12, y);
       y += spacing.small;
-      
+
       // Dirección puede ser larga, dividirla si es necesario
       const direccion = receiptData.deliveryAddress || 'N/A';
       if (direccion.length > 40) {
@@ -799,7 +851,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
     } else {
       y += 2; // Pequeño margen si está cerca del final
     }
-    
+
     doc.setLineWidth(0.5);
     doc.line(10, y, 95, y);
     y += 3;
@@ -812,7 +864,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
 
     // Convertir a Blob
     const pdfBlob = doc.output('blob');
-    
+
     console.log('✅ PDF generado:', (pdfBlob.size / 1024).toFixed(2), 'KB');
 
     if (pdfBlob.size < 10000) {
@@ -824,7 +876,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
     formData.append('file', pdfBlob, `recibo_${receiptData.reference}.pdf`);
 
     const token = localStorage.getItem('token') || localStorage.getItem('bitel_token');
-    
+
     const response = await fetch('http://127.0.0.1:8100/api/v1/upload/receipts', {
       method: 'POST',
       headers: {
@@ -850,8 +902,6 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
 
 
   // Guardar compra en backend
-  // Guardar compra en backend
-  // Guardar compra en backend
   const savePurchase = async (resultData) => {
     try {
       const timestamp = Date.now();
@@ -860,7 +910,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
       // Calcular vendor fields
       const purchaseCurrency = selectedProduct.product_currency || 'PEN';
       const vendorCurrency = selectedProduct.product_vendpro_currency || 'USD';
-      
+
       let purchaseVendorAmount = 0;
       let purchaseExchRate = 1.0;
 
@@ -935,7 +985,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
         requires_manual_intervention: resultData.requires_manual_intervention || false,
         purchase_user_id: user?.user_id || null,
         created_by: user?.user_email || 'anonymous',
-        
+
         // Campos vendor
         purchase_vendor_code: selectedProduct.product_vendor_code,
         purchase_vendpro_code: selectedProduct.product_vendpro_code,
@@ -952,7 +1002,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
         purchase_vendor_response_description: resultData.vendor_response_description || null,
         purchase_vendor_purchase_id: resultData.vendor_purchase_id || null,
         purchase_ip_petition: 'frontend',
-        
+
         // Campos balance
         purchase_balance_currency: 'USD',
         purchase_initial_balance: initialBalance,
@@ -967,7 +1017,7 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
       let montoPagar = 0;
       let descuentoCalculado = 0;
       let feeCalculado = 0;
-      
+
       if (purchaseData.productType === 'bill_payment' && purchaseData.validationData) {
         montoPagar = parseFloat(purchaseData.billPaymentAmount) || parseFloat(purchaseData.validationData.monto_base);
         const porcentajeDescuento = parseFloat(selectedProduct.product_discount_percentage) || 0;
@@ -1037,9 +1087,9 @@ const generateAndUploadReceiptPDF = async (receiptData) => {
           console.warn('⚠️ No se pudo actualizar URL del PDF:', updateError);
         }
       }
-      
+
       const uiResult = {
-        success: (resultData.payment_status === 'Paid' && 
+        success: (resultData.payment_status === 'Paid' &&
                  (resultData.delivery_status === 'Success' || resultData.delivery_status === 'Ordered')) ||
                  (resultData.payment_status === 'Pending' && resultData.payment_method === 'barcode'),
         payment_status: resultData.payment_status,
@@ -1325,7 +1375,58 @@ Dirección: ${purchaseData.deliveryAddress}
   return (
     <div className="flex-1 bg-gray-50 py-8">
       <div className="container mx-auto px-4">
-        <h1 className="text-4xl font-bold text-bitel-blue mb-8">Tienda Bitel</h1>
+        {/* 🆕 BANNER SUPERIOR - Info del País, Servicio y Compañía */}
+        {(urlCountry || urlService || urlCompany) && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-6">
+                {/* Logo de la compañía */}
+                {company && (
+                  <div className="flex items-center space-x-4">
+                    <img
+                      src={getImageUrl(company.company_logo, 'company')}
+                      alt={company.company_name}
+                      onError={(e) => e.target.src = FALLBACK_IMAGES.company}
+                      className="h-16 w-auto object-contain"
+                    />
+                    <div>
+                      <h2 className="text-2xl font-bold text-bitel-blue">{company.company_name}</h2>
+                      <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
+                        {country && (
+                          <span className="flex items-center">
+                            <img
+                              src={getImageUrl(country.country_flag_photo, 'country')}
+                              alt={country.country_name}
+                              onError={(e) => e.target.src = FALLBACK_IMAGES.country}
+                              className="w-6 h-4 object-cover rounded mr-2"
+                            />
+                            {country.country_name}
+                          </span>
+                        )}
+                        {selectedService && (
+                          <span>• {selectedService.service_name}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Botón volver */}
+              <a
+                href="/select"
+                className="flex items-center space-x-2 text-bitel-blue hover:text-blue-700 transition-colors"
+              >
+                <ArrowLeft size={20} />
+                <span className="font-semibold">Volver a Selección</span>
+              </a>
+            </div>
+          </div>
+        )}
+
+        <h1 className="text-4xl font-bold text-bitel-blue mb-8">
+          {company ? `Productos de ${company.company_name}` : 'Tienda Latconecta'}
+        </h1>
 
         <div className="bg-white rounded-lg shadow-md mb-8 overflow-x-auto">
           <div className="flex">
@@ -1348,8 +1449,18 @@ Dirección: ${purchaseData.deliveryAddress}
         </div>
 
         {products.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-600 text-lg">No hay productos disponibles</p>
+          <div className="text-center py-12 bg-white rounded-lg shadow-md">
+            <p className="text-gray-600 text-lg">
+              {company 
+                ? `No hay productos disponibles de ${company.company_name} en ${selectedService?.service_name}`
+                : 'No hay productos disponibles'}
+            </p>
+            <a
+              href="/select"
+              className="inline-block mt-4 text-bitel-blue hover:text-blue-700 font-semibold"
+            >
+              ← Volver a Selección
+            </a>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

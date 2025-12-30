@@ -1,8 +1,7 @@
 """
-Routers para Bitel API
+Routers para Latconecta API
 Todos los routers están completos y operativos
 """
-
 from . import auth
 from . import companies
 from . import services
@@ -13,6 +12,9 @@ from . import upload
 from . import countries
 from . import vendors
 from . import vendor_products
+from . import latconecta
+from . import vendor_api_mappings
+from . import mock_vendors
 
 __all__ = [
     "auth",
@@ -24,5 +26,8 @@ __all__ = [
     "upload",
     "countries",
     "vendors",
-    "vendor_products"
+    "vendor_products",
+    "latconecta",
+    "vendor_api_mappings",
+    "mock_vendors"
 ]
