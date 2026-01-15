@@ -1,9 +1,14 @@
 /**
  * Purchase Detail Modal - Latconecta Admin
  * Modal con 2 tabs para mostrar todos los detalles de una compra
- * Tab 1: Básicos + Estado + Delivery (Partes 1,2,3)
- * Tab 2: Vendor + Balance + Auditoría (Partes 4,5,6)
- * Fecha: 2025-12-05
+ * Tab 1: Básicos + Estado + Delivery
+ * Tab 2: Vendor + Balance + Auditoría
+ * 
+ * ACTUALIZADO: 2026-01-11
+ * - Botón cerrar arriba (modal más compacto)
+ * - Información Básica: sin IDs internos, con Purchase Status y códigos vendor
+ * - Estado Pago: con ambas referencias y flag de intervención manual
+ * - Estado Entrega: limpio, sin campos de pago
  */
 
 import React, { useState } from 'react';
@@ -31,20 +36,61 @@ const PurchaseDetailModal = ({ purchase, onClose }) => {
   };
 
   // Componente de campo
-  const Field = ({ label, value, isBoolean = false, isDate = false, isCurrency = false }) => (
+  const Field = ({ 
+    label, 
+    value, 
+    isBoolean = false, 
+    isDate = false, 
+    isCurrency = false, 
+    isJson = false, 
+    statusType = null  // 'transaction', 'payment', 'delivery'
+  }) => (
     <div className="mb-3">
       <label className="block text-xs font-semibold text-gray-600 mb-1">
         {label}
       </label>
       <div className="text-sm text-gray-900 bg-gray-50 p-2 rounded border border-gray-200">
         {isBoolean ? (
-          <span className={`px-2 py-1 rounded text-xs ${value ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-            {value ? 'Sí' : 'No'}
+          <span className={`px-2 py-1 rounded text-xs font-semibold ${value ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+            {value ? 'SÍ' : 'NO'}
           </span>
         ) : isDate ? (
           formatDate(value)
         ) : isCurrency ? (
           formatCurrency(value, purchase.purchase_currency)
+        ) : isJson && value ? (
+          <pre className="text-xs overflow-x-auto">{JSON.stringify(JSON.parse(value), null, 2)}</pre>
+        ) : statusType === 'transaction' ? (
+          // purchase_status: Success, Pending, Failed (NO Reversed)
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+            value === 'Success' ? 'bg-green-100 text-green-800' :
+            value === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+            value === 'Failed' ? 'bg-red-100 text-red-800' :
+            'bg-gray-100 text-gray-800'
+          }`}>
+            {value || 'N/A'}
+          </span>
+        ) : statusType === 'payment' ? (
+          // purchase_payment_status: Success, Pending, Reversed (NO Failed grabado)
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+            value === 'Success' ? 'bg-green-100 text-green-800' :
+            value === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+            value === 'Reversed' ? 'bg-orange-100 text-orange-800' :
+            'bg-gray-100 text-gray-800'
+          }`}>
+            {value || 'N/A'}
+          </span>
+        ) : statusType === 'delivery' ? (
+          // purchase_delivery_status: Success, Pending, Failed, Ordered (solo smartphones)
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+            value === 'Success' ? 'bg-green-100 text-green-800' :
+            value === 'Pending' ? 'bg-blue-100 text-blue-800' :
+            value === 'Ordered' ? 'bg-cyan-100 text-cyan-800' :
+            value === 'Failed' ? 'bg-red-100 text-red-800' :
+            'bg-gray-100 text-gray-800'
+          }`}>
+            {value || 'N/A'}
+          </span>
         ) : (
           value || 'N/A'
         )}
@@ -67,21 +113,20 @@ const PurchaseDetailModal = ({ purchase, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200">
+        {/* Header Compacto */}
+        <div className="flex justify-between items-center p-4 border-b border-gray-200">
           <div>
-            <h2 className="text-2xl font-bold text-blue-900">
-              Detalle de Compra
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">
-              Referencia: <span className="font-mono font-semibold">{purchase.purchase_reference}</span>
+            <h2 className="text-xl font-bold text-blue-900">Detalle de Compra</h2>
+            <p className="text-xs text-gray-600 mt-1">
+              <span className="font-mono font-semibold">{purchase.purchase_reference}</span>
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-sm"
           >
-            <X size={24} />
+            <X size={18} className="inline mr-1" />
+            Cerrar
           </button>
         </div>
 
@@ -111,76 +156,129 @@ const PurchaseDetailModal = ({ purchase, onClose }) => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {/* TAB 1: BÁSICOS + ESTADO + DELIVERY */}
+          {/* TAB 1: GENERAL Y ESTADO */}
           {activeTab === 1 && (
             <div>
-              {/* PARTE 1: CAMPOS BÁSICOS */}
+              {/* INFORMACIÓN BÁSICA */}
               <Section title="📋 INFORMACIÓN BÁSICA">
-                <Field label="ID" value={purchase.purchase_id} />
                 <Field label="Referencia" value={purchase.purchase_reference} />
                 <Field label="Fecha" value={purchase.purchase_date} isDate />
                 <Field label="Teléfono" value={purchase.purchase_phone_number} />
+                <Field label="Usuario ID" value={purchase.purchase_user_id || 'Anónimo'} />
                 <Field label="Servicio" value={purchase.purchase_service_name} />
                 <Field label="Producto" value={purchase.purchase_product_name} />
-                <Field label="Usuario ID" value={purchase.purchase_user_id || 'Anónimo'} />
+                <Field label="Estado de la Transacción" value={purchase.purchase_status} statusType="transaction" />
+                <Field label="Código Vendor" value={purchase.purchase_vendor_code} />
+                <Field label="Código VendorProduct" value={purchase.purchase_vendpro_code} />
+              </Section>
+
+              {/* MONTOS */}
+              <Section title="💰 MONTOS Y PRECIOS">
                 <Field label="Moneda" value={purchase.purchase_currency} />
+                <Field label="Precio Base" value={purchase.purchase_base_price} isCurrency />
                 <Field label="Descuento" value={purchase.purchase_discount} isCurrency />
-                <Field label="Comisión" value={purchase.purchase_fee} isCurrency />
+                <Field label="Comisión/Fee" value={purchase.purchase_fee} isCurrency />
                 <Field label="TOTAL" value={purchase.purchase_total_amount} isCurrency />
               </Section>
 
-              {/* PARTE 2: ESTADO */}
-              <Section title="💳 ESTADO DE PAGO Y PROVISIÓN">
+              {/* ESTADO DE PAGO */}
+              <Section title="💳 ESTADO DE PAGO">
                 <Field label="Método de Pago" value={purchase.purchase_payment_method} />
-                <Field label="Estado Pago" value={purchase.purchase_payment_status} />
+                <Field label="Estado Pago" value={purchase.purchase_payment_status} statusType="payment" />
                 <Field label="Ref. Pago" value={purchase.purchase_payment_ref} />
-                <Field label="Código Barcode" value={purchase.purchase_barcode_code} />
-                <Field label="Imagen Barcode" value={purchase.purchase_barcode_image} />
-                <Field label="Estado Entrega" value={purchase.purchase_delivery_status} />
-                <Field label="Ref. Provisión" value={purchase.purchase_provision_ref} />
                 <Field label="Ref. Reversión" value={purchase.purchase_reversal_ref} />
+                <Field label="Últimos 4 Dígitos Tarjeta" value={purchase.purchase_credit_card_last_digits} />
                 <Field 
                   label="Requiere Intervención Manual" 
                   value={purchase.requires_manual_intervention} 
                   isBoolean 
                 />
+              </Section>
+
+              {/* ESTADO DE ENTREGA */}
+              <Section title="📦 ESTADO DE ENTREGA (Solo Smartphones)">
+                <Field label="Estado Entrega" value={purchase.purchase_delivery_status} statusType="delivery" />
+                <Field label="Ref. Provisión" value={purchase.purchase_provision_ref} />
                 <Field label="Imagen Recibo" value={purchase.purchase_receip_image} />
               </Section>
 
-              {/* PARTE 3: DELIVERY Y ENTREGA */}
-              <Section title="📦 DATOS DE ENTREGA">
+              {/* DATOS DE ENTREGA */}
+              <Section title="🚚 DATOS DE ENTREGA">
                 <Field label="Teléfono Entrega" value={purchase.purchase_delivery_phone} />
                 <Field label="Nombre Destinatario" value={purchase.purchase_delivery_name} />
                 <Field label="Dirección" value={purchase.purchase_delivery_address} />
                 <Field label="Número de Cuenta" value={purchase.purchase_account_number} />
               </Section>
+
+              {/* CÓDIGO DE BARRAS */}
+              <Section title="📱 CÓDIGO DE BARRAS">
+                <Field label="Código Barcode" value={purchase.purchase_barcode_code} />
+                <Field label="Imagen Barcode" value={purchase.purchase_barcode_image} />
+              </Section>
             </div>
           )}
 
-          {/* TAB 2: VENDOR + BALANCE + AUDITORÍA */}
+          {/* TAB 2: VENDOR Y AUDITORÍA */}
           {activeTab === 2 && (
             <div>
-              {/* PARTE 4: VENDOR */}
+              {/* VENDOR - INFORMACIÓN BÁSICA */}
               <Section title="🏢 INFORMACIÓN DEL VENDOR">
                 <Field label="Código Vendor" value={purchase.purchase_vendor_code} />
+                <Field label="Nombre Vendor" value={purchase.vendor_name} />
                 <Field label="Tipo Producto" value={purchase.purchase_product_type} />
                 <Field label="Código VendPro" value={purchase.purchase_vendpro_code} />
                 <Field label="SKU ID Vendor" value={purchase.purchase_vendor_skuid} />
                 <Field label="País VendPro" value={purchase.purchase_vendpro_country} />
                 <Field label="Operador VendPro" value={purchase.purchase_vendpro_operator} />
+                <Field label="Tipo Producto VendPro" value={purchase.purchase_vendpro_product_type} />
+              </Section>
+
+              {/* VENDOR - MONTOS Y TRANSACCIONES */}
+              <Section title="💵 MONTOS Y TRANSACCIONES VENDOR">
                 <Field label="Moneda Vendor" value={purchase.purchase_vendor_currency} />
                 <Field label="Monto Vendor" value={purchase.purchase_vendor_amount} isCurrency />
-                <Field label="JSON Vendor" value={purchase.purchase_vendor_json ? 'Ver datos' : 'N/A'} />
+                <Field label="Costo Vendor" value={purchase.purchase_vendor_cost} isCurrency />
+                <Field label="Tasa de Cambio" value={purchase.purchase_exch_rate} />
+                <Field label="ID Compra Vendor" value={purchase.purchase_vendor_purchase_id} />
+                <Field label="ID Transacción Vendor" value={purchase.vendor_trans_id} />
+                <Field label="ID Transacción Proveedor" value={purchase.vendor_provider_trans_id} />
+              </Section>
+
+              {/* VENDOR - COMUNICACIÓN */}
+              <Section title="📡 COMUNICACIÓN CON VENDOR">
+                <Field label="IP Petición" value={purchase.purchase_ip_petition} />
                 <Field label="Fecha Petición" value={purchase.purchase_vendor_date_petition} isDate />
                 <Field label="Fecha Respuesta" value={purchase.purchase_vendor_date_response} isDate />
                 <Field label="Código Respuesta" value={purchase.purchase_vendor_response_code} />
                 <Field label="Descripción Respuesta" value={purchase.purchase_vendor_response_description} />
-                <Field label="ID Compra Vendor" value={purchase.purchase_vendor_purchase_id} />
-                <Field label="IP Petición" value={purchase.purchase_ip_petition} />
-                <Field label="Tasa de Cambio" value={purchase.purchase_exch_rate} />
               </Section>
 
-              {/* PARTE 5: BALANCE */}
+              {/* VENDOR - REQUEST/RESPONSE */}
+              <Section title="📨 REQUEST Y RESPONSE VENDOR">
+                <div className="col-span-full">
+                  <Field
+                    label="Vendor Request (JSON)"
+                    value={purchase.vendor_request}
+                    isJson
+                  />
+                </div>
+                <div className="col-span-full">
+                  <Field
+                    label="Vendor Response (JSON)"
+                    value={purchase.vendor_response}
+                    isJson
+                  />
+                </div>
+                <div className="col-span-full">
+                  <Field
+                    label="Vendor JSON (Completo)"
+                    value={purchase.purchase_vendor_json}
+                    isJson
+                  />
+                </div>
+              </Section>
+
+              {/* BALANCE */}
               <Section title="💰 BALANCE Y CONCILIACIÓN">
                 <Field label="Moneda Balance" value={purchase.purchase_balance_currency} />
                 <Field label="Balance Inicial" value={purchase.purchase_initial_balance} isCurrency />
@@ -188,24 +286,14 @@ const PurchaseDetailModal = ({ purchase, onClose }) => {
                 <Field label="Fecha Envío Conciliación" value={purchase.purchase_date_sent_to_conciliation} isDate />
               </Section>
 
-              {/* PARTE 6: AUDITORÍA */}
-              <Section title="📝 AUDITORÍA">
+              {/* AUDITORÍA */}
+              <Section title="🔒 AUDITORÍA">
                 <Field label="Creado Por" value={purchase.created_by} />
                 <Field label="Actualizado Por" value={purchase.updated_by} />
                 <Field label="Última Actualización" value={purchase.last_update_date} isDate />
               </Section>
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
-          <button
-            onClick={onClose}
-            className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold"
-          >
-            Cerrar
-          </button>
         </div>
       </div>
     </div>

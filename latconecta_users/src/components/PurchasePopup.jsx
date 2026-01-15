@@ -7,6 +7,7 @@ const PurchasePopup = React.memo(({
   showPurchasePopup,
   selectedProduct,
   selectedService,
+  selectedVendorProduct,
   purchaseStep,
   setPurchaseStep,
   purchaseData,
@@ -22,11 +23,18 @@ const PurchasePopup = React.memo(({
   handleDownloadReceipt,
   handleDownloadReceiptPDF,
   user,
-  company  // ✅ NUEVO: Información de la compañía para verificar disponibilidad de barcode
+  company
 }) => {
   if (!showPurchasePopup || !selectedProduct) return null;
 
-  // ✅ NUEVO: Resetear a 'card' si barcode no está disponible
+  const calculateTotalToPay = (amount) => {
+    const baseAmount = parseFloat(amount) || 0;
+    const discountPercentage = parseFloat(selectedProduct.product_discount_percentage || 0);
+    const discount = baseAmount * (discountPercentage / 100);
+    const fee = parseFloat(selectedProduct.product_fee || 0);
+    return baseAmount - discount + fee;
+  };
+
   useEffect(() => {
     if (company?.company_barcode_available === 'No' && purchaseData.paymentMethod === 'barcode') {
       setPurchaseData(prev => ({ ...prev, paymentMethod: 'card' }));
@@ -36,25 +44,26 @@ const PurchasePopup = React.memo(({
     }
   }, [company?.company_barcode_available, purchaseData.paymentMethod, setPurchaseData, showNotification]);
 
+  useEffect(() => {
+    if (purchaseStep === 2.6 && purchaseData.conversionApplies) {
+      const maxDebt = purchaseData.validationData?.monto_base || 0;
+      const amountUSD = (maxDebt / purchaseData.exchangeRate).toFixed(2);
+
+      if (!purchaseData.billPaymentAmount || purchaseData.billPaymentAmount === '') {
+        setPurchaseData(prev => ({ ...prev, billPaymentAmount: amountUSD }));
+      }
+    }
+  }, [purchaseStep]);
+
   const getStepTitle = () => {
-    if (purchaseStep === 5) return 'Resultado';
-    if (purchaseStep === 4) return 'Procesando';
-    if (purchaseStep === 2.5) return 'Datos de Entrega';
-    if (purchaseStep === 2.6) return 'Monto a Pagar';
-    if (purchaseStep === 2.7) return 'Monto a Transferir';
-    return `Paso ${Math.floor(purchaseStep)} de ${purchaseData.productType === 'smartphone' ? '4' : '3'}`;
-  };
-
-  // Calcular Total a Pagar (Monto - Descuento + Fee)
-  const calculateTotalToPay = (amount) => {
-    const monto = parseFloat(amount) || 0;
-    const discountPercent = parseFloat(selectedProduct.product_discount_percentage) || 0;
-    const fee = parseFloat(selectedProduct.product_fee) || 0;
-
-    const discountAmount = monto * (discountPercent / 100);
-    const total = monto - discountAmount + fee;
-
-    return total;
+     if (purchaseStep === 6) return 'Resultado';
+     if (purchaseStep === 5) return 'Procesando';
+     if (purchaseStep === 4) return 'Método de Pago';
+     if (purchaseStep === 3) return 'Monto';
+     if (purchaseStep === 2.6) return 'Monto a Pagar';
+     if (purchaseStep === 2.5) return 'Datos de Entrega';
+     if (purchaseStep === 2) return 'Validación';
+     return `Paso ${Math.floor(purchaseStep)}`;
   };
 
   return (
@@ -68,80 +77,6 @@ const PurchasePopup = React.memo(({
         </div>
 
         <div className="p-6">
-          {/* PASO 1: Confirmación */}
-          {purchaseStep === 1 && (
-            <div>
-              <h4 className="text-xl font-bold text-bitel-blue mb-4">Confirma tu producto</h4>
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <div className="flex items-start space-x-4">
-                  <img
-                    src={getImageUrl(selectedProduct.product_photo)}
-                    alt={selectedProduct.product_name}
-                    className="w-24 h-24 object-cover rounded-lg"
-                    onError={(e) => {
-                      e.target.src = FALLBACK_IMAGES.product;
-                    }}
-                  />
-                  <div className="flex-1">
-                    <h5 className="font-bold text-lg">{selectedProduct.product_name}</h5>
-                    <p className="text-sm text-gray-600 mb-2">{selectedService?.service_name}</p>
-                    <p className="text-gray-700 text-sm mb-3">{selectedProduct.product_description}</p>
-
-                    {/* ✅ CORREGIDO: Mostrar desglose para TODOS los productos */}
-                    <div className="bg-white rounded-lg p-3 border border-gray-200">
-                      <div className="flex justify-between items-center text-sm mb-1">
-                        <span className="text-gray-700">Precio Base:</span>
-                        <span className="font-semibold">
-                          {selectedProduct.product_currency} {parseFloat(selectedProduct.product_base_price).toFixed(2)}
-                        </span>
-                      </div>
-                      
-                      {parseFloat(selectedProduct.product_discount_percentage || 0) > 0 && (
-                        <div className="flex justify-between items-center text-sm mb-1 text-green-600">
-                          <span>Descuento ({parseFloat(selectedProduct.product_discount_percentage || 0).toFixed(2)}%):</span>
-                          <span>
-                            -{selectedProduct.product_currency} {parseFloat(selectedProduct.product_discount_amount || 0).toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-                      
-                      {parseFloat(selectedProduct.product_fee || 0) > 0 && (
-                        <div className="flex justify-between items-center text-sm mb-2">
-                          <span className="text-gray-700">Fee:</span>
-                          <span className="font-semibold">
-                            +{selectedProduct.product_currency} {parseFloat(selectedProduct.product_fee || 0).toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-                      
-                      <div className="flex justify-between items-center pt-2 border-t border-gray-300">
-                        <span className="font-bold text-gray-900">Total a Pagar:</span>
-                        <span className="text-xl font-bold text-bitel-blue">
-                          {selectedProduct.product_currency} {parseFloat(selectedProduct.product_total_price || 0).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={closePurchasePopup}
-                  className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => setPurchaseStep(2)}
-                  className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90"
-                >
-                  Continuar
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* PASO 2: Validación de número/cuenta */}
           {purchaseStep === 2 && (
             <div>
@@ -162,23 +97,20 @@ const PurchasePopup = React.memo(({
                 <input
                   type="text"
                   value={purchaseData.productType === 'bill_payment' ? purchaseData.accountNumber : purchaseData.phoneNumber}
-                  // ✅ PEGAR ESTO:
                   onChange={(e) => {
                     let value = e.target.value;
-  
-                    // Bill Payment acepta alfanumérico, otros solo números
+
                     if (purchaseData.productType === 'bill_payment') {
                       value = value.trim();
                     } else {
-                     value = value.replace(/[^0-9]/g, '');
+                      value = value.replace(/[^0-9]/g, '');
                     }
-  
+
                     setPurchaseData(prev => ({
                       ...prev,
                       [purchaseData.productType === 'bill_payment' ? 'accountNumber' : 'phoneNumber']: value
                     }));
                   }}
-
                   placeholder={purchaseData.productType === 'bill_payment' ? '123456789' : '999888777'}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bitel-blue focus:border-transparent"
                   maxLength={15}
@@ -265,11 +197,10 @@ const PurchasePopup = React.memo(({
                   />
                 </div>
 
-                {/* Google Maps Embed */}
                 {purchaseData.deliveryAddress && purchaseData.deliveryAddress.length > 10 && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      📍 Mapa de Referencia
+                      🗺️ Mapa de Referencia
                     </label>
                     <div className="border border-gray-300 rounded-lg overflow-hidden">
                       <iframe
@@ -301,7 +232,7 @@ const PurchasePopup = React.memo(({
                       if (setError) setError('Complete todos los campos de entrega');
                       return;
                     }
-                    setPurchaseStep(3);
+                    setPurchaseStep(4);
                   }}
                   className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90"
                 >
@@ -311,29 +242,52 @@ const PurchasePopup = React.memo(({
             </div>
           )}
 
-          {/* PASO 2.6: Ingreso de Monto (Bill Payment con indicador R) */}
+          {/* PASO 2.6: Bill Payment - Monto a Pagar */}
           {purchaseStep === 2.6 && (
             <div>
               <h4 className="text-xl font-bold text-bitel-blue mb-4">Confirme el Monto a Pagar</h4>
 
               <div className="bg-gray-50 rounded-lg p-4 mb-6">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-700">Monto Base:</span>
-                  <span className="font-bold text-lg">
-                    {selectedProduct.product_currency} {purchaseData.validationData?.monto_base?.toFixed(2)}
+                  <span className="text-gray-700">Deuda Total:</span>
+                  <span className="font-bold text-lg text-red-600">
+                    {purchaseData.validationData?.monto_base?.toFixed(2)} {purchaseData.vendorCurrency}
                   </span>
                 </div>
-                <div className="text-sm text-gray-600">
+
+                {purchaseData.conversionApplies && (
+                  <div className="flex justify-between items-center text-sm text-gray-600 mb-2">
+                    <span>Equivalente a:</span>
+                    <span className="font-semibold">
+                      {(purchaseData.validationData?.monto_base / purchaseData.exchangeRate).toFixed(2)} {selectedProduct.product_currency}
+                    </span>
+                  </div>
+                )}
+
+                {purchaseData.conversionApplies && (
+                  <div className="text-xs text-gray-500 mb-2">
+                    (Tipo de cambio: {(purchaseData.exchangeRate || 1).toFixed(4)} {purchaseData.vendorCurrency}/{selectedProduct.product_currency})
+                  </div>
+                )}
+
+                <div className="text-sm font-semibold mt-2">
                   {purchaseData.validationData?.indicador === 'R'
-                    ? 'Puede pagar un monto menor o igual al monto base'
-                    : 'Monto fijo'}
+                    ? '✅ Acepta pago parcial'
+                    : '⚠️ Debe pagar el monto completo'}
                 </div>
               </div>
 
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Monto a Pagar *
+                  Monto a Pagar en {selectedProduct.product_currency} *
                 </label>
+
+                {purchaseData.conversionApplies && (
+                  <div className="mb-2 text-sm text-blue-600">
+                    💰 Monto máximo: {(purchaseData.validationData?.monto_base / purchaseData.exchangeRate).toFixed(2)} {selectedProduct.product_currency}
+                  </div>
+                )}
+
                 <input
                   type="text"
                   value={purchaseData.billPaymentAmount || ''}
@@ -347,13 +301,20 @@ const PurchasePopup = React.memo(({
                     }
                     setPurchaseData(prev => ({ ...prev, billPaymentAmount: value }));
                   }}
-                  disabled={purchaseData.validationData?.indicador === 'T'}
+                  disabled={purchaseData.validationData?.indicador === 'T' || purchaseData.validationData?.indicador === 'F'}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bitel-blue focus:border-transparent disabled:bg-gray-100"
-                  placeholder="0.00"
+                  placeholder={purchaseData.conversionApplies
+                    ? (purchaseData.validationData?.monto_base / purchaseData.exchangeRate).toFixed(2)
+                    : purchaseData.validationData?.monto_base?.toFixed(2)}
                 />
+
+                <div className="text-xs text-gray-500 mt-1">
+                  {purchaseData.billPaymentAmount && parseFloat(purchaseData.billPaymentAmount) !== parseFloat((purchaseData.validationData?.monto_base / (purchaseData.exchangeRate || 1)).toFixed(2))
+                    ? '💡 Has modificado el monto'
+                    : '💡 Monto calculado automáticamente para pago total'}
+                </div>
               </div>
 
-              {/* CÁLCULO DEL TOTAL (Monto - Descuento + Fee) */}
               {purchaseData.billPaymentAmount && parseFloat(purchaseData.billPaymentAmount) > 0 && (
                 <div className="bg-gray-50 rounded-lg p-4 mb-6">
                   <div className="flex justify-between items-center mb-1">
@@ -362,42 +323,94 @@ const PurchasePopup = React.memo(({
                       {selectedProduct.product_currency} {parseFloat(purchaseData.billPaymentAmount).toFixed(2)}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center mb-1 text-green-600">
-                    <span>Descuento ({parseFloat(selectedProduct.product_discount_percentage || 0).toFixed(2)}%):</span>
-                    <span>
-                      -{selectedProduct.product_currency} {(parseFloat(purchaseData.billPaymentAmount) * parseFloat(selectedProduct.product_discount_percentage || 0) / 100).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-700">Fee:</span>
-                    <span className="font-semibold">
-                      +{selectedProduct.product_currency} {parseFloat(selectedProduct.product_fee || 0).toFixed(2)}
-                    </span>
-                  </div>
+
+                  {parseFloat(selectedProduct.product_discount_percentage || 0) > 0 && (
+                    <div className="flex justify-between items-center mb-1 text-green-600">
+                      <span>Descuento ({parseFloat(selectedProduct.product_discount_percentage || 0).toFixed(2)}%):</span>
+                      <span>
+                        -{selectedProduct.product_currency} {(parseFloat(purchaseData.billPaymentAmount) * parseFloat(selectedProduct.product_discount_percentage || 0) / 100).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+
+                  {parseFloat(selectedProduct.product_fee || 0) > 0 && (
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-700">Fee:</span>
+                      <span className="font-semibold">
+                        +{selectedProduct.product_currency} {parseFloat(selectedProduct.product_fee || 0).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-center pt-2 border-t border-gray-300">
                     <span className="text-gray-900 font-bold">Total a Pagar:</span>
                     <span className="text-xl font-bold text-bitel-blue">
-                      {selectedProduct.product_currency} {calculateTotalToPay(purchaseData.billPaymentAmount).toFixed(2)}
+                      {selectedProduct.product_currency} {(() => {
+                        const amount = parseFloat(purchaseData.billPaymentAmount);
+                        const discount = amount * (parseFloat(selectedProduct.product_discount_percentage || 0) / 100);
+                        const fee = parseFloat(selectedProduct.product_fee || 0);
+                        return (amount - discount + fee).toFixed(2);
+                      })()}
                     </span>
                   </div>
+
+                  {purchaseData.conversionApplies && (
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded">
+                        💱 <strong>Se pagarán al proveedor:</strong> {(() => {
+                          const amountUSD = parseFloat(purchaseData.billPaymentAmount);
+                          const amountLocal = amountUSD * purchaseData.exchangeRate;
+                          const maxDebt = purchaseData.validationData?.monto_base || 0;
+
+                          const diff = Math.abs(amountLocal - maxDebt);
+                          const diffPercent = (diff / maxDebt) * 100;
+
+                          if (diffPercent < 1) {
+                            return `${maxDebt.toFixed(2)} ${purchaseData.vendorCurrency} (Pago Total)`;
+                          } else {
+                            return `${amountLocal.toFixed(2)} ${purchaseData.vendorCurrency}`;
+                          }
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {error && (
+                <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-sm text-red-600">{error}</p>
                 </div>
               )}
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setPurchaseStep(2)}
+                  onClick={() => setPurchaseStep(3)}
                   className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600"
                 >
                   Atrás
                 </button>
                 <button
                   onClick={() => {
-                    const amount = parseFloat(purchaseData.billPaymentAmount);
-                    if (!amount || amount <= 0 || amount > (purchaseData.validationData?.monto_base || 0)) {
+                    let amountUSD = parseFloat(purchaseData.billPaymentAmount);
+                    const maxDebt = purchaseData.validationData?.monto_base || 0;
+
+                    if (!amountUSD || amountUSD <= 0) {
                       if (setError) setError('Ingrese un monto válido');
                       return;
                     }
-                    setPurchaseStep(3);
+
+                    let maxAllowedUSD = maxDebt;
+                    if (purchaseData.conversionApplies) {
+                      maxAllowedUSD = maxDebt / purchaseData.exchangeRate;
+                    }
+
+                    if (amountUSD > maxAllowedUSD + 0.01) {
+                      if (setError) setError(`El monto no debe exceder ${maxAllowedUSD.toFixed(2)} ${selectedProduct.product_currency}`);
+                      return;
+                    }
+
+                    setPurchaseStep(4);
                   }}
                   className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90"
                 >
@@ -406,95 +419,231 @@ const PurchasePopup = React.memo(({
               </div>
             </div>
           )}
-
-          {/* PASO 2.7: Monto a Transferir (Transferencias) */}
-          {purchaseStep === 2.7 && (
-            <div>
-              <h4 className="text-xl font-bold text-bitel-blue mb-4">Ingrese Monto a Transferir</h4>
-
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Monto a Transferir *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={purchaseData.transferAmount}
-                  onChange={(e) => {
-                    const amount = parseFloat(e.target.value) || 0;
-                    const total = calculateTotalToPay(amount);
-
-                    setPurchaseData(prev => ({
-                      ...prev,
-                      transferAmount: e.target.value,
-                      transferTotalToPay: total
-                    }));
-                  }}
-                  placeholder="50.00"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bitel-blue focus:border-transparent"
-                />
-              </div>
-
-              {/* CÁLCULO DEL TOTAL (Monto - Descuento + Fee) */}
-              {purchaseData.transferAmount && parseFloat(purchaseData.transferAmount) > 0 && (
-                <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-gray-700">Monto a transferir:</span>
-                    <span className="font-semibold">
-                      {selectedProduct.product_currency} {parseFloat(purchaseData.transferAmount).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center mb-1 text-green-600">
-                    <span>Descuento ({parseFloat(selectedProduct.product_discount_percentage || 0).toFixed(2)}%):</span>
-                    <span>
-                      -{selectedProduct.product_currency} {(parseFloat(purchaseData.transferAmount) * parseFloat(selectedProduct.product_discount_percentage || 0) / 100).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-700">Fee:</span>
-                    <span className="font-semibold">
-                      +{selectedProduct.product_currency} {parseFloat(selectedProduct.product_fee || 0).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t border-gray-300">
-                    <span className="text-gray-900 font-bold">Total a Pagar:</span>
-                    <span className="text-xl font-bold text-bitel-blue">
-                      {selectedProduct.product_currency} {purchaseData.transferTotalToPay.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setPurchaseStep(2)}
-                  className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600"
-                >
-                  Atrás
-                </button>
-                <button
-                  onClick={() => {
-                    if (!purchaseData.transferAmount || parseFloat(purchaseData.transferAmount) <= 0) {
-                      if (setError) setError('Ingrese un monto válido');
-                      return;
-                    }
-                    setPurchaseStep(3);
-                  }}
-                  className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90"
-                >
-                  Continuar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* PASO 3: Método de Pago */}
+          {/* ✅ PASO 3 NUEVO: Definir/Mostrar Monto (GENÉRICO) */}
           {purchaseStep === 3 && (
             <div>
-              <h4 className="text-xl font-bold text-bitel-blue mb-4">Seleccione Método de Pago</h4>
+              <h4 className="text-xl font-bold text-bitel-blue mb-4">
+                {selectedProduct.product_amount_type === 'F' ? 'Confirme el Monto' :
+                 selectedProduct.product_amount_type === 'R' ? 'Ingrese el Monto' :
+                 'Confirme el Monto a Pagar'}
+              </h4>
 
-              <div className="space-y-3 mb-6">
+              {/* CASO F: MONTO FIJO - Solo mostrar */}
+              {selectedProduct.product_amount_type === 'F' && (
+                <div>
+                  <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-gray-700">Monto a pagar:</span>
+                      <span className="font-semibold">
+                        {selectedProduct.product_currency} {parseFloat(selectedProduct.product_base_price).toFixed(2)}
+                      </span>
+                    </div>
+
+                    {parseFloat(selectedProduct.product_discount_percentage || 0) > 0 && (
+                      <div className="flex justify-between items-center mb-1 text-green-600">
+                        <span>Descuento ({parseFloat(selectedProduct.product_discount_percentage || 0).toFixed(2)}%):</span>
+                        <span>
+                          -{selectedProduct.product_currency} {parseFloat(selectedProduct.product_discount_amount || 0).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+
+                    {parseFloat(selectedProduct.product_fee || 0) > 0 && (
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-gray-700">Fee:</span>
+                        <span className="font-semibold">
+                          +{selectedProduct.product_currency} {parseFloat(selectedProduct.product_fee || 0).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-center pt-2 border-t border-gray-300">
+                      <span className="font-bold text-gray-900">Total a Pagar:</span>
+                      <span className="text-xl font-bold text-bitel-blue">
+                        {selectedProduct.product_currency} {parseFloat(selectedProduct.product_total_price || 0).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setPurchaseStep(2)}
+                      className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600"
+                    >
+                      Atrás
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (purchaseData.productType === 'smartphone') {
+                          setPurchaseStep(2.5);
+                        } else {
+                          setPurchaseStep(4);
+                        }
+                      }}
+                      className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90"
+                    >
+                      Continuar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CASO R: MONTO EN RANGO - Input con validación */}
+              {selectedProduct.product_amount_type === 'R' && (
+                <div>
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="text-sm text-blue-800">
+                      <div className="font-semibold">
+                        💰 Rango permitido: {parseFloat(selectedProduct.product_base_price).toFixed(2)} - {parseFloat(selectedProduct.product_base_price_max).toFixed(2)} {selectedProduct.product_currency}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Monto en {selectedProduct.product_currency} *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={selectedProduct.product_base_price}
+                      max={selectedProduct.product_base_price_max}
+                      value={purchaseData.variableAmount}
+                      onChange={(e) => {
+                        const amount = parseFloat(e.target.value) || 0;
+                        const discount = amount * (parseFloat(selectedProduct.product_discount_percentage || 0) / 100);
+                        const fee = parseFloat(selectedProduct.product_fee || 0);
+                        const total = amount - discount + fee;
+
+                        setPurchaseData(prev => ({
+                          ...prev,
+                          variableAmount: e.target.value,
+                          variableTotalToPay: total
+                        }));
+                      }}
+                      placeholder={parseFloat(selectedProduct.product_base_price).toFixed(2)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bitel-blue focus:border-transparent"
+                    />
+
+                    {purchaseData.variableAmount && (
+                      parseFloat(purchaseData.variableAmount) < parseFloat(selectedProduct.product_base_price) ||
+                      parseFloat(purchaseData.variableAmount) > parseFloat(selectedProduct.product_base_price_max)
+                    ) && (
+                      <div className="mt-2 text-sm text-red-600">
+                        ⚠️ El monto debe estar entre {parseFloat(selectedProduct.product_base_price).toFixed(2)} y {parseFloat(selectedProduct.product_base_price_max).toFixed(2)} {selectedProduct.product_currency}
+                      </div>
+                    )}
+                  </div>
+
+                  {purchaseData.variableAmount && parseFloat(purchaseData.variableAmount) > 0 && (
+                    <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-gray-700">Monto seleccionado:</span>
+                        <span className="font-semibold">
+                          {selectedProduct.product_currency} {parseFloat(purchaseData.variableAmount).toFixed(2)}
+                        </span>
+                      </div>
+
+                      {parseFloat(selectedProduct.product_discount_percentage || 0) > 0 && (
+                        <div className="flex justify-between items-center mb-1 text-green-600">
+                          <span>Descuento ({parseFloat(selectedProduct.product_discount_percentage || 0).toFixed(2)}%):</span>
+                          <span>
+                            -{selectedProduct.product_currency} {(parseFloat(purchaseData.variableAmount) * parseFloat(selectedProduct.product_discount_percentage || 0) / 100).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+
+                      {parseFloat(selectedProduct.product_fee || 0) > 0 && (
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-gray-700">Fee:</span>
+                          <span className="font-semibold">
+                            +{selectedProduct.product_currency} {parseFloat(selectedProduct.product_fee || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between items-center pt-2 border-t border-gray-300">
+                        <span className="font-bold text-gray-900">Total a Pagar:</span>
+                        <span className="text-xl font-bold text-bitel-blue">
+                          {selectedProduct.product_currency} {purchaseData.variableTotalToPay.toFixed(2)}
+                        </span>
+                      </div>
+
+                      {purchaseData.conversionApplies && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded">
+                            💱 <strong>Se {purchaseData.productType === 'transfer' ? 'enviarán' : 'recargarán'}:</strong> {(parseFloat(purchaseData.variableAmount) * purchaseData.exchangeRate).toFixed(2)} {purchaseData.vendorCurrency}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {error && (
+                    <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm text-red-600">{error}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setPurchaseStep(2)}
+                      className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600"
+                    >
+                      Atrás
+                    </button>
+                    <button
+                      onClick={() => {
+                        const amount = parseFloat(purchaseData.variableAmount);
+
+                        if (!amount || amount <= 0) {
+                          if (setError) setError('Ingrese un monto válido');
+                          return;
+                        }
+
+                        if (amount < parseFloat(selectedProduct.product_base_price) ||
+                            amount > parseFloat(selectedProduct.product_base_price_max)) {
+                          if (setError) setError(`El monto debe estar entre ${parseFloat(selectedProduct.product_base_price).toFixed(2)} y ${parseFloat(selectedProduct.product_base_price_max).toFixed(2)} ${selectedProduct.product_currency}`);
+                          return;
+                        }
+
+                        if (purchaseData.productType === 'smartphone') {
+                          setPurchaseStep(2.5);
+                        } else {
+                          setPurchaseStep(4);
+                        }
+                      }}
+                      className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90"
+                    >
+                      Continuar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CASO V: BILL PAYMENT - Redirigir al paso específico */}
+              {selectedProduct.product_amount_type === 'V' && (
+                <div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                    <p className="text-blue-800">
+                      Este producto requiere validación de deuda. Redirigiendo...
+                    </p>
+                  </div>
+                  {(() => {
+                    setTimeout(() => setPurchaseStep(2.6), 500);
+                    return null;
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PASO 4: Método de Pago */}
+          {purchaseStep === 4 && (
+            <div>
+              <h4 className="text-xl font-bold text-bitel-blue mb-4">Selecciona Método de Pago</h4>
+
+              <div className="space-y-4 mb-6">
                 <button
                   onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'card' }))}
                   className={`w-full p-4 rounded-lg border-2 transition-all ${
@@ -505,14 +654,16 @@ const PurchasePopup = React.memo(({
                 >
                   <div className="flex items-center space-x-3">
                     <CreditCard size={24} className="text-bitel-blue" />
-                    <div className="text-left">
+                    <div className="flex-1 text-left">
                       <div className="font-bold">Tarjeta de Crédito/Débito</div>
                       <div className="text-sm text-gray-600">Pago inmediato</div>
                     </div>
+                    {purchaseData.paymentMethod === 'card' && (
+                      <Check size={24} className="text-bitel-blue" />
+                    )}
                   </div>
                 </button>
 
-                {/* ✅ CONDICIONAL: Solo mostrar si barcode está disponible */}
                 {company?.company_barcode_available === 'Si' && (
                   <button
                     onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'barcode' }))}
@@ -523,20 +674,16 @@ const PurchasePopup = React.memo(({
                     }`}
                   >
                     <div className="flex items-center space-x-3">
-                      <Smartphone size={24} className="text-bitel-blue" />
-                      <div className="text-left">
+                      <div className="text-2xl">📊</div>
+                      <div className="flex-1 text-left">
                         <div className="font-bold">Código de Barras</div>
-                        <div className="text-sm text-gray-600">Paga en agentes</div>
+                        <div className="text-sm text-gray-600">Paga en tienda autorizada</div>
                       </div>
+                      {purchaseData.paymentMethod === 'barcode' && (
+                        <Check size={24} className="text-bitel-blue" />
+                      )}
                     </div>
                   </button>
-                )}
-
-                {/* ✅ NUEVO: Mensaje informativo si barcode no está disponible */}
-                {company?.company_barcode_available === 'No' && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
-                    ℹ️ Código de barras no disponible temporalmente. Use tarjeta de crédito/débito.
-                  </div>
                 )}
               </div>
 
@@ -551,12 +698,10 @@ const PurchasePopup = React.memo(({
                   onClick={() => {
                     if (purchaseData.productType === 'smartphone') {
                       setPurchaseStep(2.5);
-                    } else if (purchaseData.productType === 'transfer') {
-                      setPurchaseStep(2.7);
-                    } else if (purchaseData.productType === 'bill_payment' && purchaseData.validationData?.indicador === 'R') {
+                    } else if (purchaseData.productType === 'bill_payment' && selectedProduct.product_amount_type === 'V') {
                       setPurchaseStep(2.6);
                     } else {
-                      setPurchaseStep(2);
+                      setPurchaseStep(3);
                     }
                   }}
                   className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600"
@@ -565,356 +710,271 @@ const PurchasePopup = React.memo(({
                 </button>
                 <button
                   onClick={handlePaymentAndProvision}
-                  disabled={processing || !purchaseData.paymentMethod}
-                  className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+                  disabled={!purchaseData.paymentMethod}
+                  className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
                 >
-                  {processing ? (
-                    <>
-                      <Loader2 size={20} className="animate-spin" />
-                      <span>Procesando...</span>
-                    </>
-                  ) : (
-                    'Pagar'
-                  )}
+                  Procesar Compra
                 </button>
               </div>
             </div>
           )}
 
-          {/* PASO 4: Procesamiento */}
-          {purchaseStep === 4 && !error && !purchaseResult && (
+          {/* PASO 5: Procesamiento */}
+          {purchaseStep === 5 && !error && !purchaseResult && (
             <div className="text-center py-12">
               <Loader2 size={64} className="animate-spin text-bitel-blue mx-auto mb-4" />
-              <p className="text-lg text-gray-600">Procesando transacción...</p>
-              <p className="text-sm text-gray-500 mt-2">Por favor espere</p>
+              <p className="text-xl font-semibold text-gray-700">Procesando tu compra...</p>
+              <p className="text-sm text-gray-500 mt-2">Por favor espera un momento</p>
             </div>
           )}
 
-          {/* PASO 4 - ERROR DE PAGO */}
-          {purchaseStep === 4 && error && !purchaseResult && (
-            <div>
-              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <X size={48} className="text-bitel-blue" />
+          {/* PASO 5 - ERROR DE PAGO */}
+          {purchaseStep === 5 && error && !purchaseResult && (
+            <div className="text-center py-12">
+              <AlertCircle size={64} className="text-red-500 mx-auto mb-4" />
+              <h4 className="text-2xl font-bold text-red-600 mb-4">Error en el Pago</h4>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <p className="text-red-600">{error}</p>
               </div>
-              <h4 className="text-2xl font-bold text-bitel-blue mb-4">No se Pudo Cobrar</h4>
-
-              <p className="text-gray-700 mb-6 text-center">Cambie Medio de Pago</p>
-
-              {error && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                  <p className="text-sm text-blue-700">{error}</p>
-                </div>
-              )}
-
               <button
                 onClick={() => {
-                  setPurchaseStep(3);
+                  setPurchaseStep(4);
                   setError(null);
                 }}
-                className="w-full bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90"
+                className="bg-bitel-blue text-white px-6 py-3 rounded-lg font-bold hover:opacity-90"
               >
                 Volver a Método de Pago
               </button>
             </div>
           )}
 
-          {/* PASO 5: Resultado */}
-          {purchaseStep === 5 && purchaseResult && (
-            <div>
+          {/* PASO 6: Resultado */}
+
+          {purchaseStep === 6 && purchaseResult && (
+            <div className="py-6">
               {purchaseResult.success ? (
-                <div>
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <Check size={36} className="text-green-600" />
+                <>
+                  {/* Header de éxito */}
+                  <div className="text-center mb-4">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <Check size={40} className="text-green-600" />
+                    </div>
+                    <h4 className="text-2xl font-bold text-green-600 mb-1">
+                      {purchaseResult.purchase_status === 'Pending' ? '¡Compra Registrada!' : '¡Compra Exitosa!'}
+                    </h4>
+                    <p className="text-sm text-gray-600">
+                      {purchaseResult.purchase_status === 'Pending' 
+                        ? 'Tu compra ha sido registrada y está pendiente de confirmación'
+                        : 'Tu transacción ha sido completada'}
+                    </p>
                   </div>
-                  <h4 className="text-xl font-bold text-green-600 mb-6">
-                    {purchaseResult.payment_status === 'Pending' ? '¡Código Generado!' : '¡Compra Exitosa!'}
-                  </h4>
 
-                  <div className="bg-gray-50 rounded-lg p-5 mb-5 text-left text-sm">
-                    <div className="mb-4 pb-4 border-b border-gray-300">
-                      <h5 className="font-bold text-gray-700 mb-2">DATOS GENERALES</h5>
-                      <div className="space-y-1">
-                        <div><strong>Fecha:</strong> {new Date(purchaseResult.date).toLocaleString()}</div>
-                        <div><strong>Referencia:</strong> <span className="font-mono">{purchaseResult.reference}</span></div>
+                  {/* Información completa en formato compacto */}
+                  <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3">
+                    
+                    {/* Sección: Información Básica */}
+                    <div className="border-b pb-2">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                         <div>
-                          <strong>
-                            {purchaseData.productType === 'bill_payment' ? 'CUENTA PAGADA:' :
-                             purchaseData.productType === 'transfer' ? 'NUMERO DESTINO:' :
-                             purchaseData.productType === 'smartphone' ? 'NUMERO CONTACTO:' :
-                             'NUMERO RECARGADO:'}
-                          </strong> {purchaseData.phoneNumber || purchaseData.accountNumber}
+                          <span className="text-gray-600">Fecha:</span>
+                          <p className="font-semibold">{new Date(purchaseResult.date).toLocaleString('es-PE')}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Referencia:</span>
+                          <p className="font-bold text-bitel-blue">{purchaseResult.reference}</p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="mb-4 pb-4 border-b border-gray-300">
-                      <h5 className="font-bold text-gray-700 mb-2">PRODUCTO</h5>
-                      <div className="space-y-1">
-                        <div><strong>{selectedProduct.product_name}</strong></div>
-                        <div className="text-xs text-gray-600">Servicio: {selectedService.service_name}</div>
-
-                        <div className="mt-3 bg-white rounded p-3">
-                          <div className="flex justify-between text-xs">
-                            <span>Monto a pagar:</span>
-                            <span className="font-semibold">{selectedProduct.product_currency} {purchaseResult.monto_pagar.toFixed(2)}</span>
-                          </div>
-                          {purchaseResult.descuento > 0 && (
-                            <div className="flex justify-between text-xs text-green-600">
-                              <span>Descuento ({purchaseResult.porcentaje_descuento}%):</span>
-                              <span>-{selectedProduct.product_currency} {purchaseResult.descuento.toFixed(2)}</span>
-                            </div>
-                          )}
-                          {purchaseResult.fee > 0 && (
-                            <div className="flex justify-between text-xs">
-                              <span>Fee:</span>
-                              <span>+{selectedProduct.product_currency} {purchaseResult.fee.toFixed(2)}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between font-bold border-t mt-2 pt-2">
-                            <span>PAGO TOTAL:</span>
-                            <span className="text-lg text-bitel-blue">{selectedProduct.product_currency} {parseFloat(purchaseResult.amount).toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </div>
+                    {/* Destinatario */}
+                    <div className="border-b pb-2">
+                      <p className="text-xs text-gray-500 mb-1">
+                        {purchaseData.productType === 'bill_payment' ? 'CUENTA PAGADA' :
+                         purchaseData.productType === 'smartphone' ? 'CONTACTO ENTREGA' :
+                         purchaseData.productType === 'transfer' ? 'NÚMERO DESTINO' :
+                         'NÚMERO RECARGADO'}
+                      </p>
+                      <p className="font-semibold">
+                        {purchaseData.phoneNumber || purchaseData.accountNumber}
+                      </p>
                     </div>
 
-                    <div className="mb-4 pb-4 border-b border-gray-300">
-                      <h5 className="font-bold text-gray-700 mb-2">ESTADO</h5>
-                      <div className="space-y-1">
-                        <div><strong>Estado de Pago:</strong> <span className="text-green-600 font-semibold">{purchaseResult.payment_status}</span></div>
-                        {purchaseResult.payment_ref && (
-                          <div className="text-xs"><strong>Ref. Pago:</strong> <span className="font-mono">{purchaseResult.payment_ref}</span></div>
+                    {/* Sección: Producto */}
+                    <div className="border-b pb-2">
+                      <p className="text-xs font-bold text-gray-700 mb-1">PRODUCTO</p>
+                      <p className="font-semibold text-sm">{selectedProduct.product_name}</p>
+                      <p className="text-xs text-gray-600">Servicio: {selectedService.service_name}</p>
+                    </div>
+
+                    {/* Sección: Montos */}
+                    <div className="border-b pb-2">
+                      <p className="text-xs font-bold text-gray-700 mb-1">MONTO</p>
+                      <div className="space-y-0.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Monto a pagar:</span>
+                          <span className="font-semibold">
+                            {selectedProduct.product_currency} {purchaseResult.monto_pagar.toFixed(2)}
+                          </span>
+                        </div>
+                        {purchaseResult.descuento > 0 && (
+                          <div className="flex justify-between text-green-600">
+                            <span>Descuento ({purchaseResult.porcentaje_descuento}%):</span>
+                            <span>-{selectedProduct.product_currency} {purchaseResult.descuento.toFixed(2)}</span>
+                          </div>
                         )}
+                        {purchaseResult.fee > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Comisión:</span>
+                            <span className="font-semibold">
+                              +{selectedProduct.product_currency} {purchaseResult.fee.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-1 border-t border-gray-300 font-bold">
+                          <span>PAGO TOTAL:</span>
+                          <span className="text-bitel-blue text-base">
+                            {selectedProduct.product_currency} {parseFloat(purchaseResult.amount).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sección: Estado */}
+                    <div className={purchaseResult.barcode ? 'border-b pb-2' : ''}>
+                      <p className="text-xs font-bold text-gray-700 mb-1">ESTADO</p>
+                      <div className="space-y-0.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Estado Pago:</span>
+                          <span className="font-semibold">{purchaseResult.payment_status}</span>
+                        </div>
                         {purchaseResult.delivery_status && (
-                          <div><strong>Estado de Entrega:</strong> <span className="text-green-600 font-semibold">{purchaseResult.delivery_status}</span></div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Estado Provisión:</span>
+                            <span className="font-semibold">{purchaseResult.delivery_status}</span>
+                          </div>
+                        )}
+                        {purchaseResult.payment_ref && (
+                          <div className="text-xs text-gray-500">
+                            Ref. Pago: {purchaseResult.payment_ref}
+                          </div>
                         )}
                         {purchaseResult.provision_ref && (
-                          <div className="text-xs"><strong>Ref. Entrega:</strong> <span className="font-mono">{purchaseResult.provision_ref}</span></div>
+                          <div className="text-xs text-gray-500">
+                            Ref. Provisión: {purchaseResult.provision_ref}
+                          </div>
                         )}
                       </div>
                     </div>
 
+                    {/* Sección: Barcode (si existe) */}
                     {purchaseResult.barcode && (
-                      <div className="mb-4 pb-4 border-b border-gray-300">
-                        <h5 className="font-bold text-gray-700 mb-2">CÓDIGO DE BARRAS</h5>
-                        <div className="text-center">
-                          <p className="font-mono text-base font-bold mb-2">{purchaseResult.barcode}</p>
-                          <img
-                            src={purchaseResult.barcode_image}
-                            alt="Barcode"
-                            className="w-full max-w-xs mx-auto mb-2"
-                          />
-                          <p className="text-xs text-orange-600">
-                            📍 Acérquese a una tienda autorizada para completar el pago
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {purchaseData.productType === 'smartphone' && (
-                      <div className="mb-2">
-                        <h5 className="font-bold text-gray-700 mb-2">DATOS DE ENTREGA</h5>
-                        <div className="space-y-1 text-xs">
-                          <div><strong>Número de Contacto:</strong> {purchaseData.deliveryPhone || purchaseData.phoneNumber}</div>
-                          <div><strong>Nombre Completo:</strong> {purchaseData.deliveryName}</div>
-                          <div><strong>Dirección de Entrega:</strong> {purchaseData.deliveryAddress}</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                {/* ✅ NUEVO: Advertencia para usuarios anónimos */}
-                {!user && (
-                  <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 mb-4">
-                    <div className="flex items-start">
-                      <AlertCircle size={20} className="text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm text-blue-800">
-                        <p className="font-bold mb-2">📋 IMPORTANTE: Guarda estos datos</p>
-                        <div className="bg-white rounded p-3 mb-2 border border-blue-200">
-                          <div className="font-mono text-base space-y-1">
-                            <div>
-                              <strong>Referencia:</strong> 
-                              <span className="ml-2 text-blue-600">{purchaseResult.reference}</span>
-                            </div>
-                            <div>
-                              <strong>Teléfono:</strong> 
-                              <span className="ml-2 text-blue-600">
-                                {purchaseData.phoneNumber || purchaseData.accountNumber}
-                              </span>
-                            </div>
+                      <div className={purchaseData.productType === 'smartphone' ? 'border-b pb-2' : ''}>
+                        <p className="text-xs font-bold text-gray-700 mb-1">CÓDIGO DE BARRAS</p>
+                        <p className="font-mono text-center text-base font-bold my-2">{purchaseResult.barcode}</p>
+                        {purchaseResult.barcode_image && (
+                          <div className="flex justify-center my-2">
+                            <img 
+                              src={purchaseResult.barcode_image} 
+                              alt="Barcode" 
+                              className="max-w-full h-auto"
+                              style={{maxHeight: '80px'}}
+                            />
                           </div>
-                        </div>
-                        <p className="text-xs">
-                          💡 Para consultas sobre tu compra, comunícate con nuestro equipo de soporte 
-                          proporcionando estos datos.
+                        )}
+                        <p className="text-xs text-gray-500 text-center">
+                          Acércate a una tienda autorizada para realizar el pago
                         </p>
                       </div>
-                    </div>
-                  </div>
-                )}
+                    )}
 
-                  <div className="flex flex-col gap-2">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleDownloadReceipt}
-                        className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"
-                      >
-                        <Download size={20} />
-                        <span>TXT</span>
-                      </button>
-                      <button
-                        onClick={handleDownloadReceiptPDF}
-                        className="flex-1 bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 flex items-center justify-center gap-2"
-                      >
-                        <FileText size={20} />
-                        <span>PDF</span>
-                      </button>
-                    </div>
-                    <button
-                      onClick={closePurchasePopup}
-                      className="w-full bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90"
-                    >
-                      Finalizar
-                    </button>
-                  </div>
-                </div>
-              ) : purchaseResult.payment_status === 'Reversed' ? (
-                <div>
-                  <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <AlertCircle size={48} className="text-orange-600" />
-                  </div>
-                  <h4 className="text-2xl font-bold text-orange-600 mb-4">Falló en Provisión</h4>
-
-                  <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-6 mb-6">
-                    <p className="text-orange-800 font-bold mb-3">La Provisión Falló</p>
-                    <p className="text-sm text-orange-700 mb-4">
-                      Se devolvió cobro realizado
-                    </p>
-
-                    <div className="bg-white rounded p-3 space-y-2">
-                      {purchaseResult.payment_ref && (
-                        <div>
-                          <p className="text-xs text-gray-600">Ref. Cobro:</p>
-                          <p className="font-mono text-sm font-semibold">{purchaseResult.payment_ref}</p>
+                    {/* Sección: Datos de Entrega (solo smartphones) */}
+                    {purchaseData.productType === 'smartphone' && (
+                      <div>
+                        <p className="text-xs font-bold text-gray-700 mb-1">CONTACTO</p>
+                        <div className="space-y-0.5 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Teléfono:</span>
+                            <span className="font-semibold">{purchaseData.deliveryPhone || purchaseData.phoneNumber}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Nombre:</span>
+                            <span className="font-semibold">{purchaseData.deliveryName}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600 text-xs">Dirección:</span>
+                            <p className="text-sm font-semibold">{purchaseData.deliveryAddress}</p>
+                          </div>
                         </div>
-                      )}
-                      {purchaseResult.reversal_ref && (
-                        <div>
-                          <p className="text-xs text-gray-600">Ref. Devolución:</p>
-                          <p className="font-mono text-sm font-semibold text-orange-600">{purchaseResult.reversal_ref}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
+                    )}
 
-                  <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left text-sm">
-                    <h5 className="font-bold text-gray-700 mb-2">ESTADO DE LA TRANSACCIÓN</h5>
-                    <div className="space-y-1 text-xs">
-                      <div><strong>Fecha:</strong> {new Date(purchaseResult.date).toLocaleString()}</div>
-                      <div><strong>Referencia:</strong> <span className="font-mono">{purchaseResult.reference}</span></div>
-                      <div><strong>Producto:</strong> {selectedProduct.product_name}</div>
-                      <div><strong>Estado:</strong> <span className="text-orange-600 font-semibold">Reversed</span></div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2 mb-4">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleDownloadReceipt}
-                        className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"
-                      >
-                        <Download size={20} />
-                        <span>TXT</span>
-                      </button>
-                      <button
-                        onClick={handleDownloadReceiptPDF}
-                        className="flex-1 bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 flex items-center justify-center gap-2"
-                      >
-                        <FileText size={20} />
-                        <span>PDF</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <button onClick={closePurchasePopup} className="w-full bg-orange-600 text-white py-3 rounded-lg font-bold hover:bg-orange-700">
-                    Cerrar
-                  </button>
-                </div>
-              ) : purchaseResult.requires_manual_intervention ? (
-                <div>
-                  <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <AlertCircle size={48} className="text-red-600" />
-                  </div>
-                  <h4 className="text-2xl font-bold text-red-600 mb-4">Fallo en la Devolución de Cobro Realizado</h4>
-
-                  <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6 mb-6">
-                    <p className="text-red-800 font-bold mb-3">La provisión del servicio falló</p>
-                    <p className="text-sm text-red-700 font-bold mb-3">
-                      No se pudo devolver cobro realizado
-                    </p>
-                    <p className="text-sm text-red-700 font-bold mb-4">
-                      Si no recibe devolución en 48 horas, contactar con soporte@latcom.co
-                    </p>
-
-                    {purchaseResult.payment_ref && (
-                      <div className="bg-white rounded p-3">
-                        <p className="text-xs text-gray-600">Ref. Pago:</p>
-                        <p className="font-mono font-bold text-sm text-red-600">{purchaseResult.payment_ref}</p>
+                    {/* Alerta de intervención manual */}
+                    {purchaseResult.requires_manual_intervention && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
+                        <p className="text-xs text-yellow-800 font-semibold">⚠️ Atención Requerida</p>
+                        <p className="text-xs text-yellow-700 mt-1">
+                          No se pudo completar la devolución automática. Si no recibes tu reembolso en 48 horas, 
+                          contacta a soporte@latconecta.com con la referencia: {purchaseResult.reference}
+                        </p>
                       </div>
                     )}
                   </div>
 
-                  <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left text-sm">
-                    <h5 className="font-bold text-gray-700 mb-2">ESTADO DE LA TRANSACCIÓN</h5>
-                    <div className="space-y-1 text-xs">
-                      <div><strong>Fecha:</strong> {new Date(purchaseResult.date).toLocaleString()}</div>
-                      <div><strong>Referencia:</strong> <span className="font-mono">{purchaseResult.reference}</span></div>
-                      <div><strong>Producto:</strong> {selectedProduct.product_name}</div>
-                      <div><strong>Estado:</strong> <span className="text-red-600 font-semibold">Pendiente Devolución del Cobro</span></div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2 mb-4">
+                  {/* Botones de acción */}
+                  <div className="space-y-2">
                     <div className="flex gap-2">
                       <button
                         onClick={handleDownloadReceipt}
-                        className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"
+                        className="flex-1 bg-gray-500 text-white py-2.5 rounded-lg font-bold hover:bg-gray-600 flex items-center justify-center gap-2 text-sm"
                       >
-                        <Download size={20} />
-                        <span>TXT</span>
+                        <Download size={18} />
+                        <span>Descargar TXT</span>
                       </button>
                       <button
                         onClick={handleDownloadReceiptPDF}
-                        className="flex-1 bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 flex items-center justify-center gap-2"
+                        className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700 flex items-center justify-center gap-2 text-sm"
                       >
-                        <FileText size={20} />
-                        <span>PDF</span>
+                        <FileText size={18} />
+                        <span>Descargar PDF</span>
                       </button>
                     </div>
+
+                    <button
+                      onClick={closePurchasePopup}
+                      className="w-full bg-bitel-blue text-white py-2.5 rounded-lg font-bold hover:opacity-90"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Error en compra */}
+                  <div className="text-center mb-6">
+                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <AlertCircle size={40} className="text-red-600" />
+                    </div>
+                    <h4 className="text-2xl font-bold text-red-600 mb-2">Error en la Compra</h4>
+                    <p className="text-gray-600">{purchaseResult.error || 'Hubo un problema al procesar tu compra'}</p>
                   </div>
 
-                  <button onClick={closePurchasePopup} className="w-full bg-gray-600 text-white py-3 rounded-lg font-bold hover:bg-gray-700">
+                  <button
+                    onClick={closePurchasePopup}
+                    className="w-full bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600"
+                  >
                     Cerrar
                   </button>
-                </div>
-              ) : (
-                <div>
-                  <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <X size={48} className="text-red-600" />
-                  </div>
-                  <h4 className="text-2xl font-bold text-red-600 mb-4">Error en la compra</h4>
-                  <p className="text-gray-600 mb-6">{purchaseResult.error}</p>
-                  <button onClick={closePurchasePopup} className="w-full bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600">
-                    Cerrar
-                  </button>
-                </div>
+                </>
               )}
             </div>
           )}
+
         </div>
       </div>
     </div>
   );
 });
+
+PurchasePopup.displayName = 'PurchasePopup';
 
 export default PurchasePopup;

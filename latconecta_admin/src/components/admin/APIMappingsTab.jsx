@@ -17,12 +17,15 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingMapping, setEditingMapping] = useState(null);
   const [filterVendor, setFilterVendor] = useState('');
+  const [filterApiGroup, setFilterApiGroup] = useState(''); // ⭐ NUEVO FILTRO
   const [showJsonPreview, setShowJsonPreview] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
+    mapping_code: '',
     vendor_code: '',
-    operation_type: 'topup',
+    api_group_code: '', // ⭐ NUEVO CAMPO
+    operation_type: 'provision', // ⭐ CAMBIADO DE 'topup' A 'provision'
     http_method: 'POST',
     endpoint_url: '',
     auth_type: 'bearer',
@@ -81,6 +84,12 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
         return;
       }
 
+      // ⭐ VALIDACIÓN NUEVA: api_group_code es requerido
+      if (!formData.api_group_code || formData.api_group_code.trim() === '') {
+        showNotification('El campo API Group Code es obligatorio', 'error');
+        return;
+      }
+
       if (formData.request_mapping.fields.length === 0) {
         showNotification('Agregue al menos un campo al request mapping', 'error');
         return;
@@ -125,7 +134,8 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
     setFormData({
       mapping_code: '',
       vendor_code: '',
-      operation_type: 'topup',
+      api_group_code: '', // ⭐ RESET
+      operation_type: 'provision',
       http_method: 'POST',
       endpoint_url: '',
       auth_type: 'bearer',
@@ -143,6 +153,7 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
     setFormData({
       mapping_code: mapping.mapping_code || '',
       vendor_code: mapping.vendor_code,
+      api_group_code: mapping.api_group_code || '', // ⭐ CARGAR CAMPO
       operation_type: mapping.operation_type,
       http_method: mapping.http_method,
       endpoint_url: mapping.endpoint_url || '',
@@ -222,8 +233,12 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
   // ==================== FILTROS ====================
   const filteredMappings = mappings.filter(mapping => {
     if (filterVendor && mapping.vendor_code !== filterVendor) return false;
+    if (filterApiGroup && mapping.api_group_code !== filterApiGroup) return false; // ⭐ NUEVO FILTRO
     return true;
   });
+
+  // ⭐ OBTENER GRUPOS ÚNICOS PARA FILTRO
+  const uniqueApiGroups = [...new Set(mappings.map(m => m.api_group_code).filter(Boolean))];
 
   // ==================== RENDER ====================
   return (
@@ -243,7 +258,7 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
 
         {/* FILTROS */}
         <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-[#FFE709]">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Filtrar por Vendor:</label>
               <select
@@ -255,6 +270,23 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                 {vendors.map((vendor) => (
                   <option key={vendor.vendor_code} value={vendor.vendor_code}>
                     {vendor.vendor_code}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* ⭐ NUEVO FILTRO API GROUP */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Filtrar por API Group:</label>
+              <select
+                value={filterApiGroup}
+                onChange={(e) => setFilterApiGroup(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg"
+              >
+                <option value="">Todos los grupos</option>
+                {uniqueApiGroups.map((group) => (
+                  <option key={group} value={group}>
+                    {group}
                   </option>
                 ))}
               </select>
@@ -277,6 +309,7 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                 <tr>
                   <th className="px-4 py-3 text-left">Código</th>
                   <th className="px-4 py-3 text-left">Vendor</th>
+                  <th className="px-4 py-3 text-left">API Group</th> {/* ⭐ NUEVA COLUMNA */}
                   <th className="px-4 py-3 text-left">Operación</th>
                   <th className="px-4 py-3 text-left">Método</th>
                   <th className="px-4 py-3 text-left">Endpoint</th>
@@ -289,7 +322,7 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
               <tbody className="divide-y">
                 {filteredMappings.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan="10" className="px-4 py-8 text-center text-gray-500">
                       No hay mappings configurados
                     </td>
                   </tr>
@@ -298,6 +331,12 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                     <tr key={mapping.mapping_code} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono text-sm font-bold text-[#008C96]">{mapping.mapping_code}</td>
                       <td className="px-4 py-3 font-mono text-sm font-semibold">{mapping.vendor_code}</td>
+                      {/* ⭐ NUEVA COLUMNA */}
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded font-mono text-xs font-semibold">
+                          {mapping.api_group_code || '-'}
+                        </span>
+                      </td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
                           {mapping.operation_type}
@@ -419,6 +458,26 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                     </select>
                   </div>
 
+                  {/* ⭐ NUEVO CAMPO: API Group Code */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      API Group Code * 
+                      <span className="text-xs text-gray-500 ml-2">(Agrupa mappings relacionados)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.api_group_code}
+                      onChange={(e) => setFormData({ ...formData, api_group_code: e.target.value.toUpperCase() })}
+                      className="w-full px-4 py-2 border rounded-lg font-mono"
+                      placeholder="001"
+                      maxLength={50}
+                      required
+                    />
+                    <p className="text-xs text-gray-600 mt-1">
+                      Ej: 001, DT001, MP001 - Mismo código para mappings del mismo tipo
+                    </p>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium mb-2">Tipo de Operación *</label>
                     <select
@@ -427,10 +486,10 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                       className="w-full px-4 py-2 border rounded-lg"
                       required
                     >
-                      <option value="topup">topup</option>
-                      <option value="balance_check">balance_check</option>
-                      <option value="status_check">status_check</option>
-                      <option value="refund">refund</option>
+                      <option value="provision">provision</option>
+                      <option value="validate">validate</option>
+                      <option value="query">query</option>
+                      <option value="reversal">reversal</option>
                     </select>
                   </div>
 
@@ -454,23 +513,9 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                       type="text"
                       value={formData.endpoint_url}
                       onChange={(e) => setFormData({ ...formData, endpoint_url: e.target.value })}
-                      className="w-full px-4 py-2 border rounded-lg font-mono text-sm"
+                      className="w-full px-4 py-2 border rounded-lg font-mono"
                       placeholder="/api/v1/topup"
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Tipo de Auth</label>
-                    <select
-                      value={formData.auth_type}
-                      onChange={(e) => setFormData({ ...formData, auth_type: e.target.value })}
-                      className="w-full px-4 py-2 border rounded-lg"
-                    >
-                      <option value="bearer">Bearer Token</option>
-                      <option value="apikey">API Key</option>
-                      <option value="basic">Basic Auth</option>
-                      <option value="none">Sin Auth</option>
-                    </select>
                   </div>
 
                   <div>
@@ -480,22 +525,57 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                       value={formData.timeout_seconds}
                       onChange={(e) => setFormData({ ...formData, timeout_seconds: parseInt(e.target.value) })}
                       className="w-full px-4 py-2 border rounded-lg"
-                      min="5"
+                      min="1"
                       max="300"
                     />
                   </div>
 
-                  <div className="col-span-2">
-                    <label className="flex items-center space-x-2">
+                  <div className="flex items-center">
+                    <label className="flex items-center space-x-2 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={formData.is_active}
                         onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                        className="w-4 h-4"
+                        className="w-5 h-5 text-[#008C96] border-gray-300 rounded focus:ring-[#008C96]"
                       />
                       <span className="text-sm font-medium">Mapping Activo</span>
                     </label>
                   </div>
+                </div>
+              </div>
+
+              {/* AUTH CONFIGURATION */}
+              <div className="mb-6 bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
+                <h4 className="font-bold text-[#008C96] mb-4">🔐 Autenticación</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Tipo de Auth</label>
+                    <select
+                      value={formData.auth_type}
+                      onChange={(e) => setFormData({ ...formData, auth_type: e.target.value })}
+                      className="w-full px-4 py-2 border rounded-lg"
+                    >
+                      <option value="bearer">Bearer Token</option>
+                      <option value="basic">Basic Auth</option>
+                      <option value="api_key">API Key</option>
+                      <option value="none">Sin Auth</option>
+                    </select>
+                  </div>
+
+                  {formData.auth_type === 'bearer' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Header Name</label>
+                      <input
+                        type="text"
+                        value={formData.auth_config?.header_name || 'Authorization'}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          auth_config: { ...formData.auth_config, header_name: e.target.value }
+                        })}
+                        className="w-full px-4 py-2 border rounded-lg font-mono"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 

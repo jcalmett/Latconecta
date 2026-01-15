@@ -22,7 +22,6 @@ class Product(Base):
     # FOREIGN KEY
     # =========================================================================
     service_id = Column(Integer, ForeignKey("services.service_id"), nullable=False, index=True)
-    # NUEVOS CAMPOS
     country_id = Column(Integer, ForeignKey("countries.country_id"), nullable=False)
     company_id = Column(Integer, ForeignKey("companies.company_id"), nullable=False)
 
@@ -38,11 +37,25 @@ class Product(Base):
     # PRECIOS
     # =========================================================================
     product_currency = Column(String(10), nullable=False)
+    
+    # Precios base
     product_base_price = Column(Numeric(10, 2), nullable=False)
+    product_base_price_max = Column(Numeric(10, 2))  # Para productos de rango (tipo R)
+    
+    # Descuentos
     product_discount_percentage = Column(Numeric(5, 2), nullable=False, default=0)
     product_discount_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    product_discount_amount_max = Column(Numeric(10, 2))  # ✅ NUEVO: Descuento máximo (tipo R)
+    
+    # Fee
     product_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    
+    # Totales
     product_total_price = Column(Numeric(10, 2), nullable=False)
+    product_total_price_max = Column(Numeric(10, 2))  # ✅ NUEVO: Total máximo (tipo R)
+
+    # ⭐ Configuración de montos
+    product_amount_type = Column(String(1))  # F=Fijo, R=Rango, V=Variable
 
     # =========================================================================
     # VENDOR/PROVEEDOR
@@ -68,7 +81,6 @@ class Product(Base):
     # =========================================================================
     service = relationship("Service", back_populates="products")
     purchases = relationship("Purchase", back_populates="product")
-    # RELACIONES
     country = relationship("Country", back_populates="products")
     company = relationship("Company", back_populates="products")
 

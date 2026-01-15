@@ -1,11 +1,11 @@
 """
 LATCONECTA - Country Model
 Modelo SQLAlchemy para tabla countries
-Actualizado: 2025-12-17 - Migración Latconecta con relaciones
-CORRECCIÓN: Agregado import de relationship
+Actualizado: 2026-01-10 - Renombrado campos de tipo de cambio
+CORRECCIÓN: country_er_usd_pen → country_er_usd, country_date_er → country_er_date
 """
 from sqlalchemy import Column, Integer, String, TIMESTAMP, Numeric
-from sqlalchemy.orm import relationship  # ← AGREGADO
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -25,9 +25,9 @@ class Country(Base):
     # Información
     country_description = Column(String(500))
     
-    # Tasa de cambio
-    country_er_usd_pen = Column(Numeric(10, 6), default=3.75)
-    country_date_er = Column(TIMESTAMP, default=func.current_timestamp())
+    # Tasa de cambio - ✅ NOMBRES CORREGIDOS
+    country_er_usd = Column(Numeric(10, 6), default=3.75)
+    country_er_date = Column(TIMESTAMP, default=func.current_timestamp())
     
     # Estado
     status = Column(String(20), default="active")
@@ -50,8 +50,8 @@ class Country(Base):
             "country_flag_photo": self.country_flag_photo,
             "country_photo": self.country_photo,
             "country_description": self.country_description,
-            "country_er_usd_pen": float(self.country_er_usd_pen) if self.country_er_usd_pen else None,
-            "country_date_er": self.country_date_er.isoformat() if self.country_date_er else None,
+            "country_er_usd": float(self.country_er_usd) if self.country_er_usd else None,  # ✅ CORREGIDO
+            "country_er_date": self.country_er_date.isoformat() if self.country_er_date else None,  # ✅ CORREGIDO
             "status": self.status,
             "created_by": self.created_by,
             "updated_by": self.updated_by,

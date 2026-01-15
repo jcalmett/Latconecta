@@ -1,7 +1,7 @@
 """
 LATCONECTA - Products Router
 Endpoints para gestión de productos (recargas, paquetes, smartphones, etc.)
-Actualizado: 2025-12-17 - Migración a Latconecta con validaciones multi-país y multi-compañía
+Actualizado: 2026-01-11 - Agregados campos para productos tipo Rango (R)
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,17 +24,17 @@ async def validate_product_consistency(
 ) -> None:
     """
     Valida que country_id, company_id y service_id sean consistentes
-    
+
     Reglas de negocio LATCONECTA:
     - El country_id del producto debe coincidir con el country_id de la compañía
     - El service_id del producto debe coincidir con el service_id de la compañía
-    
+
     Args:
         country_id: ID del país del producto
         company_id: ID de la compañía
         service_id: ID del servicio
         db: Sesión de base de datos
-        
+
     Raises:
         HTTPException 404: Si la compañía no existe
         HTTPException 400: Si hay inconsistencia en los IDs
@@ -44,20 +44,20 @@ async def validate_product_consistency(
         select(Company).where(Company.company_id == company_id)
     )
     company = result.scalar_one_or_none()
-    
+
     if not company:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Compañía con ID {company_id} no existe"
         )
-    
+
     # Verificar consistencia con country_id
     if company.country_id != country_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"country_id {country_id} no coincide con country_id de la compañía ({company.country_id})"
         )
-    
+
     # Verificar consistencia con service_id
     if company.service_id != service_id:
         raise HTTPException(
@@ -162,10 +162,15 @@ async def create_product(
     - El country_id del producto debe coincidir con el de la compañía
     - El service_id del producto debe coincidir con el de la compañía
 
+    CAMPOS DE RANGO (product_amount_type = 'R'):
+    - product_base_price_max: Precio base máximo
+    - product_discount_amount_max: Descuento máximo
+    - product_total_price_max: Precio total máximo
+
     Campos nuevos obligatorios:
     - country_id: ID del país del producto
     - company_id: ID de la compañía que ofrece el producto
-    
+
     Ejemplos de productos:
     - Recarga $10, $20, $50 (Topup)
     - Paquetes de 5GB, 10GB, 20GB (pack)
@@ -181,7 +186,7 @@ async def create_product(
             service_id=product_data.service_id,
             db=db
         )
-        
+
         # Verificar que el servicio existe
         result = await db.execute(
             select(Service).where(Service.service_id == product_data.service_id)
@@ -221,8 +226,14 @@ async def create_product(
             product_discount_amount=product_data.product_discount_amount or 0,
             product_fee=product_data.product_fee or 0,
             product_total_price=product_data.product_total_price,
+            product_amount_type=product_data.product_amount_type or 'F',
+            # ⭐ NUEVOS CAMPOS PARA RANGOS
+            product_base_price_max=product_data.product_base_price_max,
+            product_discount_amount_max=product_data.product_discount_amount_max,
+            product_total_price_max=product_data.product_total_price_max,
+            # Vendor
             product_vendor_code=product_data.product_vendor_code,
-            product_vendpro_code=product_data.product_vendpro_code or "Vend001",
+            product_vendpro_code=product_data.product_vendpro_code,
             product_vendpro_skuid=product_data.product_vendpro_skuid,
             product_status=product_data.product_status or "active",
             created_by=current_user.user_email
@@ -262,9 +273,13 @@ async def update_product(
     - El country_id debe coincidir con el de la compañía
     - El service_id debe coincidir con el de la compañía
 
+    VALIDACIONES PARA TIPO RANGO (R):
+    - Si se cambia amount_type a 'R', se verifica que existan los campos _max
+    - Se pueden proporcionar en el update o ya deben existir en el producto
+
     Permite actualizar:
     - Información básica (nombre, descripción, foto)
-    - Precios, descuentos y fees
+    - Precios, descuentos y fees (incluyendo rangos)
     - Estado del producto
     - País, compañía y servicio asociados (con validación)
     - Información del proveedor (vendor/operator/country/etc)
@@ -290,13 +305,37 @@ async def update_product(
             country_id_to_validate = update_data.get('country_id', product.country_id)
             company_id_to_validate = update_data.get('company_id', product.company_id)
             service_id_to_validate = update_data.get('service_id', product.service_id)
-            
+
             await validate_product_consistency(
                 country_id=country_id_to_validate,
                 company_id=company_id_to_validate,
                 service_id=service_id_to_validate,
                 db=db
             )
+
+        # ⭐ VALIDACIÓN PARA TIPO RANGO: Si se cambia a amount_type='R', validar campos _max
+        if update_data.get('product_amount_type') == 'R':
+            # Determinar valores finales después del update
+            final_base_price_max = update_data.get('product_base_price_max', product.product_base_price_max)
+            final_discount_amount_max = update_data.get('product_discount_amount_max', product.product_discount_amount_max)
+            final_total_price_max = update_data.get('product_total_price_max', product.product_total_price_max)
+
+            # Validar que existan los campos _max
+            if final_base_price_max is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="product_base_price_max es obligatorio para productos tipo Rango (R)"
+                )
+            if final_discount_amount_max is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="product_discount_amount_max es obligatorio para productos tipo Rango (R)"
+                )
+            if final_total_price_max is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="product_total_price_max es obligatorio para productos tipo Rango (R)"
+                )
 
         # Si se actualiza el service_id, verificar que existe
         if "service_id" in update_data:

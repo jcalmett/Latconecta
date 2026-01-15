@@ -22,7 +22,7 @@ class RequestFieldMapping(BaseModel):
     required: bool = Field(default=True, description="Si el campo es obligatorio")
     default_value: Optional[Any] = Field(None, description="Valor por defecto si no existe")
     transformation: Optional[str] = Field(None, description="Transformación a aplicar")
-    
+
     @field_validator('data_type')
     @classmethod
     def validate_data_type(cls, v):
@@ -30,7 +30,7 @@ class RequestFieldMapping(BaseModel):
         if v not in valid_types:
             raise ValueError(f'data_type debe ser uno de: {valid_types}')
         return v
-    
+
     @field_validator('source_field')
     @classmethod
     def validate_source_field(cls, v):
@@ -45,7 +45,7 @@ class RequestMapping(BaseModel):
     Estructura del request_mapping JSONB
     """
     fields: List[RequestFieldMapping] = Field(..., description="Lista de campos a mapear")
-    
+
     @field_validator('fields')
     @classmethod
     def validate_fields_not_empty(cls, v):
@@ -63,8 +63,9 @@ class VendorApiMappingBase(BaseModel):
     Base schema para Vendor API Mapping
     """
     vendor_code: str = Field(..., max_length=50, description="Código del vendor")
+    api_group_code: str = Field(..., max_length=50, description="Código del grupo de APIs")  # ⭐ NUEVO
     operation_type: str = Field(..., max_length=50, description="Tipo de operación")
-    mapping_code: str = Field(..., max_length=5, description="Código único del mapping (ej: MAV01)")
+    mapping_code: str = Field(..., max_length=5, description="Código único del mapping (ej: VAL01)")
     http_method: str = Field(default="POST", max_length=10, description="Método HTTP")
     endpoint_url: Optional[str] = Field(None, max_length=500, description="URL del endpoint")
     auth_type: Optional[str] = Field(None, max_length=50, description="Tipo de autenticación")
@@ -76,7 +77,7 @@ class VendorApiMappingBase(BaseModel):
     timeout_seconds: int = Field(default=30, ge=1, le=300, description="Timeout en segundos")
     headers: Optional[Dict[str, str]] = Field(None, description="Headers adicionales")
     is_active: bool = Field(default=True, description="Si el mapping está activo")
-    
+
     @field_validator('http_method')
     @classmethod
     def validate_http_method(cls, v):
@@ -84,14 +85,22 @@ class VendorApiMappingBase(BaseModel):
         if v.upper() not in valid_methods:
             raise ValueError(f'http_method debe ser uno de: {valid_methods}')
         return v.upper()
-    
+
     @field_validator('vendor_code')
     @classmethod
     def validate_vendor_code(cls, v):
         if not v or len(v.strip()) == 0:
             raise ValueError('vendor_code no puede estar vacío')
         return v.strip().upper()
-    
+
+    @field_validator('api_group_code')  # ⭐ NUEVO
+    @classmethod
+    def validate_api_group_code(cls, v):
+        if not v or len(v.strip()) == 0:
+            raise ValueError('api_group_code no puede estar vacío')
+        # Puede ser DT001, MP001, 001, etc.
+        return v.strip().upper()
+
     @field_validator('operation_type')
     @classmethod
     def validate_operation_type(cls, v):
@@ -106,17 +115,17 @@ class VendorApiMappingBase(BaseModel):
             'cancellation',   # Cancelar
             'balance_check'   # Verificar saldo
         ]
-        
+
         if v.lower() not in valid_operations:
             raise ValueError(f'operation_type debe ser uno de: {valid_operations}')
-        
+
         return v.strip().lower()
-    
+
     @field_validator('mapping_code')
     @classmethod
     def validate_mapping_code(cls, v):
         if not v or len(v) != 5:
-            raise ValueError('mapping_code debe tener exactamente 5 caracteres (ej: MAV01)')
+            raise ValueError('mapping_code debe tener exactamente 5 caracteres (ej: VAL01)')
         return v.strip().upper()
 
 
@@ -129,8 +138,9 @@ class VendorApiMappingCreate(VendorApiMappingBase):
 
 class VendorApiMappingUpdate(BaseModel):
     """
-    Schema para actualizar un mapping (todos los campos opcionales excepto mapping_code)
+    Schema para actualizar un mapping (todos los campos opcionales)
     """
+    api_group_code: Optional[str] = Field(None, max_length=50)  # ⭐ NUEVO
     operation_type: Optional[str] = Field(None, max_length=50)
     http_method: Optional[str] = Field(None, max_length=10)
     endpoint_url: Optional[str] = Field(None, max_length=500)
@@ -152,7 +162,7 @@ class VendorApiMappingResponse(VendorApiMappingBase):
     mapping_id: int
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 

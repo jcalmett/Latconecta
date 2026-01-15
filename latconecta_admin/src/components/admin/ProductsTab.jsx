@@ -149,13 +149,15 @@ const ProductsTab = ({
     if (editingItem) {
       setFormData({
         ...editingItem,
-        product_amount_type: editingItem.product_amount_type || 'F',  // ✅ AGREGAR ESTA LÍNEA
+        product_amount_type: editingItem.product_amount_type || 'F',
         product_base_price: parseFloat(editingItem.product_base_price || 0),
         product_base_price_max: parseFloat(editingItem.product_base_price_max || 0),
         product_discount_percentage: parseFloat(editingItem.product_discount_percentage || 0),
         product_discount_amount: parseFloat(editingItem.product_discount_amount || 0),
+        product_discount_amount_max: parseFloat(editingItem.product_discount_amount_max || 0),  // ⭐ NUEVO
         product_fee: parseFloat(editingItem.product_fee || 0),
         product_total_price: parseFloat(editingItem.product_total_price || 0),
+        product_total_price_max: parseFloat(editingItem.product_total_price_max || 0),  // ⭐ NUEVO
       });
     }
   }, [editingItem]);
@@ -229,13 +231,30 @@ const ProductsTab = ({
   };
 
   // ==================== FUNCIONES AUXILIARES ====================
-  const updatePrices = (base, discount, fee) => {
-    const total = calculateTotalPrice(base, discount, fee);
+  const updatePrices = (base, baseMax, discount, fee, amountType) => {
+    // Cálculos para MÍNIMO (siempre)
     const discountAmount = (parseFloat(base) * parseFloat(discount)) / 100;
-    return {
-      product_total_price: parseFloat(total),
-      product_discount_amount: discountAmount.toFixed(2),
+    const total = parseFloat(base) - discountAmount + parseFloat(fee);
+
+    const result = {
+      product_discount_amount: parseFloat(discountAmount.toFixed(2)),
+      product_total_price: parseFloat(total.toFixed(2)),
     };
+
+    // Cálculos para MÁXIMO (solo si es tipo R)
+    if (amountType === 'R' && baseMax && parseFloat(baseMax) > 0) {
+      const discountAmountMax = (parseFloat(baseMax) * parseFloat(discount)) / 100;
+      const totalMax = parseFloat(baseMax) - discountAmountMax + parseFloat(fee);
+
+      result.product_discount_amount_max = parseFloat(discountAmountMax.toFixed(2));
+      result.product_total_price_max = parseFloat(totalMax.toFixed(2));
+    } else {
+      // Si no es tipo R, los campos _max son 0 o null
+      result.product_discount_amount_max = 0;
+      result.product_total_price_max = 0;
+    }
+
+    return result;
   };
 
   const resetForm = () => {
@@ -304,30 +323,67 @@ const ProductsTab = ({
         }
       }
 
+      // ⭐ VALIDAR QUE LOS TOTALES TAMBIÉN ESTÉN CALCULADOS CORRECTAMENTE
+      if (formData.product_amount_type === 'R') {
+        if (!formData.product_discount_amount_max && formData.product_discount_amount_max !== 0) {
+          showNotification("Error: Descuento máximo no calculado", "error");
+          return;
+        }
+        if (!formData.product_total_price_max || formData.product_total_price_max <= 0) {
+          showNotification("Error: Precio total máximo no calculado", "error");
+          return;
+        }
+        if (parseFloat(formData.product_total_price_max) <= parseFloat(formData.product_total_price)) {
+          showNotification("Precio Total Máximo debe ser mayor al Total Mínimo", "error");
+          return;
+        }
+      }
+
       // ✅ SOLO ENVIAR CAMPOS DE LA TABLA PRODUCTS
-      const dataToSend = {
-        country_id: parseInt(formData.country_id),
-        service_id: parseInt(formData.service_id),
-        company_id: parseInt(formData.company_id),
-        product_code: formData.product_code,
-        product_name: formData.product_name,
-        product_description: formData.product_description,
-        product_photo: formData.product_photo,
-        product_currency: formData.product_currency,
-        product_amount_type: formData.product_amount_type,
-        product_base_price: parseFloat(formData.product_base_price),
-        product_base_price_max: formData.product_amount_type === 'R' 
+
+       const dataToSend = {
+         country_id: parseInt(formData.country_id),
+         service_id: parseInt(formData.service_id),
+         company_id: parseInt(formData.company_id),
+         product_code: formData.product_code,
+         product_name: formData.product_name,
+         product_description: formData.product_description,
+         product_photo: formData.product_photo,
+         product_currency: formData.product_currency,
+         product_amount_type: formData.product_amount_type,
+         product_base_price: parseFloat(formData.product_base_price),
+
+         // ⭐ CAMPOS DE RANGO
+         product_base_price_max: formData.product_amount_type === 'R'
           ? parseFloat(formData.product_base_price_max)
-          : null,
-        product_discount_percentage: parseFloat(formData.product_discount_percentage),
-        product_discount_amount: parseFloat(formData.product_discount_amount),
-        product_fee: parseFloat(formData.product_fee),
-        product_total_price: parseFloat(formData.product_total_price),
-        product_status: formData.product_status,
-        product_vendor_code: formData.product_vendor_code,
-        product_vendpro_code: formData.product_vendpro_code,
-        product_vendpro_skuid: formData.product_vendpro_skuid,
-      };
+         : null,
+
+         product_discount_percentage: parseFloat(formData.product_discount_percentage),
+         product_discount_amount: parseFloat(formData.product_discount_amount),
+  
+         // ⭐ NUEVO: discount_amount_max
+         product_discount_amount_max: formData.product_amount_type === 'R'
+         ? parseFloat(formData.product_discount_amount_max)
+         : null,
+
+         product_fee: parseFloat(formData.product_fee),
+         product_total_price: parseFloat(formData.product_total_price),
+  
+         // ⭐ NUEVO: total_price_max
+         product_total_price_max: formData.product_amount_type === 'R'
+         ? parseFloat(formData.product_total_price_max)
+         : null,
+
+         product_status: formData.product_status,
+         product_vendor_code: formData.product_vendor_code,
+         product_vendpro_code: formData.product_vendpro_code,
+         product_vendpro_skuid: formData.product_vendpro_skuid,
+       };
+
+
+    console.log('📤 Datos que se van a enviar:', dataToSend);
+    console.log('📋 formData completo:', formData);
+
 
       if (editingItem) {
         await productsService.update(editingItem.product_id, dataToSend);
@@ -387,27 +443,29 @@ const ProductsTab = ({
           <h2 className="text-2xl font-bold text-[#008C96]">Gestión de Productos</h2>
           <button
             onClick={() => {
-              setFormData({
-                country_id: '',
-                service_id: '',
-                company_id: '',
-                product_code: "",
-                product_name: "",
-                product_description: "",
-                product_photo: "",
-                product_currency: "PEN",
-                product_amount_type: "F",
-                product_base_price: 0,
-                product_base_price_max: 0,
-                product_discount_percentage: 0,
-                product_discount_amount: 0,
-                product_fee: 0,
-                product_total_price: 0,
-                product_status: "active",
-                product_vendor_code: "",
-                product_vendpro_code: "",
-                product_vendpro_skuid: "",
-              });
+            setFormData({
+              country_id: '',
+              service_id: '',
+              company_id: '',
+              product_code: "",
+              product_name: "",
+              product_description: "",
+              product_photo: "",
+              product_currency: "USD",
+              product_amount_type: "F",
+              product_base_price: 0,
+              product_base_price_max: 0,
+              product_discount_percentage: 0,
+              product_discount_amount: 0,
+              product_discount_amount_max: 0,  // ⭐ NUEVO
+              product_fee: 0,
+              product_total_price: 0,
+              product_total_price_max: 0,  // ⭐ NUEVO
+              product_status: "active",
+              product_vendor_code: "",
+              product_vendpro_code: "",
+              product_vendpro_skuid: "",
+            });
               setShowForm(true);
               setActiveTab('producto');
             }}
@@ -754,8 +812,10 @@ const ProductsTab = ({
                           onChange={(e) => setFormData({ ...formData, product_currency: e.target.value })}
                           className="w-full px-4 py-1.5 border rounded-lg"
                         >
-                          <option value="PEN">PEN - Soles</option>
                           <option value="USD">USD - Dólares</option>
+                          <option value="MXN">MXN - Pesos</option>
+                          <option value="PEN">PEN - Soles</option>
+                          <option value="VED">VED - Bolivar</option>                         
                         </select>
                       </div>
 
@@ -787,30 +847,50 @@ const ProductsTab = ({
                           type="number"
                           step="0.01"
                           value={formData.product_base_price}
+
                           onChange={(e) => {
                             const newBase = parseFloat(e.target.value) || 0;
-                            const prices = updatePrices(newBase, formData.product_discount_percentage, formData.product_fee);
+                            const prices = updatePrices(
+                              newBase, 
+                              formData.product_base_price_max, 
+                              formData.product_discount_percentage, 
+                              formData.product_fee,
+                              formData.product_amount_type
+                            );
                             setFormData({ ...formData, product_base_price: newBase, ...prices });
                           }}
+
                           className="w-full px-4 py-1.5 border rounded-lg"
                           required
                         />
                       </div>
 
                       {formData.product_amount_type === 'R' && (
+                        
                         <div className="bg-green-50 p-3 rounded-lg border-2 border-green-300">
-                          <label className="block text-sm font-medium mb-1">Precio Máximo *</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min={formData.product_base_price}
-                            value={formData.product_base_price_max}
-                            onChange={(e) => setFormData({ ...formData, product_base_price_max: parseFloat(e.target.value) || 0 })}
-                            className="w-full px-4 py-1.5 border rounded-lg"
-                            required
-                          />
-                          <p className="text-xs text-gray-500 mt-1">Debe ser mayor a ${formData.product_base_price}</p>
-                        </div>
+                         <label className="block text-sm font-medium mb-1">Precio Máximo *</label>
+                         <input
+                           type="number"
+                           step="0.01"
+                           min={formData.product_base_price}
+                           value={formData.product_base_price_max}
+                           onChange={(e) => {
+                             const newBaseMax = parseFloat(e.target.value) || 0;
+                             const prices = updatePrices(
+                               formData.product_base_price,
+                               newBaseMax,
+                               formData.product_discount_percentage,
+                               formData.product_fee,
+                               formData.product_amount_type
+                             );
+                             setFormData({ ...formData, product_base_price_max: newBaseMax, ...prices });
+                           }}
+                           className="w-full px-4 py-1.5 border rounded-lg"
+                           required
+                         />
+                         <p className="text-xs text-gray-500 mt-1">Debe ser mayor a ${formData.product_base_price}</p>
+                       </div>
+
                       )}
 
                       <div>
@@ -820,12 +900,20 @@ const ProductsTab = ({
                           step="0.1"
                           max="100"
                           value={formData.product_discount_percentage}
+
                           onChange={(e) => {
                             let newDiscount = parseFloat(e.target.value) || 0;
                             if (newDiscount > 100) newDiscount = 100;
-                            const prices = updatePrices(formData.product_base_price, newDiscount, formData.product_fee);
+                            const prices = updatePrices(
+                              formData.product_base_price,
+                              formData.product_base_price_max,
+                              newDiscount,
+                              formData.product_fee,
+                              formData.product_amount_type
+                            );
                             setFormData({ ...formData, product_discount_percentage: newDiscount, ...prices });
                           }}
+
                           className="w-full px-4 py-1.5 border rounded-lg"
                         />
                       </div>
@@ -840,27 +928,68 @@ const ProductsTab = ({
                         />
                       </div>
 
+                      {formData.product_amount_type === 'R' && (
+                      <div className="bg-green-50 p-3 rounded-lg border-2 border-green-300">
+                        <label className="block text-sm font-medium mb-1">Descuento Máximo (auto)</label>
+                        <input
+                         type="text"
+                         value={`$${parseFloat(formData.product_discount_amount_max || 0).toFixed(2)}`}
+                         className="w-full px-4 py-1.5 border rounded-lg bg-gray-100"
+                         readOnly
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                        {formData.product_discount_percentage}% de ${formData.product_base_price_max}
+                        </p>
+                      </div>
+                       )}
+
                       <div>
                         <label className="block text-sm font-medium mb-1">Fee</label>
                         <input
                           type="number"
                           step="0.01"
                           value={formData.product_fee}
+
                           onChange={(e) => {
                             const newFee = parseFloat(e.target.value) || 0;
-                            const prices = updatePrices(formData.product_base_price, formData.product_discount_percentage, newFee);
+                            const prices = updatePrices(
+                              formData.product_base_price,
+                              formData.product_base_price_max,
+                              formData.product_discount_percentage,
+                              newFee,
+                              formData.product_amount_type
+                            );
                             setFormData({ ...formData, product_fee: newFee, ...prices });
                           }}
+
                           className="w-full px-4 py-1.5 border rounded-lg"
                         />
                       </div>
 
                       <div className="bg-[#FFE709] bg-opacity-20 p-4 rounded-lg border-2 border-[#FFE709]">
-                        <label className="block text-sm font-medium mb-1">Precio Total (auto)</label>
+                        <label className="block text-sm font-medium mb-1">
+                          Precio Total {formData.product_amount_type === 'R' ? '(Mínimo)' : ''} (auto)
+                        </label>
                         <div className="text-2xl font-bold text-[#008C96]">
                           ${parseFloat(formData.product_total_price || 0).toFixed(2)}
                         </div>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Base ${formData.product_base_price} - Desc ${formData.product_discount_amount} + Fee ${formData.product_fee}
+                        </p>
+
+                        {formData.product_amount_type === 'R' && (
+                         <div className="mt-3 pt-3 border-t-2 border-[#FFE709]">
+                           <label className="block text-sm font-medium mb-1">Precio Total Máximo (auto)</label>
+                           <div className="text-2xl font-bold text-green-600">
+                             ${parseFloat(formData.product_total_price_max || 0).toFixed(2)}
+                           </div>
+                           <p className="text-xs text-gray-600 mt-1">
+                             Base ${formData.product_base_price_max} - Desc ${formData.product_discount_amount_max} + Fee ${formData.product_fee}
+                           </p>
+                         </div>
+                        )}
                       </div>
+
                     </div>
 
                     {/* COLUMNA 3: CÓDIGOS VENDOR (SOLO 3 CAMPOS) */}

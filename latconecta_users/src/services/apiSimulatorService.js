@@ -1,10 +1,10 @@
 /**
  * API Simulator Service
  * Simula respuestas de APIs externas basándose en configuración guardada
- * 
+ *
  * Uso:
  * import apiSimulator from './services/apiSimulatorService';
- * 
+ *
  * const response = await apiSimulator.call('VALNUMTEL', { phone: '999888777' });
  */
 
@@ -88,14 +88,15 @@ class ApiSimulatorService {
         };
 
       case 'VALNUMCTA':
+        // ✅ MEJORADO: Usar valores configurados si existen
         return {
           ...baseResponse,
           data: {
             valid: true,
-            account_number: requestData.account_number,
-            monto_base: parseFloat(config.monto_base) || 85.50,
-            indicador: config.indicador || 'T',
-            account_holder: 'Juan Pérez (Simulado)'
+            account_number: requestData.account_number || '123456789',
+            monto_base: config.monto_base !== undefined ? parseFloat(config.monto_base) : 85.50,
+            indicador: config.indicador || 'R',  // 'T' = Total, 'R' = Rango permitido
+            account_holder: config.account_holder || 'Juan Pérez (Simulado)'
           }
         };
 
@@ -162,12 +163,61 @@ class ApiSimulatorService {
    * Respuesta por defecto si no hay configuración
    */
   _defaultSuccessResponse(apiName, requestData) {
-    return {
+    const baseResponse = {
       status: 200,
       message: `Respuesta por defecto de ${apiName}`,
-      data: { ...requestData },
       timestamp: new Date().toISOString()
     };
+
+    // Respuestas específicas por tipo de API
+    switch (apiName) {
+      case 'VALNUMTEL':
+        return {
+          ...baseResponse,
+          data: {
+            valid: true,
+            phone_number: requestData.phone_number || '999888777'
+          }
+        };
+
+      case 'VALNUMCTA':
+        return {
+          ...baseResponse,
+          data: {
+            valid: true,
+            account_number: requestData.account_number || '123456789',
+            monto_base: 85.50,  // ✅ Valor por defecto
+            indicador: 'R',     // ✅ 'T' = Total, 'R' = Rango permitido
+            account_holder: 'Juan Pérez (Simulado por defecto)'
+          }
+        };
+
+      case 'APICARD':
+        return {
+          ...baseResponse,
+          data: {
+            success: true,
+            payment_ref: `PAY-${Date.now()}`,
+            card_last_digits: '4532'
+          }
+        };
+
+      case 'BARCODE':
+        return {
+          ...baseResponse,
+          data: {
+            success: true,
+            barcode: `BC${Date.now()}`,
+            barcode_image: `https://barcode.example.com/BC${Date.now()}.png`
+          }
+        };
+
+      default:
+        return {
+          ...baseResponse,
+          data: { ...requestData }
+        };
+    }
   }
 
   /**

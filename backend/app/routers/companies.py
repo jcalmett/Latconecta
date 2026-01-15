@@ -1,13 +1,14 @@
 """
 LATCONECTA - Companies Router
 Endpoints para gestión de compañías
-Actualizado: 2025-12-20 - Agregado filtrado por país y servicio en GET /companies/
+Actualizado: 2026-01-10 - Renombrado campos de balance y agregados campos de moneda local
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
+from datetime import datetime
 
 from app.database import get_db
 from app.models.company import Company
@@ -35,7 +36,6 @@ async def validate_company_consistency(
     Raises:
         HTTPException 404: Si el país o servicio no existen
     """
-    # Verificar que el país existe
     result = await db.execute(
         select(Country).where(Country.country_id == country_id)
     )
@@ -47,7 +47,6 @@ async def validate_company_consistency(
             detail=f"País con ID {country_id} no existe"
         )
 
-    # Verificar que el servicio existe
     result = await db.execute(
         select(Service).where(Service.service_id == service_id)
     )
@@ -83,8 +82,11 @@ async def get_companies(
         - country_id, country_name, country_code (via relationship)
         - service_id, service_name (via relationship)
         - company_mail_commercial_support
-        - company_credit_balance
-        - company_date_balance
+        - company_usd_balance
+        - company_usd_date_balance
+        - company_local_currency
+        - company_local_balance
+        - company_local_date_balance
         - company_barcode_available
         - company_mail_customer_support
 
@@ -94,15 +96,12 @@ async def get_companies(
         GET /companies/?service=TopUps → Compañías con servicio TopUps
         GET /companies/?country=PE&service=TopUps → Compañías TopUps en Perú
     """
-    # Construir query base con eager loading de relationships
     query = select(Company).options(
         selectinload(Company.country),
         selectinload(Company.service)
     )
 
-    # Filtrar por país si se proporciona
     if country:
-        # Obtener country_id del código de país
         country_result = await db.execute(
             select(Country.country_id).where(Country.country_code == country)
         )
@@ -110,12 +109,9 @@ async def get_companies(
         if country_id:
             query = query.where(Company.country_id == country_id)
         else:
-            # Si no existe el país, retornar vacío
             return []
 
-    # Filtrar por servicio si se proporciona
     if service:
-        # Obtener service_id del nombre de servicio
         service_result = await db.execute(
             select(Service.service_id).where(Service.service_name == service)
         )
@@ -123,13 +119,9 @@ async def get_companies(
         if service_id:
             query = query.where(Company.service_id == service_id)
         else:
-            # Si no existe el servicio, retornar vacío
             return []
 
-    # Aplicar paginación
     query = query.offset(skip).limit(limit)
-
-    # Ejecutar query
     result = await db.execute(query)
     companies = result.scalars().all()
 
@@ -206,14 +198,12 @@ async def create_company(
     - company_mail_commercial_support: Email soporte comercial (opcional)
     """
     try:
-        # VALIDACIÓN LATCONECTA: Verificar country_id y service_id
         await validate_company_consistency(
             country_id=company_data.country_id,
             service_id=company_data.service_id,
             db=db
         )
 
-        # Crear nueva compañía
         new_company = Company(
             country_id=company_data.country_id,
             service_id=company_data.service_id,
@@ -228,8 +218,11 @@ async def create_company(
             company_lema_1=company_data.company_lema_1,
             company_lema_2=company_data.company_lema_2,
             company_status=company_data.company_status,
-            company_credit_balance=company_data.company_credit_balance,
-            company_date_balance=company_data.company_date_balance,
+            company_usd_balance=company_data.company_usd_balance,
+            company_usd_date_balance=company_data.company_usd_date_balance,
+            company_local_currency=company_data.company_local_currency,
+            company_local_balance=company_data.company_local_balance,
+            company_local_date_balance=company_data.company_local_date_balance,
             company_barcode_available=company_data.company_barcode_available,
             company_mail_customer_support=company_data.company_mail_customer_support,
             company_mail_commercial_support=company_data.company_mail_commercial_support,
@@ -243,7 +236,6 @@ async def create_company(
         return new_company
 
     except HTTPException:
-        # Re-lanzar excepciones HTTP de validación
         raise
     except Exception as e:
         await db.rollback()
@@ -279,10 +271,11 @@ async def update_company(
     VALIDACIONES LATCONECTA:
     - Si se actualiza country_id, debe existir en countries
     - Si se actualiza service_id, debe existir en services
+    - Si se actualiza company_usd_balance, se actualiza automáticamente company_usd_date_balance
+    - Si se actualiza company_local_balance, se actualiza automáticamente company_local_date_balance
 
     Nota: Solo se actualizan los campos enviados (no None)
     """
-    # Buscar compañía
     result = await db.execute(
         select(Company).where(Company.company_id == company_id)
     )
@@ -295,10 +288,8 @@ async def update_company(
         )
 
     try:
-        # Obtener datos a actualizar
         update_data = company_data.model_dump(exclude_unset=True)
 
-        # VALIDACIÓN LATCONECTA: Si se actualizan country_id o service_id, validar
         if 'country_id' in update_data or 'service_id' in update_data:
             country_id_to_validate = update_data.get('country_id', company.country_id)
             service_id_to_validate = update_data.get('service_id', company.service_id)
@@ -309,12 +300,18 @@ async def update_company(
                 db=db
             )
 
-        # Actualizar campos
+        if 'company_usd_balance' in update_data and update_data['company_usd_balance'] is not None:
+            if company.company_usd_balance != update_data['company_usd_balance']:
+                update_data['company_usd_date_balance'] = datetime.now()
+
+        if 'company_local_balance' in update_data and update_data['company_local_balance'] is not None:
+            if company.company_local_balance != update_data['company_local_balance']:
+                update_data['company_local_date_balance'] = datetime.now()
+
         for field, value in update_data.items():
             if hasattr(company, field):
                 setattr(company, field, value)
 
-        # Actualizar auditoría
         company.updated_by = company_data.updated_by or current_user.user_email
 
         await db.commit()
@@ -323,7 +320,6 @@ async def update_company(
         return company
 
     except HTTPException:
-        # Re-lanzar excepciones HTTP de validación
         raise
     except Exception as e:
         await db.rollback()
@@ -353,14 +349,12 @@ async def delete_company(
         HTTPException 400: Si hay productos asociados (ON DELETE RESTRICT)
         HTTPException 500: Si hay error al eliminar
     """
-    # Verificar que el usuario sea admin
     if current_user.user_role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Solo administradores pueden eliminar compañías"
         )
 
-    # Buscar compañía
     result = await db.execute(
         select(Company).where(Company.company_id == company_id)
     )
@@ -378,7 +372,6 @@ async def delete_company(
 
     except Exception as e:
         await db.rollback()
-        # Si hay FK constraint violation (productos asociados)
         if "foreign key" in str(e).lower() or "fk_" in str(e).lower():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

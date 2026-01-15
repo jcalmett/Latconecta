@@ -55,7 +55,6 @@ except ImportError:
     is_development = lambda: True
 
 router = APIRouter(
-    prefix="/api/v1/mock",
     tags=["Mock Vendors"],
     responses={404: {"description": "Not found"}}
 )

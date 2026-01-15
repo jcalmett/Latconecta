@@ -22,12 +22,25 @@ const CompaniesTab = ({
   setConfirmDialog,
   loadCompanies,
 }) => {
-  // Estados para filtros
   const [filterCountry, setFilterCountry] = useState("");
   const [filterService, setFilterService] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
 
-  // Cargar datos en modo edición
+  const getLocalDateTime = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const normalizeDecimal = (value) => {
+    if (!value) return value;
+    return value.toString().replace(',', '.');
+  };
+
   useEffect(() => {
     if (editingItem) {
       setFormData({
@@ -43,8 +56,11 @@ const CompaniesTab = ({
         company_description5: editingItem.company_description5 || "",
         company_lema_1: editingItem.company_lema_1 || "",
         company_lema_2: editingItem.company_lema_2 || "",
-        company_credit_balance: editingItem.company_credit_balance || 0,
-        company_date_balance: editingItem.company_date_balance || "",
+        company_usd_balance: editingItem.company_usd_balance || 0,
+        company_usd_date_balance: editingItem.company_usd_date_balance || "",
+        company_local_currency: editingItem.company_local_currency || "",
+        company_local_balance: editingItem.company_local_balance || 0,
+        company_local_date_balance: editingItem.company_local_date_balance || "",
         company_barcode_available: editingItem.company_barcode_available || "No",
         company_mail_customer_support: editingItem.company_mail_customer_support || "",
         company_mail_commercial_support: editingItem.company_mail_commercial_support || "",
@@ -53,6 +69,40 @@ const CompaniesTab = ({
     }
   }, [editingItem, setFormData]);
 
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    let processedValue = value;
+
+    if (name === 'company_usd_balance') {
+      processedValue = normalizeDecimal(value);
+      if (processedValue && !formData.company_usd_date_balance) {
+        setFormData(prev => ({
+          ...prev,
+          [name]: processedValue,
+          company_usd_date_balance: getLocalDateTime()
+        }));
+        return;
+      }
+    }
+
+    if (name === 'company_local_balance') {
+      processedValue = normalizeDecimal(value);
+      if (processedValue && !formData.company_local_date_balance) {
+        setFormData(prev => ({
+          ...prev,
+          [name]: processedValue,
+          company_local_date_balance: getLocalDateTime()
+        }));
+        return;
+      }
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      [name]: processedValue
+    }));
+  };
+
   const handleSave = async () => {
     try {
       if (!formData.company_name || !formData.country_id || !formData.service_id) {
@@ -60,7 +110,6 @@ const CompaniesTab = ({
         return;
       }
 
-      // Validar emails
       if (formData.company_mail_customer_support && !isValidEmail(formData.company_mail_customer_support)) {
         showNotification("El email de soporte no es válido", "error");
         return;
@@ -71,18 +120,33 @@ const CompaniesTab = ({
         return;
       }
 
+      if (formData.company_usd_balance) {
+        const balanceStr = formData.company_usd_balance.toString();
+        if (balanceStr.includes(',')) {
+          showNotification("Use punto (.) como separador decimal en Balance USD, no coma (,)", "error");
+          return;
+        }
+      }
+
+      if (formData.company_local_balance) {
+        const balanceStr = formData.company_local_balance.toString();
+        if (balanceStr.includes(',')) {
+          showNotification("Use punto (.) como separador decimal en Balance Local, no coma (,)", "error");
+          return;
+        }
+      }
+
       const dataToSend = {
         ...formData,
         country_id: parseInt(formData.country_id),
         service_id: parseInt(formData.service_id),
-        company_credit_balance: parseFloat(formData.company_credit_balance) || 0,
+        company_usd_balance: formData.company_usd_balance ? parseFloat(normalizeDecimal(formData.company_usd_balance)) : 0,
+        company_usd_date_balance: formData.company_usd_date_balance || null,
+        company_local_currency: formData.company_local_currency || null,
+        company_local_balance: formData.company_local_balance ? parseFloat(normalizeDecimal(formData.company_local_balance)) : null,
+        company_local_date_balance: formData.company_local_date_balance || null,
         updated_by: user?.email || "admin",
       };
-
-      // No enviar company_date_balance si está vacío
-      if (!dataToSend.company_date_balance || dataToSend.company_date_balance === "") {
-        delete dataToSend.company_date_balance;
-      }
 
       if (editingItem) {
         await companiesService.update(editingItem.company_id, dataToSend);
@@ -150,7 +214,6 @@ const CompaniesTab = ({
     return service ? service.service_name : "N/A";
   };
 
-  // Filtrar compañías
   const filteredCompanies = companies.filter((company) => {
     if (filterCountry && company.country_id !== parseInt(filterCountry)) return false;
     if (filterService && company.service_id !== parseInt(filterService)) return false;
@@ -184,8 +247,11 @@ const CompaniesTab = ({
               company_description5: "",
               company_lema_1: "",
               company_lema_2: "",
-              company_credit_balance: 0,
-              company_date_balance: "",
+              company_usd_balance: 0,
+              company_usd_date_balance: "",
+              company_local_currency: "",
+              company_local_balance: 0,
+              company_local_date_balance: "",
               company_barcode_available: "No",
               company_mail_customer_support: "",
               company_mail_commercial_support: "",
@@ -200,7 +266,6 @@ const CompaniesTab = ({
         </button>
       </div>
 
-      {/* FILTROS */}
       <div className="bg-white rounded-lg shadow-md p-4 mb-6 border-l-4 border-[#FFE709]">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -271,7 +336,6 @@ const CompaniesTab = ({
         )}
       </div>
 
-      {/* TABLA DE COMPAÑÍAS */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -316,7 +380,7 @@ const CompaniesTab = ({
                       <div className="text-xs text-gray-500">{company.company_description5}</div>
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-[#008C96]">
-                      ${parseFloat(company.company_credit_balance || 0).toFixed(2)}
+                      ${parseFloat(company.company_usd_balance || 0).toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
@@ -367,7 +431,6 @@ const CompaniesTab = ({
         </div>
       </div>
 
-      {/* FORMULARIO MODAL - Simplificado para brevedad */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
@@ -382,15 +445,15 @@ const CompaniesTab = ({
 
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* COLUMNA 1: DATOS BÁSICOS */}
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       País <span className="text-red-500">*</span>
                     </label>
                     <select
+                      name="country_id"
                       value={formData.country_id}
-                      onChange={(e) => setFormData({ ...formData, country_id: e.target.value })}
+                      onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       required
                     >
@@ -408,8 +471,9 @@ const CompaniesTab = ({
                       Servicio <span className="text-red-500">*</span>
                     </label>
                     <select
+                      name="service_id"
                       value={formData.service_id}
-                      onChange={(e) => setFormData({ ...formData, service_id: e.target.value })}
+                      onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       required
                     >
@@ -428,8 +492,9 @@ const CompaniesTab = ({
                     </label>
                     <input
                       type="text"
+                      name="company_name"
                       value={formData.company_name}
-                      onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                      onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       placeholder="Telefónica Perú - TopUps"
                       maxLength={50}
@@ -442,40 +507,121 @@ const CompaniesTab = ({
                       Descripción
                     </label>
                     <textarea
+                      name="company_description5"
                       value={formData.company_description5}
-                      onChange={(e) =>
-                        setFormData({ ...formData, company_description5: e.target.value })
-                      }
+                      onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       rows={3}
                       maxLength={500}
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
+                  <div className="border-t pt-4 mt-4">
+                    <h4 className="font-semibold text-gray-800 mb-3">💵 Balance USD</h4>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Balance USD <span className="text-blue-500 text-xs">(use punto)</span>
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          name="company_usd_balance"
+                          value={formData.company_usd_balance}
+                          onChange={handleChange}
+                          placeholder="0.00"
+                          lang="en"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Ejemplo: 1000.50</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Fecha Balance USD <span className="text-blue-500 text-xs">(hora local)</span>
+                        </label>
+                        <input
+                          type="datetime-local"
+                          name="company_usd_date_balance"
+                          value={formData.company_usd_date_balance}
+                          onChange={handleChange}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          {formData.company_usd_date_balance ? 'Configurada' : 'Auto-completa al modificar balance'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4 mt-4">
+                    <h4 className="font-semibold text-gray-800 mb-3">🌎 Balance Moneda Local</h4>
+                    
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Moneda
+                        </label>
+                        <select
+                          name="company_local_currency"
+                          value={formData.company_local_currency}
+                          onChange={handleChange}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
+                        >
+                          <option value="">Ninguna</option>
+                          <option value="PEN">PEN</option>
+                          <option value="MXN">MXN</option>
+                          <option value="CLP">CLP</option>
+                          <option value="COP">COP</option>
+                          <option value="USD">USD</option>
+                        </select>
+                      </div>
+
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Balance Local <span className="text-blue-500 text-xs">(use punto)</span>
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          name="company_local_balance"
+                          value={formData.company_local_balance}
+                          onChange={handleChange}
+                          placeholder="0.00"
+                          lang="en"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Ejemplo: 3750.00</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Balance USD
+                        Fecha Balance Local <span className="text-blue-500 text-xs">(hora local)</span>
                       </label>
                       <input
-                        type="number"
-                        step="0.01"
-                        value={formData.company_credit_balance}
-                        onChange={(e) =>
-                          setFormData({ ...formData, company_credit_balance: e.target.value })
-                        }
+                        type="datetime-local"
+                        name="company_local_date_balance"
+                        value={formData.company_local_date_balance}
+                        onChange={handleChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formData.company_local_date_balance ? 'Configurada' : 'Auto-completa al modificar balance'}
+                      </p>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 border-t pt-4 mt-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Barcode
                       </label>
                       <select
+                        name="company_barcode_available"
                         value={formData.company_barcode_available}
-                        onChange={(e) =>
-                          setFormData({ ...formData, company_barcode_available: e.target.value })
-                        }
+                        onChange={handleChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       >
                         <option value="No">No</option>
@@ -487,10 +633,9 @@ const CompaniesTab = ({
                         Estado
                       </label>
                       <select
+                        name="company_status"
                         value={formData.company_status}
-                        onChange={(e) =>
-                          setFormData({ ...formData, company_status: e.target.value })
-                        }
+                        onChange={handleChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       >
                         <option value="active">Activo</option>
@@ -505,10 +650,9 @@ const CompaniesTab = ({
                     </label>
                     <input
                       type="email"
+                      name="company_mail_customer_support"
                       value={formData.company_mail_customer_support}
-                      onChange={(e) =>
-                        setFormData({ ...formData, company_mail_customer_support: e.target.value })
-                      }
+                      onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       maxLength={255}
                     />
@@ -520,17 +664,15 @@ const CompaniesTab = ({
                     </label>
                     <input
                       type="email"
+                      name="company_mail_commercial_support"
                       value={formData.company_mail_commercial_support}
-                      onChange={(e) =>
-                        setFormData({ ...formData, company_mail_commercial_support: e.target.value })
-                      }
+                      onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       maxLength={255}
                     />
                   </div>
                 </div>
 
-                {/* COLUMNA 2: IMÁGENES */}
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">

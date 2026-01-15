@@ -1,8 +1,9 @@
 """
-Router de Vendor Products - Gestión de productos de vendors (CORREGIDO - ORDEN DE RUTAS)
+Router de Vendor Products - Gestión de productos de vendors (ACTUALIZADO CON api_group_code)
 Solo usa columnas que existen en la BD
 Las rutas específicas van ANTES de las rutas con parámetros variables
 ✅ FASE 2: Agregado endpoint /by-keys/ para búsqueda por claves de relación
+✅ FASE 3: Actualizado con api_group_code
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +65,7 @@ async def get_vendor_products_summary(
     - active_products: Productos activos
     - inactive_products: Productos inactivos
     - products_by_vendor: Productos agrupados por vendor
+    - products_by_api_group: Productos agrupados por grupo de APIs ⭐ NUEVO
     - products_by_type: Productos agrupados por tipo
     - products_by_operator: Productos agrupados por operador
     """
@@ -94,6 +96,16 @@ async def get_vendor_products_summary(
     )
     products_by_vendor = {row.vendor_code: row.count for row in result}
 
+    # ⭐ NUEVO: Productos por api_group_code
+    result = await db.execute(
+        select(
+            VendorProduct.api_group_code,
+            func.count(VendorProduct.vp_id).label('count')
+        )
+        .group_by(VendorProduct.api_group_code)
+    )
+    products_by_api_group = {row.api_group_code: row.count for row in result}
+
     # Productos por tipo
     result = await db.execute(
         select(
@@ -120,12 +132,13 @@ async def get_vendor_products_summary(
         "active_products": active_products,
         "inactive_products": inactive_products,
         "products_by_vendor": products_by_vendor,
+        "products_by_api_group": products_by_api_group,  # ⭐ NUEVO
         "products_by_type": products_by_type,
         "products_by_operator": products_by_operator
     }
 
 
-# ✅✅✅ NUEVO ENDPOINT - FASE 2 ✅✅✅
+# ✅✅✅ ENDPOINT - FASE 2 (MANTIENE FUNCIONALIDAD) ✅✅✅
 @router.get("/by-keys/", response_model=VendorProductPublic)
 async def get_vendor_product_by_keys(
     vendor_code: str,
@@ -134,23 +147,24 @@ async def get_vendor_product_by_keys(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    ✅ NUEVO - FASE 2: Obtener vendor product por claves de relación
-    
+    ✅ FASE 2: Obtener vendor product por claves de relación
+    ⭐ Ahora incluye api_group_code en la respuesta
+
     **Uso:** Cuando tienes un product y necesitas obtener el vendor_product asociado
-    
+
     **Query params:**
     - vendor_code: Código del vendor (de products.product_vendor_code)
     - vp_code: Código del producto vendor (de products.product_vendpro_code)
     - vp_skuid: SKU del producto vendor (de products.product_vendpro_skuid)
-    
+
     **Ejemplo:**
-    ```
+```
     GET /api/v1/vendor-products/by-keys/?vendor_code=LATCOM&vp_code=BITEL_20_PEN&vp_skuid=SKU_001
-    ```
-    
-    **Retorna:** VendorProduct completo con todos los campos (vp_country, vp_operator, vp_currency, vp_amount, etc.)
-    
-    **Acceso:** Público (no requiere autenticación) para uso desde Bitel_Users
+```
+
+    **Retorna:** VendorProduct completo con todos los campos incluyendo api_group_code
+
+    **Acceso:** Público (no requiere autenticación) para uso desde Latconecta_Users
     """
     result = await db.execute(
         select(VendorProduct).where(
@@ -268,13 +282,13 @@ async def list_vendor_products(
     skip: int = 0,
     limit: int = 100,
     vendor_code: Optional[str] = None,
+    api_group_code: Optional[str] = None,  # ⭐ NUEVO
     vp_status: Optional[str] = None,
     vp_product_type: Optional[int] = None,
     vp_operator: Optional[str] = None,
     vp_country: Optional[str] = None,
     search: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Listar vendor products con filtros opcionales
@@ -283,6 +297,7 @@ async def list_vendor_products(
 
     **Parámetros:**
     - vendor_code: Filtrar por vendor
+    - api_group_code: Filtrar por grupo de APIs ⭐ NUEVO
     - vp_status: Filtrar por estado (active, inactive)
     - vp_product_type: Filtrar por tipo de producto
     - vp_operator: Filtrar por operador
@@ -294,6 +309,9 @@ async def list_vendor_products(
     # Aplicar filtros
     if vendor_code:
         query = query.where(VendorProduct.vendor_code == vendor_code)
+
+    if api_group_code:  # ⭐ NUEVO
+        query = query.where(VendorProduct.api_group_code == api_group_code)
 
     if vp_status:
         query = query.where(VendorProduct.vp_status == vp_status)
@@ -320,6 +338,7 @@ async def list_vendor_products(
     # Ordenar y paginar
     query = query.offset(skip).limit(limit).order_by(
         VendorProduct.vendor_code,
+        VendorProduct.api_group_code,  # ⭐ NUEVO
         VendorProduct.vp_code
     )
 
@@ -472,15 +491,10 @@ async def delete_vendor_product(
 
 
 # =============================================================================
-# ✅✅✅ CAMBIOS REALIZADOS EN FASE 2:
+# ✅✅✅ CAMBIOS REALIZADOS EN FASE 3 (api_group_code):
 # =============================================================================
-# LÍNEA 138-177: Agregado endpoint GET /by-keys/ para búsqueda por claves
-#                - Query params: vendor_code, vp_code, vp_skuid
-#                - Acceso público (sin autenticación) para Bitel_Users
-#                - Retorna VendorProduct completo
-#
-# INSTRUCCIONES DE INSTALACIÓN:
-# 1. Reemplazar archivo: backend/app/routers/vendor_products.py
-# 2. Reiniciar servidor backend
-# 3. Probar endpoint: GET /api/v1/vendor-products/by-keys/?vendor_code=LATCOM&vp_code=BITEL_20_PEN&vp_skuid=SKU_001
+# LÍNEA 65: Agregado products_by_api_group en summary
+# LÍNEA 153: Agregado filtro api_group_code en list_vendor_products
+# LÍNEA 200: Agregado api_group_code en order_by
+# El endpoint /by-keys/ ahora retorna api_group_code automáticamente (VendorProductPublic)
 # =============================================================================

@@ -3,6 +3,7 @@ Router de Vendor API Mappings
 CRUD completo para gestión de mapeos entre purchases y APIs de vendors
 Usa convención de códigos: VAL01, PRO01, QRY01, REV01, etc.
 ✅ CONVERTIDO A ASYNC (AsyncSession)
+✅ ACTUALIZADO CON api_group_code
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status
@@ -39,6 +40,7 @@ router = APIRouter(
 @router.get("/", response_model=List[VendorApiMappingResponse])
 async def list_mappings(
     vendor_code: Optional[str] = None,
+    api_group_code: Optional[str] = None,  # ⭐ NUEVO
     operation_type: Optional[str] = None,
     mapping_code: Optional[str] = None,
     is_active: Optional[bool] = None,
@@ -50,6 +52,7 @@ async def list_mappings(
 
     Filtros:
     - vendor_code: Filtrar por vendor específico
+    - api_group_code: Filtrar por grupo de APIs específico ⭐ NUEVO
     - operation_type: Filtrar por tipo de operación (validation, provision, etc.)
     - mapping_code: Filtrar por código específico (VAL01, PRO01, etc.)
     - is_active: Filtrar por estado activo/inactivo
@@ -58,6 +61,9 @@ async def list_mappings(
 
     if vendor_code:
         query = query.filter(VendorApiMapping.vendor_code == vendor_code.upper())
+
+    if api_group_code:  # ⭐ NUEVO
+        query = query.filter(VendorApiMapping.api_group_code == api_group_code.upper())
 
     if operation_type:
         query = query.filter(VendorApiMapping.operation_type == operation_type.lower())
@@ -70,6 +76,8 @@ async def list_mappings(
 
     query = query.order_by(
         VendorApiMapping.vendor_code,
+        VendorApiMapping.api_group_code,  # ⭐ NUEVO
+        VendorApiMapping.operation_type,
         VendorApiMapping.mapping_code
     )
 
@@ -118,7 +126,7 @@ async def get_mappings_summary(
     # Total
     result_total = await db.execute(select(func.count(VendorApiMapping.mapping_id)))
     total = result_total.scalar()
-    
+
     # Activos
     result_active = await db.execute(
         select(func.count(VendorApiMapping.mapping_id))
@@ -137,6 +145,16 @@ async def get_mappings_summary(
     vendors = result_vendors.all()
     vendors_dict = {v[0]: v[1] for v in vendors}
 
+    # Contar por api_group_code ⭐ NUEVO
+    result_groups = await db.execute(
+        select(
+            VendorApiMapping.api_group_code,
+            func.count(VendorApiMapping.mapping_id).label("count")
+        ).group_by(VendorApiMapping.api_group_code)
+    )
+    groups = result_groups.all()
+    groups_dict = {g[0]: g[1] for g in groups}
+
     # Contar por operación
     result_operations = await db.execute(
         select(
@@ -152,6 +170,7 @@ async def get_mappings_summary(
         "active_mappings": active,
         "inactive_mappings": inactive,
         "by_vendor": vendors_dict,
+        "by_api_group": groups_dict,  # ⭐ NUEVO
         "by_operation": operations_dict,
         "last_updated": datetime.now().isoformat()
     }
@@ -165,12 +184,15 @@ async def get_mappings_by_vendor(
 ):
     """
     Obtiene todos los mappings de un vendor específico
-    Ordenados por mapping_code
+    Ordenados por api_group_code y mapping_code
     """
     result = await db.execute(
         select(VendorApiMapping)
         .filter(VendorApiMapping.vendor_code == vendor_code.upper())
-        .order_by(VendorApiMapping.mapping_code)
+        .order_by(
+            VendorApiMapping.api_group_code,  # ⭐ ACTUALIZADO
+            VendorApiMapping.mapping_code
+        )
     )
     mappings = result.scalars().all()
 
@@ -179,6 +201,76 @@ async def get_mappings_by_vendor(
         return []
 
     return mappings
+
+
+@router.get("/vendor/{vendor_code}/group/{api_group_code}", response_model=List[VendorApiMappingResponse])
+async def get_mappings_by_vendor_and_group(
+    vendor_code: str,
+    api_group_code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Obtiene todos los mappings de un vendor y grupo específico
+    
+    Ejemplo: GET /vendor/DTONE/group/DT001
+    Retorna: VAL01, PRO01, QRY01, REV01, etc. del grupo DT001
+    """
+    result = await db.execute(
+        select(VendorApiMapping)
+        .filter(
+            VendorApiMapping.vendor_code == vendor_code.upper(),
+            VendorApiMapping.api_group_code == api_group_code.upper()
+        )
+        .order_by(VendorApiMapping.operation_type)
+    )
+    mappings = result.scalars().all()
+
+    if not mappings:
+        return []
+
+    return mappings
+
+
+@router.get("/lookup/{vendor_code}/{api_group_code}/{operation_type}", response_model=VendorApiMappingResponse)
+async def get_mapping_by_lookup(
+    vendor_code: str,
+    api_group_code: str,
+    operation_type: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    ⭐ ENDPOINT PRINCIPAL PARA BUSCAR MAPPINGS
+    
+    Obtiene un mapping por (vendor_code, api_group_code, operation_type)
+    
+    Este es el endpoint que se usa en el flujo de compras:
+    1. Usuario selecciona producto → obtenemos vendor_product
+    2. vendor_product tiene: vendor_code y api_group_code
+    3. Según operación necesaria (validation, provision, etc.) buscamos el mapping
+    
+    Ejemplo: GET /lookup/DTONE/DT001/provision
+    → Retorna el mapping PRO01 para provisionar con DTONE grupo DT001
+    
+    ⚠️ Este endpoint NO requiere autenticación (usado en flujo de compra)
+    """
+    result = await db.execute(
+        select(VendorApiMapping).filter(
+            VendorApiMapping.vendor_code == vendor_code.upper(),
+            VendorApiMapping.api_group_code == api_group_code.upper(),
+            VendorApiMapping.operation_type == operation_type.lower(),
+            VendorApiMapping.is_active == True  # Solo mappings activos
+        )
+    )
+    mapping = result.scalar_one_or_none()
+
+    if not mapping:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No se encontró mapping activo para vendor={vendor_code}, group={api_group_code}, operation={operation_type}"
+        )
+
+    return mapping
 
 
 @router.get("/by-code/{vendor_code}/{mapping_code}", response_model=VendorApiMappingResponse)
@@ -255,7 +347,7 @@ async def create_mapping(
     Validaciones:
     - vendor_code debe existir en tabla vendors
     - mapping_code debe ser único
-    - La combinación (vendor_code, operation_type) debe ser única
+    - La combinación (vendor_code, api_group_code, operation_type) debe ser única ⭐ ACTUALIZADO
 
     Convención de códigos:
     - VAL01, VAL02: Validación
@@ -279,10 +371,11 @@ async def create_mapping(
             detail=f"Ya existe un mapping con código {mapping.mapping_code}"
         )
 
-    # Verificar si ya existe mapping para vendor + operation
+    # ⭐ ACTUALIZADO: Verificar constraint único (vendor_code, api_group_code, operation_type)
     result_existing = await db.execute(
         select(VendorApiMapping).filter(
             VendorApiMapping.vendor_code == mapping.vendor_code.upper(),
+            VendorApiMapping.api_group_code == mapping.api_group_code.upper(),
             VendorApiMapping.operation_type == mapping.operation_type.lower()
         )
     )
@@ -291,12 +384,13 @@ async def create_mapping(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ya existe un mapping para {mapping.vendor_code} - {mapping.operation_type} (código: {existing.mapping_code})"
+            detail=f"Ya existe un mapping para vendor={mapping.vendor_code}, group={mapping.api_group_code}, operation={mapping.operation_type} (código: {existing.mapping_code})"
         )
 
     # Crear nuevo mapping
     db_mapping = VendorApiMapping(
         vendor_code=mapping.vendor_code.upper(),
+        api_group_code=mapping.api_group_code.upper(),  # ⭐ NUEVO
         operation_type=mapping.operation_type.lower(),
         mapping_code=mapping.mapping_code.upper(),
         http_method=mapping.http_method,
@@ -347,6 +441,29 @@ async def update_mapping(
     # Actualizar solo campos no-None
     update_data = mapping_update.model_dump(exclude_unset=True)
 
+    # ⭐ NUEVO: Si se actualiza api_group_code u operation_type, validar constraint único
+    if 'api_group_code' in update_data or 'operation_type' in update_data:
+        new_vendor_code = db_mapping.vendor_code
+        new_api_group_code = update_data.get('api_group_code', db_mapping.api_group_code).upper()
+        new_operation_type = update_data.get('operation_type', db_mapping.operation_type).lower()
+
+        # Verificar que no exista otro mapping con esa combinación
+        result_check = await db.execute(
+            select(VendorApiMapping).filter(
+                VendorApiMapping.vendor_code == new_vendor_code,
+                VendorApiMapping.api_group_code == new_api_group_code,
+                VendorApiMapping.operation_type == new_operation_type,
+                VendorApiMapping.mapping_id != mapping_id  # Excluir el actual
+            )
+        )
+        existing = result_check.scalar_one_or_none()
+
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ya existe otro mapping para vendor={new_vendor_code}, group={new_api_group_code}, operation={new_operation_type}"
+            )
+
     for field, value in update_data.items():
         setattr(db_mapping, field, value)
 
@@ -368,8 +485,7 @@ async def delete_mapping(
     """
     Elimina un mapping
 
-    ADVERTENCIA: Esto eliminará el mapping y pondrá NULL en vendor_products.api_mapping_code
-    que lo referencien (por el ON DELETE SET NULL).
+    ADVERTENCIA: Esto eliminará el mapping permanentemente.
 
     Considera desactivar el mapping (is_active=false) en vez de eliminarlo.
     """
@@ -591,6 +707,7 @@ async def toggle_mapping_status(
 @router.post("/validate")
 async def validate_mapping_data(
     vendor_code: str,
+    api_group_code: str,  # ⭐ NUEVO
     request_mapping: dict
 ):
     """

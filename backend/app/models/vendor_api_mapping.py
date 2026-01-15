@@ -14,6 +14,7 @@ class VendorApiMapping(Base):
 
     Almacena la configuración de cómo comunicarse con APIs de vendors:
     - Códigos identificadores
+    - Grupo de APIs (api_group_code)
     - URLs y métodos HTTP
     - Autenticación
     - Mapeo de request (Purchase → Vendor API)
@@ -25,13 +26,14 @@ class VendorApiMapping(Base):
     # PRIMARY KEYS
     # =========================================================================
     mapping_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    mapping_code = Column(String(5), unique=True, nullable=False, index=True)  # Identificador de usuario
+    mapping_code = Column(String(5), unique=True, nullable=False, index=True)
 
     # =========================================================================
     # CONFIGURACIÓN BÁSICA
     # =========================================================================
     vendor_code = Column(String(50), nullable=False, index=True)
-    operation_type = Column(String(50), nullable=False)  # topup, balance_check, refund, etc
+    api_group_code = Column(String(50), nullable=False, index=True)  # ⭐ NUEVO
+    operation_type = Column(String(50), nullable=False)  # validation, provision, query, reversal, etc
     http_method = Column(String(10), default='POST')     # POST, GET, PUT, PATCH
     endpoint_url = Column(String(500))                   # /api/v1/topup
 
@@ -67,6 +69,7 @@ class VendorApiMapping(Base):
             f"<VendorApiMapping("
             f"code={self.mapping_code}, "
             f"vendor={self.vendor_code}, "
+            f"group={self.api_group_code}, "  # ⭐ NUEVO
             f"operation={self.operation_type}, "
             f"active={self.is_active}"
             f")>"
@@ -78,6 +81,7 @@ class VendorApiMapping(Base):
         return (
             self.mapping_code is not None and
             self.vendor_code is not None and
+            self.api_group_code is not None and  # ⭐ NUEVO
             self.operation_type is not None and
             self.request_mapping is not None
         )
@@ -102,6 +106,7 @@ class VendorApiMapping(Base):
             'mapping_id': self.mapping_id,
             'mapping_code': self.mapping_code,
             'vendor_code': self.vendor_code,
+            'api_group_code': self.api_group_code,  # ⭐ NUEVO
             'operation_type': self.operation_type,
             'http_method': self.http_method,
             'endpoint_url': self.endpoint_url,
@@ -129,14 +134,14 @@ class VendorApiMapping(Base):
             return {}
 
         api_request = {}
-        
+
         for field_config in self.request_mapping['fields']:
             source_field = field_config.get('source_field')
             api_field = field_config.get('api_field')
-            
+
             if source_field in source_data:
                 api_request[api_field] = source_data[source_field]
-        
+
         return api_request
 
     def parse_api_response(self, api_response: dict) -> dict:
@@ -153,9 +158,9 @@ class VendorApiMapping(Base):
             return {}
 
         parsed_data = {}
-        
+
         for api_field, purchase_field in self.response_mapping.items():
             if api_field in api_response:
                 parsed_data[purchase_field] = api_response[api_field]
-        
+
         return parsed_data

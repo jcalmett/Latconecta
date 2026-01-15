@@ -1,10 +1,10 @@
 /**
  * VendorsTab Component - Latconecta Admin
- * Gestión de vendors con balance y conexiones
- * Fecha: 2025-12-12
+ * Gestión de vendors con balance dual (USD + Local)
+ * Actualizado: 2026-01-10 - Agregada verificación de consistencia de monedas
  */
 import React, { useState, useEffect } from 'react';
-import { Pencil, Trash2, Plus, RefreshCw, Search, AlertCircle, DollarSign, Package, Shield, Tag } from 'lucide-react';
+import { Pencil, Trash2, Plus, RefreshCw, Search, AlertCircle, DollarSign, CheckCircle } from 'lucide-react';
 import vendorsService from "../../services/vendorsService";
 import VendorForm from './VendorForm';
 
@@ -15,10 +15,9 @@ const VendorsTab = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [showBalanceModal, setShowBalanceModal] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [balanceSummary, setBalanceSummary] = useState(null);
 
-  // Cargar vendors
   useEffect(() => {
     loadVendors();
     loadBalanceSummary();
@@ -77,7 +76,7 @@ const VendorsTab = () => {
     try {
       const result = await vendorsService.syncBalance(vendorCode);
       if (result.success) {
-        alert(`Balance sincronizado: ${result.balance}`);
+        alert(`Balance sincronizado exitosamente`);
         loadVendors();
         loadBalanceSummary();
       } else {
@@ -101,9 +100,9 @@ const VendorsTab = () => {
     }
   };
 
-  const handleManageBalance = (vendor) => {
+  const handleVerifyCurrency = (vendor) => {
     setSelectedVendor(vendor);
-    setShowBalanceModal(true);
+    setShowVerificationModal(true);
   };
 
   const getStatusBadge = (status) => {
@@ -116,18 +115,30 @@ const VendorsTab = () => {
   };
 
   const getBalanceStatusBadge = (vendor) => {
-    if (!vendor.vendor_balance_amount) {
+    const hasUSD = vendor.vendor_usd_balance !== null && vendor.vendor_usd_balance !== undefined;
+    const usdAmount = hasUSD ? parseFloat(vendor.vendor_usd_balance) : 0;
+
+    const hasLocal = vendor.vendor_local_balance !== null && vendor.vendor_local_balance !== undefined;
+    const localAmount = hasLocal ? parseFloat(vendor.vendor_local_balance) : 0;
+
+    if (!hasUSD && !hasLocal) {
       return <span className="px-2 py-1 text-xs rounded bg-gray-100 text-gray-600">Sin balance</span>;
     }
 
-    const amount = parseFloat(vendor.vendor_balance_amount);
-    if (amount < 1000) {
-      return <span className="px-2 py-1 text-xs rounded bg-red-100 text-red-800">⚠️ Bajo</span>;
+    if (hasUSD) {
+      if (usdAmount < 100) {
+        return <span className="px-2 py-1 text-xs rounded bg-red-100 text-red-800">⚠️ USD Bajo</span>;
+      }
+      if (usdAmount < 500) {
+        return <span className="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-800">⚠️ USD Medio</span>;
+      }
+      return <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800">✅ USD OK</span>;
     }
-    if (amount < 5000) {
-      return <span className="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-800">⚠️ Medio</span>;
+
+    if (localAmount < 1000) {
+      return <span className="px-2 py-1 text-xs rounded bg-red-100 text-red-800">⚠️ Local Bajo</span>;
     }
-    return <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800">✅ OK</span>;
+    return <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800">✅ Local OK</span>;
   };
 
   if (loading) {
@@ -140,7 +151,6 @@ const VendorsTab = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-[#008C96]">
@@ -155,7 +165,6 @@ const VendorsTab = () => {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-4 border">
         <div className="flex gap-4 items-center">
           <label className="text-sm font-medium text-gray-700">Filtrar por estado:</label>
@@ -175,14 +184,12 @@ const VendorsTab = () => {
         </div>
       </div>
 
-      {/* Error Message */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
           {error}
         </div>
       )}
 
-      {/* Vendors Table */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -195,19 +202,16 @@ const VendorsTab = () => {
                   Nombre
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                  Tipo
+                  Balance USD
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                  Balance
+                  Balance Local
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Estado
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Estado Balance
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                  Última Actualización
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">
                   Acciones
@@ -225,17 +229,35 @@ const VendorsTab = () => {
                     <div className="text-sm text-gray-500">{vendor.vendor_description}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-600">{vendor.vendor_type || 'N/A'}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {vendor.vendor_balance_amount ? (
+                    {vendor.vendor_usd_balance !== null && vendor.vendor_usd_balance !== undefined ? (
                       <div>
                         <div className="text-sm font-semibold text-gray-900">
-                          {vendor.vendor_balance_currency} {parseFloat(vendor.vendor_balance_amount).toFixed(2)}
+                          USD {parseFloat(vendor.vendor_usd_balance).toFixed(2)}
                         </div>
+                        {vendor.vendor_usd_date_balance && (
+                          <div className="text-xs text-gray-500">
+                            {new Date(vendor.vendor_usd_date_balance).toLocaleDateString()}
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <span className="text-sm text-gray-400">Sin balance</span>
+                      <span className="text-sm text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {vendor.vendor_local_balance !== null && vendor.vendor_local_balance !== undefined ? (
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">
+                          {vendor.vendor_local_currency} {parseFloat(vendor.vendor_local_balance).toFixed(2)}
+                        </div>
+                        {vendor.vendor_local_date_balance && (
+                          <div className="text-xs text-gray-500">
+                            {new Date(vendor.vendor_local_date_balance).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400">-</span>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -245,12 +267,6 @@ const VendorsTab = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {getBalanceStatusBadge(vendor)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {vendor.vendor_balance_last_update
-                      ? new Date(vendor.vendor_balance_last_update).toLocaleString()
-                      : 'Nunca'
-                    }
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end gap-2">
@@ -262,11 +278,11 @@ const VendorsTab = () => {
                         ✏️
                       </button>
                       <button
-                        onClick={() => handleManageBalance(vendor)}
+                        onClick={() => handleVerifyCurrency(vendor)}
                         className="text-green-600 hover:text-green-900"
-                        title="Gestionar Balance"
+                        title="Verificar Consistencia de Monedas"
                       >
-                        💰
+                        🔍
                       </button>
                       <button
                         onClick={() => handleSyncBalance(vendor.vendor_code)}
@@ -297,7 +313,6 @@ const VendorsTab = () => {
           </table>
         </div>
 
-        {/* Empty State */}
         {vendors.length === 0 && !loading && (
           <div className="text-center py-12">
             <div className="text-gray-400 text-lg mb-2">No hay vendors</div>
@@ -311,7 +326,6 @@ const VendorsTab = () => {
         )}
       </div>
 
-      {/* Vendor Form Modal */}
       {showForm && (
         <VendorForm
           vendor={selectedVendor}
@@ -319,24 +333,21 @@ const VendorsTab = () => {
             setShowForm(false);
             setSelectedVendor(null);
           }}
-          onSave={() => {
+          onSuccess={() => {
+            setShowForm(false);
+            setSelectedVendor(null);
             loadVendors();
             loadBalanceSummary();
           }}
         />
       )}
 
-      {/* Balance Management Modal */}
-      {showBalanceModal && selectedVendor && (
-        <BalanceModal
+      {showVerificationModal && selectedVendor && (
+        <CurrencyVerificationModal
           vendor={selectedVendor}
           onClose={() => {
-            setShowBalanceModal(false);
+            setShowVerificationModal(false);
             setSelectedVendor(null);
-          }}
-          onUpdate={() => {
-            loadVendors();
-            loadBalanceSummary();
           }}
         />
       )}
@@ -344,115 +355,151 @@ const VendorsTab = () => {
   );
 };
 
-// Balance Modal Component
-const BalanceModal = ({ vendor, onClose, onUpdate }) => {
-  const [amount, setAmount] = useState(vendor.vendor_balance_amount || '0');
-  const [currency, setCurrency] = useState(vendor.vendor_balance_currency || 'PEN');
-  const [saving, setSaving] = useState(false);
+const CurrencyVerificationModal = ({ vendor, onClose }) => {
+  const [verificationData, setVerificationData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  useEffect(() => {
+    loadVerificationData();
+  }, [vendor]);
 
-    if (!amount || parseFloat(amount) < 0) {
-      alert('Ingrese un monto válido');
-      return;
-    }
-
-    setSaving(true);
+  const loadVerificationData = async () => {
     try {
-      await vendorsService.updateBalance(vendor.vendor_code, {
-        vendor_balance_amount: parseFloat(amount),
-        vendor_balance_currency: currency
-      });
-      alert('✅ Balance actualizado exitosamente');
-      onUpdate();
-      onClose();
+      setLoading(true);
+      const response = await vendorsService.verifyCurrencyConsistency(vendor.vendor_code);
+      setVerificationData(response);
     } catch (err) {
-      alert(`❌ Error: ${err.response?.data?.detail || err.message}`);
+      console.error('Error al verificar consistencia:', err);
+      alert(`Error: ${err.response?.data?.detail || err.message}`);
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
+  const filteredData = verificationData.filter(item => {
+    if (filter === 'errors') return !item.is_valid;
+    if (filter === 'correct') return item.is_valid;
+    return true;
+  });
+
+  const errorCount = verificationData.filter(item => !item.is_valid).length;
+  const correctCount = verificationData.filter(item => item.is_valid).length;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
         <div className="bg-gradient-to-r from-green-600 to-green-800 text-white px-6 py-4 rounded-t-lg">
-          <h3 className="text-xl font-bold">💰 Actualizar Balance</h3>
-          <p className="text-green-100 text-sm mt-1">{vendor.vendor_name}</p>
+          <h3 className="text-xl font-bold">🔍 Verificación de Consistencia de Monedas</h3>
+          <p className="text-green-100 text-sm mt-1">
+            {vendor.vendor_name} - Moneda Local: {vendor.vendor_local_currency || 'No definida'}
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Balance Actual
-            </label>
-            <div className="bg-gray-50 px-4 py-3 rounded-lg">
-              <span className="text-lg font-semibold text-gray-800">
-                {vendor.vendor_balance_currency} {parseFloat(vendor.vendor_balance_amount || 0).toFixed(2)}
-              </span>
+        <div className="p-6 flex-1 overflow-auto">
+          {loading ? (
+            <div className="flex justify-center items-center h-64">
+              <div className="text-blue-600">Cargando verificación...</div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="mb-4 flex justify-between items-center">
+                <div className="flex gap-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+                    <span className="text-sm text-green-800">
+                      ✅ Correctos: <strong>{correctCount}</strong>
+                    </span>
+                  </div>
+                  <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+                    <span className="text-sm text-red-800">
+                      ❌ Errores: <strong>{errorCount}</strong>
+                    </span>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+                    <span className="text-sm text-blue-800">
+                      📊 Total: <strong>{verificationData.length}</strong>
+                    </span>
+                  </div>
+                </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nuevo Balance *
-            </label>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              step="0.01"
-              min="0"
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              placeholder="0.00"
-            />
-          </div>
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                >
+                  <option value="all">Todos ({verificationData.length})</option>
+                  <option value="errors">Solo Errores ({errorCount})</option>
+                  <option value="correct">Solo Correctos ({correctCount})</option>
+                </select>
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Moneda
-            </label>
-            <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            >
-              <option value="PEN">PEN (Soles)</option>
-              <option value="USD">USD (Dólares)</option>
-              <option value="EUR">EUR (Euros)</option>
-            </select>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <span className="animate-spin">⏳</span>
-                  Actualizando...
-                </>
+              {filteredData.length === 0 ? (
+                <div className="text-center py-12 bg-gray-50 rounded-lg">
+                  <div className="text-gray-400 text-lg">
+                    {filter === 'errors' ? '✅ No hay errores de consistencia' : 'No hay registros para mostrar'}
+                  </div>
+                </div>
               ) : (
-                <>
-                  <span>💾</span>
-                  Actualizar Balance
-                </>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Moneda Producto</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">VP Code</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Moneda VP</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Observación</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredData.map((item, index) => (
+                        <tr key={index} className={item.is_valid ? 'bg-green-50' : 'bg-red-50'}>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.is_valid ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                ✅ OK
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                ❌ Error
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm font-medium text-gray-900">{item.product_name}</div>
+                            <div className="text-xs text-gray-500">ID: {item.product_id}</div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="text-sm font-semibold text-gray-900">{item.product_currency}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-gray-900">{item.vp_code}</div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="text-sm font-semibold text-gray-900">{item.vp_currency}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-gray-700">{item.observation}</div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
-            </button>
-          </div>
-        </form>
+            </>
+          )}
+        </div>
+
+        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
       </div>
     </div>
   );

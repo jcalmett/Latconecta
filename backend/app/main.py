@@ -2,6 +2,7 @@
 FastAPI Main Application - Latconecta Backend
 API REST para la plataforma Latconecta
 """
+from app.routers import exchange_rate
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -143,14 +144,16 @@ from app.routers import (
     products, 
     services, 
     companies, 
-    purchases, 
+    purchases,
+    exchange_rate,  # ← NUEVO 
     upload, 
     countries, 
     vendors, 
     vendor_products, 
     latconecta,
     vendor_api_mappings,  # ⭐ NUEVO
-    mock_vendors          # ⭐ NUEVO
+    mock_vendors,         # ⭐ NUEVO
+    mock_config
 )
 
 # Registrar routers con PREFIXES CORRECTOS
@@ -164,6 +167,8 @@ app.include_router(countries.router, prefix="/api/v1/countries", tags=["Countrie
 app.include_router(vendors.router, prefix="/api/v1/vendors", tags=["Vendors"])
 app.include_router(vendor_products.router, prefix="/api/v1/vendor-products", tags=["Vendor Products"])
 app.include_router(latconecta.router, prefix="/api/v1/latconecta", tags=["Latconecta"])
+app.include_router(exchange_rate.router, prefix="/api/v1/exchange-rate", tags=["Exchange Rate"])
+app.include_router(mock_config.router, prefix="/api/v1/mock", tags=["Mock Config"])
 
 # ⭐ NUEVOS ROUTERS
 app.include_router(vendor_api_mappings.router, prefix="/api/v1/vendor-api-mappings", tags=["Vendor API Mappings"])

@@ -1,6 +1,6 @@
 """
 Modelo VendorProduct - Catálogo de productos de vendors (ACTUALIZADO)
-Incluye api_mapping_code para vincular con API mappings
+Incluye api_group_code para vincular con grupos de API mappings
 """
 from sqlalchemy import Column, Integer, String, Numeric, TIMESTAMP, Text, ForeignKey, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -17,7 +17,7 @@ class VendorProduct(Base):
     - Datos del servicio (operador, país, moneda)
     - Información de montos
     - Configuración y metadata
-    - Vinculación con API mapping
+    - Vinculación con grupo de APIs (api_group_code)
     """
     __tablename__ = "vendor_products"
 
@@ -37,14 +37,13 @@ class VendorProduct(Base):
     )
 
     # =========================================================================
-    # FOREIGN KEY - Relación con API mapping (NUEVO)
+    # API GROUP CODE - Grupo de APIs (NO es FK, es un código de agrupación)
     # =========================================================================
-    api_mapping_code = Column(
-        String(5),
-        ForeignKey("vendor_api_mappings.mapping_code", ondelete="SET NULL", onupdate="CASCADE"),
-        nullable=True,
+    api_group_code = Column(
+        String(50),
+        nullable=False,
         index=True
-    )
+    )  # ⭐ NUEVO - Reemplaza api_mapping_code
 
     # =========================================================================
     # IDENTIFICACIÓN DEL PRODUCTO EN VENDOR
@@ -104,7 +103,6 @@ class VendorProduct(Base):
     # RELACIONES
     # =========================================================================
     vendor = relationship("Vendor", back_populates="vendor_products")
-    api_mapping = relationship("VendorApiMapping", foreign_keys=[api_mapping_code])  # ✅ NUEVO
 
     def __repr__(self):
         return (
@@ -113,7 +111,7 @@ class VendorProduct(Base):
             f"vendor={self.vendor_code}, "
             f"code={self.vp_code}, "
             f"operator={self.vp_operator}, "
-            f"mapping={self.api_mapping_code}, "
+            f"api_group={self.api_group_code}, "  # ⭐ ACTUALIZADO
             f"status={self.vp_status}"
             f")>"
         )
@@ -137,15 +135,16 @@ class VendorProduct(Base):
             return f"{self.vp_amount} {self.vp_currency}"
 
     @property
-    def has_mapping(self) -> bool:
-        """Verificar si tiene API mapping asignado"""
-        return self.api_mapping_code is not None
+    def has_api_group(self) -> bool:
+        """Verificar si tiene API group asignado"""
+        return self.api_group_code is not None  # ⭐ ACTUALIZADO
 
     def to_dict(self) -> dict:
         """Convertir a diccionario"""
         return {
             'vp_id': self.vp_id,
             'vendor_code': self.vendor_code,
+            'api_group_code': self.api_group_code,  # ⭐ ACTUALIZADO
             'vp_code': self.vp_code,
             'vp_skuid': self.vp_skuid,
             'vp_name': self.vp_name,
@@ -156,9 +155,8 @@ class VendorProduct(Base):
             'vp_amount_type': self.vp_amount_type,
             'vp_product_type': self.vp_product_type,
             'vp_status': self.vp_status,
-            'api_mapping_code': self.api_mapping_code,  # ✅ NUEVO
             'is_active': self.is_active,
-            'has_mapping': self.has_mapping,  # ✅ NUEVO
+            'has_api_group': self.has_api_group,  # ⭐ ACTUALIZADO
             'display_amount': self.display_amount
         }
 
@@ -184,22 +182,23 @@ class VendorProduct(Base):
             'service_type': self.vp_product_type
         }
 
-    def get_api_mapping_info(self) -> dict:
+    def get_api_group_info(self) -> dict:
         """
-        Obtener información del API mapping asignado
-        
+        Obtener información del API group asignado
+
         Returns:
-            dict: Info del mapping o None si no tiene asignado
+            dict: Info del grupo de APIs
         """
-        if not self.has_mapping:
+        if not self.has_api_group:
             return {
-                'has_mapping': False,
-                'mapping_code': None,
-                'message': 'Producto sin API mapping asignado'
+                'has_api_group': False,
+                'api_group_code': None,
+                'message': 'Producto sin grupo de APIs asignado'
             }
-        
+
         return {
-            'has_mapping': True,
-            'mapping_code': self.api_mapping_code,
-            'message': f'Usa mapping {self.api_mapping_code}'
-        }
+            'has_api_group': True,
+            'api_group_code': self.api_group_code,
+            'vendor_code': self.vendor_code,
+            'message': f'Usa grupo de APIs {self.api_group_code}'
+        }  # ⭐ ACTUALIZADO

@@ -1,7 +1,8 @@
 """
 LATCONECTA - Country Schemas
 Schemas Pydantic para validación de datos de countries
-Actualizado: 2025-12-17 - Cambiado a códigos ISO 3166-1 alpha-3 (3 caracteres)
+Actualizado: 2026-01-10 - Renombrado campos de tipo de cambio
+CORRECCIÓN: country_er_usd_pen → country_er_usd, country_date_er → country_er_date
 """
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
@@ -17,17 +18,21 @@ class CountryBase(BaseModel):
     country_photo: Optional[str] = Field(None, max_length=500)
     country_description: Optional[str] = Field(None, max_length=500)
 
-    # Tasa de cambio
-    country_er_usd_pen: Optional[Decimal] = Field(
+    # Tasa de cambio - ✅ CORREGIDO
+    country_er_usd: Optional[Decimal] = Field(
         default=3.75,
         ge=0,
         le=99.999999,
-        description="Tasa de cambio USD a PEN"
+        description="Tasa de cambio a USD"
+    )
+    country_er_date: Optional[datetime] = Field(
+        None,
+        description="Fecha de actualización del tipo de cambio"
     )
 
     status: Optional[str] = Field(default="active", pattern="^(active|inactive)$")
 
-    @field_validator('country_er_usd_pen')
+    @field_validator('country_er_usd')  # ✅ CORREGIDO
     @classmethod
     def validate_exchange_rate(cls, v):
         """Validar que la tasa tenga máximo 6 decimales"""
@@ -64,13 +69,14 @@ class CountryUpdate(BaseModel):
     country_photo: Optional[str] = Field(None, max_length=500)
     country_description: Optional[str] = Field(None, max_length=500)
 
-    # Tasa de cambio
-    country_er_usd_pen: Optional[Decimal] = Field(None, ge=0, le=99.999999)
+    # Tasa de cambio - ✅ CORREGIDO
+    country_er_usd: Optional[Decimal] = Field(None, ge=0, le=99.999999)
+    country_er_date: Optional[datetime] = None
 
     status: Optional[str] = Field(None, pattern="^(active|inactive)$")
     updated_by: Optional[str] = Field(None, max_length=100)
 
-    @field_validator('country_er_usd_pen')
+    @field_validator('country_er_usd')  # ✅ CORREGIDO
     @classmethod
     def validate_exchange_rate(cls, v):
         """Validar tasa de cambio en actualización"""
@@ -95,8 +101,8 @@ class CountryResponse(CountryBase):
     """Schema para respuestas - incluye campos de solo lectura"""
     country_id: int
 
-    # Fecha de tasa de cambio (solo lectura)
-    country_date_er: Optional[datetime] = None
+    # Fecha de tasa de cambio (solo lectura) - ✅ CORREGIDO
+    country_er_date: Optional[datetime] = None
 
     created_by: Optional[str] = None
     updated_by: Optional[str] = None

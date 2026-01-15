@@ -14,7 +14,7 @@ const vendorsService = {
     try {
       console.log('[Vendors Service] Fetching vendors:', params);
       const queryParams = new URLSearchParams();
-      
+
       if (params.status) queryParams.append('status', params.status);
       if (params.vendor_type) queryParams.append('vendor_type', params.vendor_type);
       if (params.skip !== undefined) queryParams.append('skip', params.skip);
@@ -22,7 +22,7 @@ const vendorsService = {
 
       const queryString = queryParams.toString();
       const url = `/vendors/${queryString ? `?${queryString}` : ''}`;
-      
+
       const response = await apiClient.get(url);
       console.log('[Vendors Service] Vendors fetched successfully:', response.data);
       return response.data;
@@ -104,13 +104,13 @@ const vendorsService = {
     try {
       console.log('[Vendors Service] Fetching products for vendor:', vendorCode);
       const queryParams = new URLSearchParams();
-      
+
       if (params.status) queryParams.append('status', params.status);
       if (params.product_type) queryParams.append('product_type', params.product_type);
 
       const queryString = queryParams.toString();
       const url = `/vendors/${vendorCode}/products/${queryString ? `?${queryString}` : ''}`;
-      
+
       const response = await apiClient.get(url);
       console.log('[Vendors Service] Products fetched successfully:', response.data);
       return response.data;
@@ -123,6 +123,11 @@ const vendorsService = {
   /**
    * Actualizar balance de un vendor manualmente
    * PUT /vendors/{vendor_code}/balance
+   *
+   * balanceData puede contener:
+   * - vendor_usd_balance: Balance en USD
+   * - vendor_local_balance: Balance en moneda local
+   * - vendor_local_currency: Código de moneda local
    */
   updateBalance: async (vendorCode, balanceData) => {
     try {
@@ -155,12 +160,27 @@ const vendorsService = {
   /**
    * Obtener alertas de saldo bajo
    * GET /vendors/balance/low-alerts
+   *
+   * @param {Object} params - Parámetros opcionales
+   * @param {number} params.usd_threshold - Umbral mínimo para balance USD (default: 100)
+   * @param {number} params.local_threshold - Umbral mínimo para balance local (default: 1000)
    */
-  getLowBalanceAlerts: async (threshold = null) => {
+  getLowBalanceAlerts: async (params = {}) => {
     try {
       console.log('[Vendors Service] Fetching low balance alerts');
-      const queryParams = threshold ? `?threshold=${threshold}` : '';
-      const response = await apiClient.get(`/vendors/balance/low-alerts/${queryParams}`);
+      const queryParams = new URLSearchParams();
+
+      if (params.usd_threshold !== undefined) {
+        queryParams.append('usd_threshold', params.usd_threshold);
+      }
+      if (params.local_threshold !== undefined) {
+        queryParams.append('local_threshold', params.local_threshold);
+      }
+
+      const queryString = queryParams.toString();
+      const url = `/vendors/balance/low-alerts/${queryString ? `?${queryString}` : ''}`;
+
+      const response = await apiClient.get(url);
       console.log('[Vendors Service] Alerts fetched:', response.data);
       return response.data;
     } catch (error) {
@@ -197,6 +217,29 @@ const vendorsService = {
       return response.data;
     } catch (error) {
       console.error('[Vendors Service] Error testing connection:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Verificar consistencia de monedas entre vendor_products y products
+   * GET /vendors/{vendor_code}/verify-currency-consistency
+   * 
+   * Valida que:
+   * - product.product_currency sea 'USD' o vendor.vendor_local_currency
+   * - La moneda del producto coincida con alguna de las monedas soportadas por el vendor
+   * 
+   * @param {string} vendorCode - Código del vendor a verificar
+   * @returns {Array} Lista de vendor_products con su estado de validación
+   */
+  verifyCurrencyConsistency: async (vendorCode) => {
+    try {
+      console.log('[Vendors Service] Verifying currency consistency for vendor:', vendorCode);
+      const response = await apiClient.get(`/vendors/${vendorCode}/verify-currency-consistency/`);
+      console.log('[Vendors Service] Currency consistency verified:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('[Vendors Service] Error verifying currency consistency:', error.response?.data || error.message);
       throw error;
     }
   }

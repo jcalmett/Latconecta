@@ -18,7 +18,7 @@ const VendorProductForm = ({ vendorProduct, onClose, onSuccess = () => {} }) => 
     vp_product_type: vendorProduct?.vp_product_type || '1',
     vp_country: vendorProduct?.vp_country || '',
     vp_operator: vendorProduct?.vp_operator || '',
-    vp_currency: vendorProduct?.vp_currency || 'PEN',
+    vp_currency: vendorProduct?.vp_currency || 'MXN',
     vp_amount_type: vendorProduct?.vp_amount_type || 'F',
     vp_amount: vendorProduct?.vp_amount || '0.00',
     vp_minimum_amount: vendorProduct?.vp_minimum_amount || '0.00',
@@ -27,7 +27,7 @@ const VendorProductForm = ({ vendorProduct, onClose, onSuccess = () => {} }) => 
     vp_commission: vendorProduct?.vp_commission || '0.00',
     vp_fee_usd: vendorProduct?.vp_fee_usd || '0.00000',
     vp_status: vendorProduct?.vp_status || 'active',
-    api_mapping_code: vendorProduct?.api_mapping_code || ''  // ← CAMBIADO a code
+    api_group_code: vendorProduct?.api_group_code || ''  // ⭐ CAMBIO: api_group_code
   });
 
   // Cargar vendors
@@ -48,7 +48,7 @@ const VendorProductForm = ({ vendorProduct, onClose, onSuccess = () => {} }) => 
     loadVendors();
   }, []);
 
-  // ← NUEVO: Cargar mappings cuando cambia el vendor
+  // ⭐ CAMBIO: Cargar mappings cuando cambia el vendor
   useEffect(() => {
     const loadMappings = async () => {
       if (!formData.vendor_code) {
@@ -70,15 +70,38 @@ const VendorProductForm = ({ vendorProduct, onClose, onSuccess = () => {} }) => 
     loadMappings();
   }, [formData.vendor_code]);
 
+  // ⭐ NUEVO: Extraer grupos únicos de los mappings
+  const uniqueApiGroups = React.useMemo(() => {
+    const groups = new Map();
+    
+    apiMappings.forEach(mapping => {
+      const groupCode = mapping.api_group_code;
+      if (groupCode && !groups.has(groupCode)) {
+        // Contar cuántos mappings tiene este grupo
+        const groupMappings = apiMappings.filter(m => m.api_group_code === groupCode);
+        const operations = groupMappings.map(m => m.operation_type).join(', ');
+        
+        groups.set(groupCode, {
+          code: groupCode,
+          count: groupMappings.length,
+          operations: operations,
+          vendor_code: mapping.vendor_code
+        });
+      }
+    });
+    
+    return Array.from(groups.values());
+  }, [apiMappings]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     
-    // Si cambia el vendor, resetear el mapping seleccionado
+    // Si cambia el vendor, resetear el grupo seleccionado
     if (name === 'vendor_code') {
       setFormData({
         ...formData,
         [name]: value,
-        api_mapping_code: ''  // Reset mapping al cambiar vendor
+        api_group_code: ''  // ⭐ CAMBIO: Reset group al cambiar vendor
       });
     } else {
       setFormData({
@@ -94,7 +117,7 @@ const VendorProductForm = ({ vendorProduct, onClose, onSuccess = () => {} }) => 
     try {
       setSubmitting(true);
 
-      // Preparar datos - convertir strings a números
+      // ⭐ CAMBIO: Preparar datos con api_group_code
       const submitData = {
         ...formData,
         vp_amount: parseFloat(formData.vp_amount) || 0,
@@ -103,8 +126,11 @@ const VendorProductForm = ({ vendorProduct, onClose, onSuccess = () => {} }) => 
         vp_cost: parseFloat(formData.vp_cost) || 0,
         vp_commission: parseFloat(formData.vp_commission) || 0,
         vp_fee_usd: parseFloat(formData.vp_fee_usd) || 0,
-        api_mapping_code: formData.api_mapping_code || null  // ← CAMBIADO a code (string)
+        vp_product_type: parseInt(formData.vp_product_type),
+        api_group_code: formData.api_group_code || null  // ⭐ CAMBIO: api_group_code
       };
+
+      console.log('📤 Enviando datos:', submitData);
 
       if (vendorProduct) {
         // Actualizar
@@ -224,42 +250,51 @@ const VendorProductForm = ({ vendorProduct, onClose, onSuccess = () => {} }) => 
             </div>
 
             {/* ========================================
-                NUEVO: SELECTOR DE API MAPPING
+                ⭐ CAMBIO: SELECTOR DE API GROUP
                 ======================================== */}
             <div className="md:col-span-3 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
               <label className="block text-sm font-bold text-gray-700 mb-2">
-                🗺️ API Mapping (Plantilla de API a usar)
+                🗺️ API Mapping (Plantilla de API a usar) <span className="text-gray-500 text-xs">(Opcional)</span>
               </label>
               <select
-                name="api_mapping_code"
-                value={formData.api_mapping_code}
+                name="api_group_code"
+                value={formData.api_group_code}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent font-mono text-sm"
                 disabled={!formData.vendor_code}
               >
-                <option value="">Sin mapping asignado</option>
-                {apiMappings.map((mapping) => (
-                  <option key={mapping.mapping_code} value={mapping.mapping_code}>
-                    {mapping.mapping_code} | {mapping.operation_type} | {mapping.request_mapping?.fields?.length || 0} campos
-                    {mapping.endpoint_url ? ` | ${mapping.endpoint_url}` : ''}
+                <option value="">Sin grupo de APIs asignado</option>
+                {uniqueApiGroups.map((group) => (
+                  <option key={group.code} value={group.code}>
+                    {group.code} | {group.count} operación(es): {group.operations}
                   </option>
                 ))}
               </select>
               <div className="mt-2 text-xs text-gray-600">
                 {!formData.vendor_code && (
-                  <p>💡 Primero selecciona un vendor para ver los mappings disponibles.</p>
+                  <p>💡 Primero selecciona un vendor para ver los grupos de APIs disponibles.</p>
                 )}
-                {formData.vendor_code && apiMappings.length === 0 && (
+                {formData.vendor_code && uniqueApiGroups.length === 0 && (
                   <p className="text-orange-600">
-                    ⚠️ No hay mappings disponibles para <strong>{formData.vendor_code}</strong>. 
+                    ⚠️ No hay grupos de APIs disponibles para <strong>{formData.vendor_code}</strong>. 
                     Créalos primero en el tab "API Mappings".
                   </p>
                 )}
-                {formData.vendor_code && apiMappings.length > 0 && (
+                {formData.vendor_code && uniqueApiGroups.length > 0 && (
                   <p>
-                    ✅ Hay {apiMappings.length} mapping(s) disponible(s) para {formData.vendor_code}. 
-                    El código identifica la plantilla de API a usar (ej: DTOP1, MDTOP).
+                    ✅ Hay {uniqueApiGroups.length} grupo(s) de APIs disponible(s) para {formData.vendor_code}. 
+                    Cada grupo agrupa múltiples operaciones (provision, validate, reversal, etc).
                   </p>
+                )}
+                {formData.api_group_code && (
+                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
+                    <p className="font-semibold text-green-800">
+                      Grupo seleccionado: {formData.api_group_code}
+                    </p>
+                    <p className="text-green-700 text-xs mt-1">
+                      Este producto usará las operaciones configuradas en este grupo de APIs.
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -339,7 +374,7 @@ const VendorProductForm = ({ vendorProduct, onClose, onSuccess = () => {} }) => 
                 <option value="PEN">PEN</option>
                 <option value="USD">USD</option>
                 <option value="MXN">MXN</option>
-                <option value="EUR">EUR</option>
+                <option value="VED">VED</option>
               </select>
             </div>
 

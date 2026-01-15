@@ -1,7 +1,8 @@
 """
 LATCONECTA - Countries Router
 Endpoints para gestión de países (multi-país)
-Actualizado: 2025-12-17 - CRUD completo para múltiples países
+Actualizado: 2026-01-10 - Renombrado campos de tipo de cambio
+CORRECCIÓN: country_er_usd_pen → country_er_usd, country_date_er → country_er_date
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,7 +120,7 @@ async def update_country(
 ):
     """
     Actualizar un país (solo administradores)
-    Si se actualiza country_er_usd_pen, se actualiza automáticamente country_date_er
+    Si se actualiza country_er_usd, se actualiza automáticamente country_er_date
     """
     # Obtener país
     result = await db.execute(
@@ -137,10 +138,10 @@ async def update_country(
     update_data = country_update.dict(exclude_unset=True)
     update_data['updated_by'] = current_user.user_email
     
-    # Si se actualiza la tasa de cambio, actualizar fecha
-    if 'country_er_usd_pen' in update_data and update_data['country_er_usd_pen'] is not None:
-        if country.country_er_usd_pen != update_data['country_er_usd_pen']:
-            update_data['country_date_er'] = datetime.now()
+    # Si se actualiza la tasa de cambio, actualizar fecha - ✅ CORREGIDO
+    if 'country_er_usd' in update_data and update_data['country_er_usd'] is not None:
+        if country.country_er_usd != update_data['country_er_usd']:
+            update_data['country_er_date'] = datetime.now()
     
     # Si se actualiza el código, convertir a mayúsculas
     if 'country_code' in update_data:

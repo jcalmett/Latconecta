@@ -1,0 +1,110 @@
+
+[2026-01-15 10:27:59] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REQUEST RECIBIDO
+Endpoint: api/latcom/recharge
+Mapping Code: LC02P
+Data: {
+  "msisdn": "5215512345678",
+  "product_code": "CODTOP01",
+  "amount": 200.0,
+  "currency": "MXN",
+  "client_reference": "REF-20260115102758"
+}
+
+RESPONSE ENVIADO
+Data: {
+  "status": "SUCCESS",
+  "transaction_id": "SIM-20260115102759",
+  "timestamp": "2026-01-15T10:27:59.461841",
+  "message": "Transaction processed successfully (SIMULATED)"
+}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+[2026-01-15 12:41:54] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REQUEST RECIBIDO
+Endpoint: api/latcom/recharge
+Mapping Code: LC02P
+Data: {
+  "msisdn": "5215512345678",
+  "product_code": "GLO01B_1G4D_A1",
+  "amount": 2.75,
+  "currency": "USD",
+  "client_reference": "REF-20260115124154"
+}
+
+RESPONSE ENVIADO
+Data: {
+  "status": "SUCCESS",
+  "transaction_id": "SIM-20260115124154",
+  "timestamp": "2026-01-15T12:41:54.791621",
+  "message": "Transaction processed successfully (SIMULATED)"
+}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+[2026-01-15 12:41:56] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REQUEST RECIBIDO
+Endpoint: api/latcom/recharge
+Mapping Code: LC02P
+Data: {
+  "msisdn": "5215512345678",
+  "product_code": "GLO01B_2G7D_A1",
+  "amount": 4.5,
+  "currency": "USD",
+  "client_reference": "REF-20260115124156"
+}
+
+RESPONSE ENVIADO
+Data: {
+  "status": "SUCCESS",
+  "transaction_id": "SIM-20260115124156",
+  "timestamp": "2026-01-15T12:41:56.901598",
+  "message": "Transaction processed successfully (SIMULATED)"
+}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+[2026-01-15 12:41:58] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REQUEST RECIBIDO
+Endpoint: api/latcom/recharge
+Mapping Code: LC02P
+Data: {
+  "msisdn": "5215512345678",
+  "product_code": "GLO01T_RAMXN_A1",
+  "amount": 100.0,
+  "currency": "MXN",
+  "client_reference": "REF-20260115124158"
+}
+
+RESPONSE ENVIADO
+Data: {
+  "status": "SUCCESS",
+  "transaction_id": "SIM-20260115124158",
+  "timestamp": "2026-01-15T12:41:58.898302",
+  "message": "Transaction processed successfully (SIMULATED)"
+}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+[2026-01-15 12:42:00] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REQUEST RECIBIDO
+Endpoint: api/latcom/recharge
+Mapping Code: LC02P
+Data: {
+  "msisdn": "5215512345678",
+  "product_code": "GLO01T_RAUSD_A1",
+  "amount": 10.0,
+  "currency": "USD",
+  "client_reference": "REF-20260115124200"
+}
+
+RESPONSE ENVIADO
+Data: {
+  "status": "SUCCESS",
+  "transaction_id": "SIM-20260115124200",
+  "timestamp": "2026-01-15T12:42:00.876884",
+  "message": "Transaction processed successfully (SIMULATED)"
+}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+

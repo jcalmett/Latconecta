@@ -28,16 +28,12 @@ class CompanyBase(BaseModel):
     company_status: Optional[str] = Field("active", max_length=20, description="Estado: active/inactive")
 
     # Campos de crédito y balance
-    company_credit_balance: Optional[Decimal] = Field(
-        default=Decimal("0.00"),
-        ge=0,
-        decimal_places=2,
-        description="Balance de crédito de la compañía"
-    )
-    company_date_balance: Optional[date] = Field(
-        None,
-        description="Fecha del último balance de crédito"
-    )
+    company_usd_balance: Optional[Decimal] = Field(default=0, ge=0)
+    company_usd_date_balance: Optional[datetime] = None
+    company_local_currency: Optional[str] = Field(None, min_length=3, max_length=3)
+    company_local_balance: Optional[Decimal] = Field(None, ge=0)
+    company_local_date_balance: Optional[datetime] = None       
+    
     company_barcode_available: Optional[str] = Field(
         default="No",
         description="Disponibilidad de código de barras: Si o No"
@@ -88,27 +84,6 @@ class CompanyBase(BaseModel):
             raise ValueError("company_barcode_available debe ser 'Si' o 'No'")
         return v
 
-    @field_validator("company_credit_balance")
-    @classmethod
-    def validate_credit_balance(cls, v):
-        """Valida que el balance sea un número válido con máximo 2 decimales"""
-        if v is None:
-            return Decimal("0.00")
-
-        # Convertir a Decimal si viene como float o string
-        if not isinstance(v, Decimal):
-            v = Decimal(str(v))
-
-        # Validar rango (máximo 99999999.99)
-        if v < 0:
-            raise ValueError("El balance no puede ser negativo")
-        if v > Decimal("99999999.99"):
-            raise ValueError("El balance excede el máximo permitido (99999999.99)")
-
-        # Redondear a 2 decimales
-        return v.quantize(Decimal("0.01"))
-
-
 class CompanyCreate(CompanyBase):
     """Schema para crear una nueva compañía"""
     created_by: Optional[str] = Field(None, max_length=100, description="Usuario que crea")
@@ -133,8 +108,12 @@ class CompanyUpdate(BaseModel):
     company_status: Optional[str] = Field(None, max_length=20)
 
     # Campos de crédito y balance
-    company_credit_balance: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    company_date_balance: Optional[date] = None
+    company_usd_balance: Optional[Decimal] = Field(None, ge=0)
+    company_usd_date_balance: Optional[datetime] = None
+    company_local_currency: Optional[str] = Field(None, min_length=3, max_length=3)
+    company_local_balance: Optional[Decimal] = Field(None, ge=0)
+    company_local_date_balance: Optional[datetime] = None
+
     company_barcode_available: Optional[str] = None
     
     # Emails de soporte
@@ -179,27 +158,6 @@ class CompanyUpdate(BaseModel):
         if v not in ["Si", "No"]:
             raise ValueError("company_barcode_available debe ser 'Si' o 'No'")
         return v
-
-    @field_validator("company_credit_balance")
-    @classmethod
-    def validate_credit_balance(cls, v):
-        """Valida que el balance sea un número válido con máximo 2 decimales"""
-        if v is None:
-            return v
-
-        # Convertir a Decimal si viene como float o string
-        if not isinstance(v, Decimal):
-            v = Decimal(str(v))
-
-        # Validar rango
-        if v < 0:
-            raise ValueError("El balance no puede ser negativo")
-        if v > Decimal("99999999.99"):
-            raise ValueError("El balance excede el máximo permitido (99999999.99)")
-
-        # Redondear a 2 decimales
-        return v.quantize(Decimal("0.01"))
-
 
 class CompanyResponse(CompanyBase):
     """Schema de respuesta con todos los campos"""

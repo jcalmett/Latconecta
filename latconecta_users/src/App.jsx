@@ -1,5 +1,4 @@
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
-import ApiSimulatorPanel from './components/ApiSimulatorPanel';
 import { React, useState, useEffect } from 'react';
 import Header from './components/common/Header';
 import Footer from './components/common/Footer';
@@ -8,6 +7,7 @@ import SelectView from './views/SelectView';
 import LoginModal from './components/auth/LoginModal';
 import SignUpModal from './components/auth/SignUpModal';
 import Notification from './components/common/Notification';
+import MockControlPanel from './components/MockControlPanel';
 import { useAuth } from './hooks/useAuth';
 import latconectaService from './services/latconectaService';
 import ShopView from './views/ShopView';
@@ -159,6 +159,9 @@ function AppContent() {
         />
       </Routes>
 
+      {/* 🎭 PANEL MOCK - Flotante, siempre visible */}
+      <MockControlPanel />
+
       <Footer latconectaData={latconectaData} />
 
       {/* Modales */}
@@ -195,7 +198,7 @@ function App() {
 
       {/* Agregar el simulador aquí */}
       {import.meta.env.VITE_API_SIMULATOR === 'true' && (
-        <ApiSimulatorPanel />
+        <MockControlPanel />
       )}
     </Router>
   );

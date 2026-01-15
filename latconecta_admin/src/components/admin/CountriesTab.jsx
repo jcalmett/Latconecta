@@ -20,7 +20,21 @@ const CountriesTab = ({
   setConfirmDialog,
   loadCountries,
 }) => {
-  // Cargar datos en modo edición
+  const getLocalDateTime = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const normalizeDecimal = (value) => {
+    if (!value) return value;
+    return value.toString().replace(',', '.');
+  };
+
   useEffect(() => {
     if (editingItem) {
       setFormData({
@@ -29,11 +43,35 @@ const CountriesTab = ({
         country_flag_photo: editingItem.country_flag_photo || "",
         country_photo: editingItem.country_photo || "",
         country_description: editingItem.country_description || "",
-        country_er_usd_pen: editingItem.country_er_usd_pen || 3.75,
+        country_er_usd: editingItem.country_er_usd || 3.75,
+        country_er_date: editingItem.country_er_date || "",
         status: editingItem.status || "active",
       });
     }
   }, [editingItem, setFormData]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    let processedValue = value;
+
+    if (name === 'country_er_usd') {
+      processedValue = normalizeDecimal(value);
+      
+      if (processedValue && !formData.country_er_date) {
+        setFormData(prev => ({
+          ...prev,
+          [name]: processedValue,
+          country_er_date: getLocalDateTime()
+        }));
+        return;
+      }
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      [name]: processedValue
+    }));
+  };
 
   const handleSave = async () => {
     try {
@@ -47,9 +85,23 @@ const CountriesTab = ({
         return;
       }
 
+      if (formData.country_er_usd) {
+        const erStr = formData.country_er_usd.toString();
+        if (erStr.includes(',')) {
+          showNotification("Use punto (.) como separador decimal, no coma (,)", "error");
+          return;
+        }
+        const erNum = parseFloat(erStr);
+        if (isNaN(erNum) || erNum <= 0) {
+          showNotification("Tipo de cambio debe ser un número válido mayor a 0", "error");
+          return;
+        }
+      }
+
       const dataToSend = {
         ...formData,
-        country_er_usd_pen: parseFloat(formData.country_er_usd_pen) || 3.75,
+        country_er_usd: formData.country_er_usd ? parseFloat(normalizeDecimal(formData.country_er_usd)) : 3.75,
+        country_er_date: formData.country_er_date || null,
         updated_by: user?.email || "admin",
       };
 
@@ -90,10 +142,6 @@ const CountriesTab = ({
     });
   };
 
-  // Calcular número de servicios y compañías (placeholder - necesita datos reales)
-  const getServicesCount = () => 0;
-  const getCompaniesCount = () => 0;
-
   return (
     <div>
       {loadingCountries && (
@@ -113,7 +161,8 @@ const CountriesTab = ({
               country_flag_photo: "",
               country_photo: "",
               country_description: "",
-              country_er_usd_pen: 3.75,
+              country_er_usd: 3.75,
+              country_er_date: "",
               status: "active",
             });
             setShowForm(true);
@@ -125,7 +174,6 @@ const CountriesTab = ({
         </button>
       </div>
 
-      {/* TABLA DE PAÍSES */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -136,15 +184,13 @@ const CountriesTab = ({
                 <th className="px-4 py-3 text-left">Nombre País</th>
                 <th className="px-4 py-3 text-right">Tipo Cambio</th>
                 <th className="px-4 py-3 text-center">Estado</th>
-                <th className="px-4 py-3 text-center">Nro Serv</th>
-                <th className="px-4 py-3 text-center">Nro Cías</th>
                 <th className="px-4 py-3 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {countries.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
                     {loadingCountries ? "Cargando..." : "No hay países registrados"}
                   </td>
                 </tr>
@@ -167,7 +213,7 @@ const CountriesTab = ({
                       <div className="text-xs text-gray-500">{country.country_description}</div>
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-800">
-                      {parseFloat(country.country_er_usd_pen || 0).toFixed(2)}
+                      {parseFloat(country.country_er_usd || 0).toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
@@ -179,12 +225,6 @@ const CountriesTab = ({
                       >
                         {country.status}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-center text-sm text-gray-600">
-                      {getServicesCount(country.country_id)}
-                    </td>
-                    <td className="px-4 py-3 text-center text-sm text-gray-600">
-                      {getCompaniesCount(country.country_id)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-center space-x-2">
@@ -213,7 +253,6 @@ const CountriesTab = ({
         </div>
       </div>
 
-      {/* FORMULARIO MODAL */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -228,7 +267,6 @@ const CountriesTab = ({
 
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* COLUMNA 1: DATOS */}
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -236,10 +274,9 @@ const CountriesTab = ({
                     </label>
                     <input
                       type="text"
+                      name="country_name"
                       value={formData.country_name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, country_name: e.target.value })
-                      }
+                      onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       placeholder="Perú"
                       maxLength={100}
@@ -253,6 +290,7 @@ const CountriesTab = ({
                     </label>
                     <input
                       type="text"
+                      name="country_code"
                       value={formData.country_code}
                       onChange={(e) =>
                         setFormData({
@@ -273,10 +311,9 @@ const CountriesTab = ({
                       Descripción
                     </label>
                     <textarea
+                      name="country_description"
                       value={formData.country_description}
-                      onChange={(e) =>
-                        setFormData({ ...formData, country_description: e.target.value })
-                      }
+                      onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                       rows={3}
                       placeholder="Descripción del país..."
@@ -286,22 +323,37 @@ const CountriesTab = ({
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tipo de Cambio USD
+                      Tipo de Cambio a USD <span className="text-blue-500 text-xs">(use punto como separador)</span>
                     </label>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.country_er_usd_pen}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          country_er_usd_pen: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
+                      type="text"
+                      inputMode="decimal"
+                      name="country_er_usd"
+                      value={formData.country_er_usd}
+                      onChange={handleChange}
                       placeholder="3.75"
+                      lang="en"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                     />
+                    <p className="text-xs text-gray-500 mt-1">Ejemplo: 3.75 o 17.50</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Fecha del Tipo de Cambio <span className="text-blue-500 text-xs">(hora local del sistema)</span>
+                    </label>
+                    <input
+                      type="datetime-local"
+                      name="country_er_date"
+                      value={formData.country_er_date}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {formData.country_er_date 
+                        ? 'Fecha configurada' 
+                        : 'Se auto-completa al modificar el tipo de cambio'}
+                    </p>
                   </div>
 
                   <div>
@@ -309,8 +361,9 @@ const CountriesTab = ({
                       Estado
                     </label>
                     <select
+                      name="status"
                       value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                      onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFE709] focus:border-[#FFE709]"
                     >
                       <option value="active">Activo</option>
@@ -319,7 +372,6 @@ const CountriesTab = ({
                   </div>
                 </div>
 
-                {/* COLUMNA 2: IMÁGENES */}
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">

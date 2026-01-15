@@ -3,7 +3,7 @@ import apiClient from './apiClient';
 class PurchasesService {
   async create(purchaseData) {
     try {
-      return await apiClient.post('/purchases', purchaseData);
+      return await apiClient.post('/purchases/create', purchaseData); 
     } catch (error) {
       throw new Error(error.message || 'Error al crear compra');
     }

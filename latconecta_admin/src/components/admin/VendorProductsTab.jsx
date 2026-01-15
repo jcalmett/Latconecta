@@ -16,6 +16,7 @@ const VendorProductsTab = () => {
     vendor: 'all',
     country: 'all',
     status: 'all',
+    apiGroup: 'all', // ⭐ NUEVO FILTRO
     searchTerm: ''
   });
 
@@ -112,16 +113,20 @@ Esta acción no se puede deshacer.`;
     const matchVendor = filters.vendor === 'all' || vp.vendor_code === filters.vendor;
     const matchCountry = filters.country === 'all' || vp.vp_country === filters.country;
     const matchStatus = filters.status === 'all' || vp.vp_status === filters.status;
+    const matchApiGroup = filters.apiGroup === 'all' || vp.api_group_code === filters.apiGroup; // ⭐ NUEVO FILTRO
     const matchSearch = !filters.searchTerm || 
       vp.vp_code?.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
       vp.vp_name?.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
       vp.vp_skuid?.toLowerCase().includes(filters.searchTerm.toLowerCase());
 
-    return matchVendor && matchCountry && matchStatus && matchSearch;
+    return matchVendor && matchCountry && matchStatus && matchApiGroup && matchSearch;
   });
 
   // Obtener países únicos para filtro
   const uniqueCountries = [...new Set((Array.isArray(vendorProducts) ? vendorProducts : []).map(vp => vp.vp_country).filter(Boolean))];
+  
+  // ⭐ NUEVO: Obtener api_group_codes únicos para filtro
+  const uniqueApiGroups = [...new Set((Array.isArray(vendorProducts) ? vendorProducts : []).map(vp => vp.api_group_code).filter(Boolean))];
 
   return (
     <div className="space-y-6">
@@ -149,7 +154,7 @@ Esta acción no se puede deshacer.`;
           <h3 className="text-lg font-semibold text-gray-900">Filtros</h3>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           {/* Filtro Vendor */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -183,6 +188,25 @@ Esta acción no se puede deshacer.`;
               {uniqueCountries.map(country => (
                 <option key={country} value={country}>
                   {country}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* ⭐ NUEVO: Filtro API Group */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              API Group
+            </label>
+            <select
+              value={filters.apiGroup}
+              onChange={(e) => setFilters({ ...filters, apiGroup: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Todos los grupos</option>
+              {uniqueApiGroups.map(group => (
+                <option key={group} value={group}>
+                  {group}
                 </option>
               ))}
             </select>
@@ -240,96 +264,108 @@ Esta acción no se puede deshacer.`;
             <p className="text-gray-600">No se encontraron vendor products</p>
           </div>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Vendor
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Código
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  SKU ID
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Nombre
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  País
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Operador
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Monto
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredVendorProducts.map((vp) => (
-                <tr key={vp.vp_id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {vp.vendor_code}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {vp.vp_code}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {vp.vp_skuid}
-                  </td>
-                  <td className="px-4 py-4 text-sm text-gray-900">
-                    {vp.vp_name || 'Sin nombre'}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {vp.vp_country || '-'}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {vp.vp_operator || '-'}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {vp.vp_currency} {vp.vp_amount || '0.00'}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      vp.vp_status === 'active' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {vp.vp_status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-right text-sm">
-                    <div className="flex items-center justify-end gap-2">
-                      {/* Botón Editar */}
-                      <button
-                        onClick={() => handleEdit(vp)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Editar Vendor Product"
-                      >
-                        <Edit size={18} />
-                      </button>
-                      
-                      {/* ✅ Botón Eliminar */}
-                      <button
-                        onClick={() => handleDelete(vp)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Eliminar Vendor Product"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Vendor
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Código
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    SKU ID
+                  </th>
+                  {/* ⭐ NUEVA COLUMNA */}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    API Group
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nombre
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    País
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Operador
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Monto
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Acciones
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredVendorProducts.map((vp) => (
+                  <tr key={vp.vp_id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {vp.vendor_code}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {vp.vp_code}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {vp.vp_skuid}
+                    </td>
+                    {/* ⭐ NUEVA COLUMNA */}
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-md font-mono text-xs font-semibold">
+                        {vp.api_group_code || '-'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-sm text-gray-900">
+                      {vp.vp_name || 'Sin nombre'}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {vp.vp_country || '-'}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {vp.vp_operator || '-'}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {vp.vp_currency} {vp.vp_amount || '0.00'}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        vp.vp_status === 'active' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {vp.vp_status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-right text-sm">
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Botón Editar */}
+                        <button
+                          onClick={() => handleEdit(vp)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Editar Vendor Product"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        
+                        {/* ✅ Botón Eliminar */}
+                        <button
+                          onClick={() => handleDelete(vp)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Eliminar Vendor Product"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
