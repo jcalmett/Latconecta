@@ -11,6 +11,8 @@ from fastapi.responses import JSONResponse
 import time
 import os
 from app.config import settings
+from app.events import startup_event, shutdown_event
+from app.payments.router import router as payments_router
 
 # Crear instancia de FastAPI con metadata
 app = FastAPI(
@@ -177,6 +179,9 @@ app.include_router(mock_vendors.router, prefix="/api/v1/mock", tags=["Mock Vendo
 # Upload router
 app.include_router(upload.router, prefix="/api/v1")
 
+# Payments router
+app.include_router(payments_router)
+
 # Servir archivos estáticos
 uploads_dir = Path("uploads")
 uploads_dir.mkdir(exist_ok=True)
@@ -210,46 +215,12 @@ async def internal_error_handler(request: Request, exc):
 
 # Startup event
 @app.on_event("startup")
-async def startup_event():
+async def on_startup():
     """Evento al iniciar la aplicación"""
-    environment = os.getenv("ENVIRONMENT", "development")
-    
-    print("\n" + "="*70)
-    print("🚀 LATCONECTA BACKEND - INICIADO")
-    print("="*70)
-    print(f"\n🌍 Ambiente: {environment.upper()}\n")
-    
-    if environment.lower() == "development":
-        print("🧪 MODO DEVELOPMENT:")
-        print("   ✅ Sistema completo con datos reales de BD")
-        print("   ✅ Vendors, VendorProducts, ApiMappings configurados")
-        print("   ✅ Llamadas HTTP interceptadas → Mock Universal")
-        print("   ✅ Mock: http://localhost:8100/api/v1/mock/<vendor>/<operation>")
-        print("   ✅ Fallback Legacy: http://localhost:8100/api/v1/mock/legacy/<api>")
-        print("")
-        print("   📊 Mock Config:")
-        mock_success_rate = float(os.getenv("MOCK_SUCCESS_RATE", "0.95"))
-        print(f"      - Success Rate: {mock_success_rate*100}%")
-        print(f"      - Delay: {os.getenv('MOCK_DELAY_MIN', '0.5')}s - {os.getenv('MOCK_DELAY_MAX', '2.0')}s")
-        print("      - Legacy Fallback: Enabled")
-        print("")
-    
-    print("📚 Documentación:")
-    print("   • Swagger UI: http://localhost:8100/docs")
-    print("   • ReDoc: http://localhost:8100/redoc")
-    print("")
-    print("📋 Convención de Códigos API Mappings:")
-    print("   • VAL01: Validación")
-    print("   • PRO01: Provisionamiento (obligatorio)")
-    print("   • QRY01: Consulta")
-    print("   • REV01: Reversión")
-    print("")
-    print("✅ Todos los routers cargados correctamente")
-    print("="*70 + "\n")
-
+    await startup_event()
 
 # Shutdown event
 @app.on_event("shutdown")
-async def shutdown_event():
+async def on_shutdown():
     """Evento al cerrar la aplicación"""
-    print("\n👋 Latconecta API - Backend detenido\n")
+    await shutdown_event()

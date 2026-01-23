@@ -752,8 +752,304 @@ const PurchasePopup = React.memo(({
 
           {purchaseStep === 6 && purchaseResult && (
             <div className="py-6">
-              {purchaseResult.success ? (
+              {/* CASO 1: Provisión falló + Reversión EXITOSA */}
+              {purchaseResult.purchase_status === 'Failed' && purchaseResult.payment_status === 'Reversed' ? (
                 <>
+                  {/* Header de reversión exitosa */}
+                  <div className="text-center mb-4">
+                    <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <AlertCircle size={40} className="text-orange-600" />
+                    </div>
+                    <h4 className="text-2xl font-bold text-orange-600 mb-1">
+                      Provisión Fallida
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-2">
+                      No se pudo completar la provisión del servicio
+                    </p>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 mx-auto max-w-md">
+                      <p className="text-sm font-semibold text-green-700">
+                        ✓ El pago ha sido revertido exitosamente
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        No se realizó ningún cargo a tu tarjeta
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Información completa */}
+                  <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3">
+                    
+                    {/* Información Básica */}
+                    <div className="border-b pb-2">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                        <div>
+                          <span className="text-gray-600">Fecha:</span>
+                          <p className="font-semibold">{new Date(purchaseResult.date).toLocaleString('es-PE')}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Referencia:</span>
+                          <p className="font-bold text-orange-600">{purchaseResult.reference}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Destinatario */}
+                    <div className="border-b pb-2">
+                      <p className="text-xs text-gray-500 mb-1">
+                        {purchaseData.productType === 'bill_payment' ? 'CUENTA' :
+                         purchaseData.productType === 'smartphone' ? 'CONTACTO' :
+                         purchaseData.productType === 'transfer' ? 'NÚMERO DESTINO' :
+                         'NÚMERO'}
+                      </p>
+                      <p className="font-semibold">
+                        {purchaseData.phoneNumber || purchaseData.accountNumber}
+                      </p>
+                    </div>
+
+                    {/* Producto */}
+                    <div className="border-b pb-2">
+                      <p className="text-xs font-bold text-gray-700 mb-1">PRODUCTO SOLICITADO</p>
+                      <p className="font-semibold text-sm">{selectedProduct.product_name}</p>
+                      <p className="text-xs text-gray-600">Servicio: {selectedService.service_name}</p>
+                    </div>
+
+                    {/* Montos */}
+                    <div className="border-b pb-2">
+                      <p className="text-xs font-bold text-gray-700 mb-1">MONTO</p>
+                      <div className="space-y-0.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Monto solicitado:</span>
+                          <span className="font-semibold">
+                            {selectedProduct.product_currency} {purchaseResult.monto_pagar.toFixed(2)}
+                          </span>
+                        </div>
+                        {purchaseResult.fee > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Comisión:</span>
+                            <span className="font-semibold">
+                              +{selectedProduct.product_currency} {purchaseResult.fee.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-1 border-t border-gray-300">
+                          <span className="font-bold">Total:</span>
+                          <span className="font-bold line-through text-gray-500">
+                            {selectedProduct.product_currency} {parseFloat(purchaseResult.amount).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-green-600 font-bold">
+                          <span>CARGO REAL:</span>
+                          <span className="text-lg">$0.00</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Estado */}
+                    <div>
+                      <p className="text-xs font-bold text-gray-700 mb-1">ESTADO</p>
+                      <div className="space-y-0.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Estado Compra:</span>
+                          <span className="font-semibold text-red-600">{purchaseResult.purchase_status}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Estado Pago:</span>
+                          <span className="font-semibold text-green-600">{purchaseResult.payment_status}</span>
+                        </div>
+                        {purchaseResult.payment_ref && (
+                          <div className="text-xs text-gray-500">
+                            Ref. Pago: {purchaseResult.payment_ref}
+                          </div>
+                        )}
+                        {purchaseResult.reversal_ref && (
+                          <div className="text-xs text-green-600 font-semibold">
+                            Ref. Reversión: {purchaseResult.reversal_ref}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Botones de acción */}
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDownloadReceipt}
+                        className="flex-1 bg-gray-500 text-white py-2.5 rounded-lg font-bold hover:bg-gray-600 flex items-center justify-center gap-2 text-sm"
+                      >
+                        <Download size={18} />
+                        <span>Descargar TXT</span>
+                      </button>
+                      <button
+                        onClick={handleDownloadReceiptPDF}
+                        className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700 flex items-center justify-center gap-2 text-sm"
+                      >
+                        <FileText size={18} />
+                        <span>Descargar PDF</span>
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={closePurchasePopup}
+                      className="w-full bg-orange-500 text-white py-2.5 rounded-lg font-bold hover:bg-orange-600"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </>
+
+              ) : purchaseResult.purchase_status === 'Failed' && purchaseResult.requires_manual_intervention ? (
+                <>
+                  {/* CASO 2: Provisión falló + Reversión FALLÓ - CRÍTICO */}
+                  <div className="text-center mb-4">
+                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <AlertCircle size={40} className="text-red-600" />
+                    </div>
+                    <h4 className="text-2xl font-bold text-red-600 mb-1">
+                      ⚠️ Intervención Manual Requerida
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-2">
+                      La provisión del servicio falló
+                    </p>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 mx-auto max-w-md">
+                      <p className="text-sm font-semibold text-red-700">
+                        ✗ No se pudo revertir el pago automáticamente
+                      </p>
+                      <p className="text-xs text-red-600 mt-1">
+                        El cargo permanece en tu tarjeta
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Información completa */}
+                  <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3">
+                    
+                    {/* Información Básica */}
+                    <div className="border-b pb-2">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                        <div>
+                          <span className="text-gray-600">Fecha:</span>
+                          <p className="font-semibold">{new Date(purchaseResult.date).toLocaleString('es-PE')}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Referencia:</span>
+                          <p className="font-bold text-red-600">{purchaseResult.reference}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Destinatario */}
+                    <div className="border-b pb-2">
+                      <p className="text-xs text-gray-500 mb-1">
+                        {purchaseData.productType === 'bill_payment' ? 'CUENTA' :
+                         purchaseData.productType === 'smartphone' ? 'CONTACTO' :
+                         purchaseData.productType === 'transfer' ? 'NÚMERO DESTINO' :
+                         'NÚMERO'}
+                      </p>
+                      <p className="font-semibold">
+                        {purchaseData.phoneNumber || purchaseData.accountNumber}
+                      </p>
+                    </div>
+
+                    {/* Producto */}
+                    <div className="border-b pb-2">
+                      <p className="text-xs font-bold text-gray-700 mb-1">PRODUCTO SOLICITADO</p>
+                      <p className="font-semibold text-sm">{selectedProduct.product_name}</p>
+                      <p className="text-xs text-gray-600">Servicio: {selectedService.service_name}</p>
+                    </div>
+
+                    {/* Montos */}
+                    <div className="border-b pb-2">
+                      <p className="text-xs font-bold text-gray-700 mb-1">MONTO COBRADO</p>
+                      <div className="space-y-0.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Monto:</span>
+                          <span className="font-semibold">
+                            {selectedProduct.product_currency} {purchaseResult.monto_pagar.toFixed(2)}
+                          </span>
+                        </div>
+                        {purchaseResult.fee > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Comisión:</span>
+                            <span className="font-semibold">
+                              +{selectedProduct.product_currency} {purchaseResult.fee.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-1 border-t border-gray-300 font-bold text-red-600">
+                          <span>TOTAL COBRADO:</span>
+                          <span className="text-lg">
+                            {selectedProduct.product_currency} {parseFloat(purchaseResult.amount).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Estado */}
+                    <div className="border-b pb-2">
+                      <p className="text-xs font-bold text-gray-700 mb-1">ESTADO</p>
+                      <div className="space-y-0.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Estado Compra:</span>
+                          <span className="font-semibold text-red-600">{purchaseResult.purchase_status}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Estado Pago:</span>
+                          <span className="font-semibold text-red-600">{purchaseResult.payment_status}</span>
+                        </div>
+                        {purchaseResult.payment_ref && (
+                          <div className="text-xs text-gray-500">
+                            Ref. Pago: {purchaseResult.payment_ref}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Instrucciones */}
+                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                      <p className="text-xs font-bold text-yellow-800 mb-2">📞 ACCIÓN REQUERIDA</p>
+                      <p className="text-xs text-yellow-700">
+                        No se pudo completar la devolución automática. 
+                        Si no recibes tu reembolso en las próximas 48 horas, 
+                        contacta a <span className="font-semibold">soporte@latconecta.com</span> 
+                        con la referencia: <span className="font-bold">{purchaseResult.reference}</span>
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Botones de acción */}
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDownloadReceipt}
+                        className="flex-1 bg-gray-500 text-white py-2.5 rounded-lg font-bold hover:bg-gray-600 flex items-center justify-center gap-2 text-sm"
+                      >
+                        <Download size={18} />
+                        <span>Descargar TXT</span>
+                      </button>
+                      <button
+                        onClick={handleDownloadReceiptPDF}
+                        className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700 flex items-center justify-center gap-2 text-sm"
+                      >
+                        <FileText size={18} />
+                        <span>Descargar PDF</span>
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={closePurchasePopup}
+                      className="w-full bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </>
+
+              ) : purchaseResult.success ? (
+                <>
+                  {/* CASO 3: Compra EXITOSA (código original) */}
                   {/* Header de éxito */}
                   <div className="text-center mb-4">
                     <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -861,6 +1157,11 @@ const PurchasePopup = React.memo(({
                         {purchaseResult.provision_ref && (
                           <div className="text-xs text-gray-500">
                             Ref. Provisión: {purchaseResult.provision_ref}
+                          </div>
+                        )}
+                        {purchaseResult.reversal_ref && (
+                          <div className="text-xs text-green-600 font-semibold">
+                            Ref. Reversión: {purchaseResult.reversal_ref}
                           </div>
                         )}
                       </div>

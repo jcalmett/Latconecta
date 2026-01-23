@@ -1,0 +1,3 @@
+from app.payments.router import router as payments_router
+
+app.include_router(payments_router)

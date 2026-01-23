@@ -10,8 +10,8 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
   const [mappings, setMappings] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [availableFields, setAvailableFields] = useState({
-    purchase_fields: [],
-    vendor_product_fields: []
+    request_fields: [],
+    response_fields: []
   });
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -32,6 +32,11 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
     auth_config: {},
     request_mapping: { fields: [] },
     response_mapping: {},
+    success_indicators: { // ⭐ NUEVO
+      status_codes: [200, 201],
+      success_field: 'status',
+      success_values: ['success', 'ok', true, 1]
+    },
     timeout_seconds: 30,
     headers: {},
     is_active: true
@@ -95,6 +100,27 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
         return;
       }
 
+      // ⭐ NUEVA VALIDACIÓN: success_indicators
+      if (!formData.success_indicators) {
+        showNotification('Success Indicators es requerido', 'error');
+        return;
+      }
+
+      if (!formData.success_indicators.status_codes || formData.success_indicators.status_codes.length === 0) {
+        showNotification('Agregue al menos un status code válido', 'error');
+        return;
+      }
+
+      if (!formData.success_indicators.success_field || formData.success_indicators.success_field.trim() === '') {
+        showNotification('Success Field es requerido', 'error');
+        return;
+      }
+
+      if (!formData.success_indicators.success_values || formData.success_indicators.success_values.length === 0) {
+        showNotification('Agregue al menos un success value', 'error');
+        return;
+      }
+
       if (editingMapping) {
         await vendorApiMappingsService.update(editingMapping.mapping_id, formData);
         showNotification(`Mapping actualizado para ${formData.vendor_code}`);
@@ -142,6 +168,11 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
       auth_config: {},
       request_mapping: { fields: [] },
       response_mapping: {},
+      success_indicators: { // ⭐ NUEVO
+        status_codes: [200, 201],
+        success_field: 'status',
+        success_values: ['success', 'ok', true, 1]
+      },
       timeout_seconds: 30,
       headers: {},
       is_active: true
@@ -161,6 +192,11 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
       auth_config: mapping.auth_config || {},
       request_mapping: mapping.request_mapping || { fields: [] },
       response_mapping: mapping.response_mapping || {},
+      success_indicators: mapping.success_indicators || { // ⭐ NUEVO
+        status_codes: [200, 201],
+        success_field: 'status',
+        success_values: ['success', 'ok', true, 1]
+      },
       timeout_seconds: mapping.timeout_seconds || 30,
       headers: mapping.headers || {},
       is_active: mapping.is_active !== false
@@ -486,10 +522,14 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                       className="w-full px-4 py-2 border rounded-lg"
                       required
                     >
-                      <option value="provision">provision</option>
-                      <option value="validate">validate</option>
-                      <option value="query">query</option>
-                      <option value="reversal">reversal</option>
+                      <option value="provision">Provision</option>
+                      <option value="validation">Validation</option>
+                      <option value="reservation">Reservation</option>
+                      <option value="query">Query</option>
+                      <option value="reversal">Reversal</option>
+                      <option value="confirmation">Confirmation</option>
+                      <option value="cancellation">Cancellation</option>
+                      <option value="balance_check">Balance Check</option>
                     </select>
                   </div>
 
@@ -612,30 +652,44 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                             />
                           </div>
 
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Campo Origen *</label>
-                            <select
-                              value={field.source_field}
-                              onChange={(e) => updateRequestField(index, 'source_field', e.target.value)}
-                              className="w-full px-3 py-2 border rounded text-sm"
-                            >
-                              <option value="">Seleccionar...</option>
-                              <optgroup label="Purchase Fields">
-                                {availableFields.purchase_fields.map((f) => (
-                                  <option key={f.field_name} value={f.field_name}>
-                                    {f.field_name}
-                                  </option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="Vendor Product Fields">
-                                {availableFields.vendor_product_fields.map((f) => (
-                                  <option key={f.field_name} value={f.field_name}>
-                                    {f.field_name}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            </select>
-                          </div>
+<div>
+  <label className="block text-xs font-medium mb-1">Campo Origen *</label>
+  
+  {/* Opción 1: Seleccionar de la lista */}
+  <select
+    value={field.source_field?.startsWith('constant:') ? '' : field.source_field}
+    onChange={(e) => updateRequestField(index, 'source_field', e.target.value)}
+    className="w-full px-3 py-2 border rounded text-sm mb-2"
+  >
+    <option value="">Seleccionar campo...</option>
+    <optgroup label="Campos Disponibles para Request">
+      {availableFields.request_fields.map((f) => (
+        <option key={f.field_name} value={f.field_name}>
+          {f.field_name}
+        </option>
+      ))}
+    </optgroup>
+  </select>
+  
+  {/* Opción 2: O ingresar constante manualmente */}
+  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded">
+    <label className="block text-xs font-medium text-blue-800 mb-1">
+      O ingresar valor constante:
+    </label>
+    <input
+      type="text"
+      value={field.source_field?.startsWith('constant:') ? field.source_field : ''}
+      onChange={(e) => updateRequestField(index, 'source_field', e.target.value)}
+      placeholder="constant:MEX  o  constant:1  o  constant:true"
+      className="w-full px-3 py-2 border border-blue-300 rounded text-sm font-mono bg-white"
+    />
+    <p className="text-xs text-blue-600 mt-1">
+      Ejemplos: <code className="bg-blue-100 px-1 rounded">constant:MEX</code>, 
+      <code className="bg-blue-100 px-1 rounded ml-1">constant:1</code>, 
+      <code className="bg-blue-100 px-1 rounded ml-1">constant:true</code>
+    </p>
+  </div>
+</div>
 
                           <div>
                             <label className="block text-xs font-medium mb-1">Tipo de Dato</label>
@@ -676,8 +730,7 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                         {/* Ayuda contextual */}
                         {field.source_field && (
                           <div className="mt-2 text-xs text-gray-600">
-                            {availableFields.purchase_fields.find(f => f.field_name === field.source_field)?.description ||
-                             availableFields.vendor_product_fields.find(f => f.field_name === field.source_field)?.description}
+                             {availableFields.request_fields.find(f => f.field_name === field.source_field)?.description} 
                           </div>
                         )}
                       </div>
@@ -730,12 +783,15 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                               onChange={(e) => updateResponseField(key, key, e.target.value)}
                               className="w-full px-3 py-2 border rounded text-sm"
                             >
-                              <option value="">Seleccionar...</option>
-                              {availableFields.purchase_fields.map((f) => (
-                                <option key={f.field_name} value={f.field_name}>
-                                  {f.field_name}
-                                </option>
-                              ))}
+                             <option value="">Seleccionar...</option>
+                             <optgroup label="Campos Disponibles para Response">
+                               {availableFields.response_fields.map((f) => (
+                                  <option key={f.field_name} value={f.field_name}>
+                                      {f.field_name}
+                              </option>
+                               ))}
+                             </optgroup>
+
                             </select>
                           </div>
 
@@ -752,7 +808,7 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                         {/* Ayuda contextual */}
                         {value && (
                           <div className="mt-2 text-xs text-gray-600">
-                            → {availableFields.purchase_fields.find(f => f.field_name === value)?.description}
+                            → {availableFields.response_fields.find(f => f.field_name === value)?.description}
                           </div>
                         )}
                       </div>
@@ -761,6 +817,162 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                 </div>
               </div>
             </div>
+
+              {/* SUCCESS INDICATORS - NUEVO */}
+              <div className="mb-6 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+                <h4 className="font-bold text-[#008C96] mb-4">✅ Success Indicators</h4>
+                
+                <div className="bg-white p-4 rounded-lg border border-yellow-200">
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Status Codes (HTTP) *
+                        <span className="text-gray-500 text-xs ml-2">Separados por coma</span>
+                      </label>
+
+<input
+  type="text"
+  defaultValue={(formData.success_indicators?.status_codes || [200, 201]).join(', ')}
+  onBlur={(e) => {
+    const input = e.target.value;
+    
+    if (!input || input.trim() === '') {
+      setFormData({
+        ...formData,
+        success_indicators: {
+          ...formData.success_indicators,
+          status_codes: [200, 201]
+        }
+      });
+      e.target.value = '200, 201';
+      return;
+    }
+    
+    const codes = input
+      .split(',')
+      .map(v => {
+        const trimmed = v.trim();
+        const num = parseInt(trimmed, 10);
+        return isNaN(num) ? null : num;
+      })
+      .filter(v => v !== null);
+    
+    setFormData({
+      ...formData,
+      success_indicators: {
+        ...formData.success_indicators,
+        status_codes: codes.length > 0 ? codes : [200, 201]
+      }
+    });
+    
+    // Formatear el input
+    e.target.value = codes.join(', ');
+  }}
+  className="w-full px-3 py-2 border rounded font-mono text-sm"
+  placeholder="200, 201"
+/>
+
+
+                      <small className="text-xs text-gray-600">
+                        Códigos HTTP que indican éxito (200, 201, etc.)
+                      </small>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Success Field *
+                        <span className="text-gray-500 text-xs ml-2">Campo a evaluar</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.success_indicators?.success_field || 'status'}
+                        onChange={(e) => {
+                          setFormData({
+                            ...formData,
+                            success_indicators: {
+                              ...formData.success_indicators,
+                              success_field: e.target.value
+                            }
+                          });
+                        }}
+                        className="w-full px-3 py-2 border rounded font-mono text-sm"
+                        placeholder="status"
+                      />
+                      <small className="text-xs text-gray-600">
+                        Campo en la respuesta del vendor a evaluar
+                      </small>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Success Values *
+                      <span className="text-gray-500 text-xs ml-2">Valores que indican éxito</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={(formData.success_indicators?.success_values || ['success', 'ok', true, 1])
+                        .map(v => {
+                          if (typeof v === 'boolean') return v.toString();
+                          if (typeof v === 'number') return v.toString();
+                          return v;
+                        })
+                        .join(', ')}
+                      onChange={(e) => {
+                        const values = e.target.value.split(',').map(v => {
+                          const trimmed = v.trim();
+                          
+                          // Convertir strings especiales
+                          if (trimmed === 'true') return true;
+                          if (trimmed === 'false') return false;
+                          if (trimmed === 'null') return null;
+                          
+                          // Convertir números
+                          if (!isNaN(trimmed) && trimmed !== '') {
+                            return Number(trimmed);
+                          }
+                          
+                          // Dejar como string
+                          return trimmed;
+                        });
+                        
+                        setFormData({
+                          ...formData,
+                          success_indicators: {
+                            ...formData.success_indicators,
+                            success_values: values
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 border rounded font-mono text-sm"
+                      placeholder="success, ok, completed, true, 1"
+                    />
+                    <small className="text-xs text-gray-600">
+                      <strong>Soporta múltiples tipos:</strong> strings ("success"), booleans (true/false), números (0, 1)
+                      <br />
+                      <strong>Ejemplos válidos:</strong> success, ok, completed, true, false, 0, 1
+                    </small>
+                  </div>
+
+                  {/* Preview del JSON */}
+                  <div className="mt-4 p-3 bg-gray-100 rounded border">
+                    <div className="text-xs font-medium text-gray-700 mb-1">Preview JSON:</div>
+                    <pre className="text-xs font-mono text-gray-800 overflow-auto">
+                      {JSON.stringify(formData.success_indicators, null, 2)}
+                    </pre>
+                  </div>
+
+                  {/* Advertencia */}
+                  <div className="mt-3 p-3 bg-blue-50 border-l-4 border-blue-400 text-sm">
+                    <strong className="text-blue-800">ℹ️ Importante:</strong>
+                    <ul className="mt-1 ml-4 text-blue-700 text-xs list-disc">
+                      <li>Los valores deben coincidir exactamente con lo que devuelve el vendor</li>
+                      <li>Soporta comparación de strings, booleans e integers</li>
+                      <li>Se evalúa: <code>response[success_field] in success_values</code></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
 
             {/* FOOTER */}
             <div className="border-t px-6 py-4 bg-gray-50 flex justify-end space-x-3">

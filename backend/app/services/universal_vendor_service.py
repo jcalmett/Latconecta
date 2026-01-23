@@ -236,9 +236,13 @@ class UniversalVendorService:
                 parsed_response = mapper.parse_response(response_data)
 
                 return {
+                    "success": True,
                     "status": "success",
                     **parsed_response,
-                    "raw_response": response_data
+                    "raw_response": response_data,
+                    "vendor_request": request_body,  # ✅ AGREGADO para auditoría
+                    "vendor_response": response_data,  # ✅ AGREGADO para auditoría
+                    "extracted_data": parsed_response  # ✅ AGREGADO para claridad
                 }
             else:
                 # Error del vendor
@@ -370,6 +374,27 @@ async def validate_vendor_phone(
     """
     service = UniversalVendorService(db)
 
+    # ✅ VERIFICAR SI EXISTE MAPPING DE VALIDACIÓN
+    validation_mapping = await service.get_vendor_mapping(
+        vendor_code=vendor_code,
+        api_group_code=api_group_code,
+        operation_type='validation'
+    )
+
+    # ✅ SI NO HAY MAPPING DE VALIDACIÓN → Retornar éxito automático
+    if not validation_mapping:
+        logger.info(
+            f"No validation mapping found for {vendor_code}/{api_group_code}. "
+            f"Validation not required - returning success."
+        )
+        return {
+            "status": "success",
+            "valid": True,
+            "message": "Validation not required by vendor",
+            "phone_number": phone_number
+        }
+
+    # Si hay mapping, ejecutar validación real
     data = {
         "purchase_phone_number": phone_number,
         **(additional_data or {})

@@ -126,7 +126,7 @@ const VendorProductForm = ({ vendorProduct, onClose, onSuccess = () => {} }) => 
         vp_cost: parseFloat(formData.vp_cost) || 0,
         vp_commission: parseFloat(formData.vp_commission) || 0,
         vp_fee_usd: parseFloat(formData.vp_fee_usd) || 0,
-        vp_product_type: parseInt(formData.vp_product_type),
+        vp_product_type: formData.vp_product_type,  // Ya es string '1' o '2'
         api_group_code: formData.api_group_code || null  // ⭐ CAMBIO: api_group_code
       };
 

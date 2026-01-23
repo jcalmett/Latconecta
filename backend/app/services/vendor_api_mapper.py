@@ -2,6 +2,7 @@
 # VENDOR API MAPPER
 # Motor de transformación configurable
 # NO REQUIERE CÓDIGO NUEVO POR VENDOR
+# ✅ ACTUALIZADO: Soporta formato JSONPath
 # ========================================
 
 from typing import Dict, Any, List, Optional
@@ -29,6 +30,7 @@ class VendorAPIMapper:
     def build_request(self, source_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Construye el request JSON para el vendor
+        ✅ ACTUALIZADO: Detecta automáticamente el formato
 
         Args:
             source_data: Datos de purchase + vendor product
@@ -36,10 +38,19 @@ class VendorAPIMapper:
         Returns:
             JSON formateado para el vendor (con orden preservado)
         """
-        # Usar OrderedDict para preservar orden
-        request = OrderedDict()
+        # ✅ NUEVO: Detectar formato del request_mapping
+        if 'fields' in self.request_mapping:
+            # Formato VIEJO (con fields array)
+            return self._build_request_old_format(source_data)
+        else:
+            # Formato NUEVO (JSONPath: {"source_field": "$.target_field"})
+            return self._build_request_jsonpath_format(source_data)
 
-        # Procesar cada campo según configuración
+    def _build_request_old_format(self, source_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Formato viejo con fields array
+        """
+        request = OrderedDict()
         fields = self.request_mapping.get('fields', [])
 
         for field_config in fields:
@@ -48,8 +59,22 @@ class VendorAPIMapper:
             data_type = field_config.get('data_type', 'string')
             required = field_config.get('required', False)
 
-            # Obtener valor del source
-            value = source_data.get(source_field)
+            # ✅ NUEVO: Soporte para constant:valor
+            if source_field.startswith('constant:'):
+                # Extraer el valor de la constante
+                constant_value = source_field.split(':', 1)[1]
+                # Convertir al tipo correcto
+                if data_type == 'integer':
+                    value = int(constant_value)
+                elif data_type == 'float':
+                    value = float(constant_value)
+                elif data_type == 'boolean':
+                    value = constant_value.lower() in ('true', '1', 'yes')
+                else:
+                    value = constant_value
+            else:
+                # Obtener valor del source
+                value = source_data.get(source_field)
 
             # Aplicar transformaciones
             value = self._apply_transformations(
@@ -67,6 +92,41 @@ class VendorAPIMapper:
 
             # Agregar al request (maneja campos anidados)
             self._set_nested_field(request, api_field, value)
+
+        return request
+
+    def _build_request_jsonpath_format(self, source_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        ✅ NUEVO: Formato JSONPath: {"source_field": "$.target_field"}
+        """
+        request = OrderedDict()
+
+        for source_field, jsonpath in self.request_mapping.items():
+            # Extraer target_field del JSONPath ($.target_field → target_field)
+            if jsonpath.startswith('$.'):
+                target_field = jsonpath[2:]  # Remover "$."
+            else:
+                target_field = jsonpath
+
+            # ✅ NUEVO: Soporte para constant:valor
+            if source_field.startswith('constant:'):
+                # Extraer el valor de la constante
+                constant_value = source_field.split(':', 1)[1]
+                value = constant_value
+            else:
+                # Obtener valor del source
+                value = source_data.get(source_field)
+
+            # Aplicar transformaciones si existen
+            value = self._apply_transformations(
+                value,
+                source_field,
+                source_data
+            )
+
+            # Solo agregar si el valor no es None
+            if value is not None:
+                self._set_nested_field(request, target_field, value)
 
         return request
 
@@ -183,14 +243,27 @@ class VendorAPIMapper:
     def parse_response(self, vendor_response: Dict[str, Any]) -> Dict[str, Any]:
         """
         Parsea respuesta del vendor a formato Latconecta
+        
+        El response_mapping tiene formato:
+        {
+          "vendor_field": "latconecta_field",
+          "trans_id": "vendor_trans_id",
+          "status": "purchase_status"
+        }
+        
+        Donde KEY = campo en response del vendor
+              VALUE = campo destino en Latconecta
         """
         # ✅ CORREGIDO: Manejar None en response_mapping
         response_mapping = self.mapping_config.get('response_mapping') or {}
         parsed = {}
 
+        # Iterar sobre el mapeo: vendor_field -> latconecta_field
         for vendor_field, latconecta_field in response_mapping.items():
+            # Obtener valor del response del vendor
             value = self._get_nested_value(vendor_response, vendor_field)
             if value is not None:
+                # Guardar con el nombre del campo de Latconecta
                 parsed[latconecta_field] = value
 
         return parsed
@@ -220,6 +293,7 @@ class VendorAPIMapper:
     ) -> bool:
         """
         Determina si la respuesta es exitosa
+        ✅ ACTUALIZADO: Maneja formato JSONPath
         """
         # ✅ CORREGIDO: Manejar None en success_indicators
         success_config = self.mapping_config.get('success_indicators') or {}
@@ -232,88 +306,12 @@ class VendorAPIMapper:
         # Verificar campo de éxito en response
         success_field = success_config.get('success_field')
         if success_field:
+            # ✅ NUEVO: Extraer campo del JSONPath si aplica
+            if isinstance(success_field, str) and success_field.startswith('$.'):
+                success_field = success_field[2:]
+            
             success_values = success_config.get('success_values', [])
             actual_value = self._get_nested_value(response_data, success_field)
             return actual_value in success_values
 
         return True
-
-
-# ========================================
-# EJEMPLO DE USO
-# ========================================
-
-if __name__ == "__main__":
-
-    # Simular configuración desde BD (DTone)
-    dtone_config = {
-        "request_mapping": {
-            "fields": [
-                {"api_field": "phone_number", "source_field": "purchase_phone_number", "data_type": "string", "required": True},
-                {"api_field": "product_sku", "source_field": "vp_skuid", "data_type": "string", "required": True},
-                {"api_field": "amount", "source_field": "purchase_vendor_amount", "data_type": "float", "required": True},
-                {"api_field": "currency", "source_field": "purchase_vendor_currency", "data_type": "string", "required": True},
-                {"api_field": "reference", "source_field": "purchase_reference", "data_type": "string", "required": True}
-            ]
-        },
-        "value_transformations": {
-            "purchase_phone_number": {"trim": True, "remove_spaces": True},
-            "purchase_vendor_amount": {"format": "%.2f"}
-        },
-        "response_mapping": {
-            "transaction_id": "purchase_vendor_purchase_id",
-            "status": "purchase_delivery_status"
-        },
-        "success_indicators": {
-            "status_codes": [200, 201],
-            "success_field": "status",
-            "success_values": ["SUCCESS"]
-        }
-    }
-
-    # Datos de compra
-    purchase_data = {
-        "purchase_phone_number": " 999 888 777 ",
-        "vp_skuid": "SKU_001",
-        "purchase_vendor_amount": 50.0,
-        "purchase_vendor_currency": "PEN",
-        "purchase_reference": "REF-12345"
-    }
-
-    # Crear mapper
-    mapper = VendorAPIMapper(dtone_config)
-
-    # Generar request
-    request = mapper.build_request(purchase_data)
-
-    print("Request generado:")
-    print(json.dumps(request, indent=2))
-    # Output:
-    # {
-    #   "phone_number": "999888777",
-    #   "product_sku": "SKU_001",
-    #   "amount": 50.0,
-    #   "currency": "PEN",
-    #   "reference": "REF-12345"
-    # }
-
-    # Simular respuesta del vendor
-    vendor_response = {
-        "transaction_id": "VENDOR-123456",
-        "status": "SUCCESS",
-        "timestamp": "2025-12-26T10:00:00Z"
-    }
-
-    # Parsear respuesta
-    parsed = mapper.parse_response(vendor_response)
-    print("\nRespuesta parseada:")
-    print(json.dumps(parsed, indent=2))
-    # Output:
-    # {
-    #   "purchase_vendor_purchase_id": "VENDOR-123456",
-    #   "purchase_delivery_status": "SUCCESS"
-    # }
-
-    # Verificar éxito
-    is_success = mapper.is_success_response(200, vendor_response)
-    print(f"\n¿Exitoso? {is_success}")

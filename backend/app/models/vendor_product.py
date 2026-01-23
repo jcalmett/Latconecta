@@ -71,7 +71,7 @@ class VendorProduct(Base):
     # =========================================================================
     # TIPO DE PRODUCTO
     # =========================================================================
-    vp_product_type = Column(Integer)         # 1=bundle/paquete, 2=topup/recarga
+    vp_product_type = Column(String(1))        # 1=bundle/paquete, 2=topup/recarga
     vp_service_type = Column(String(50))      # 'data', 'voice', 'sms', 'combo'
 
     # =========================================================================

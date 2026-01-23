@@ -264,28 +264,53 @@ const ShopView = ({ user, showNotification }) => {
     return 'topup';
   };
 
-  const handleValidation = async () => {
-    setProcessing(true);
-    setError(null);
+const handleValidation = async () => {
+  setProcessing(true);
+  setError(null);
 
-    try {
-      let response;
+  try {
+    let response;
 
-      if (purchaseData.productType === 'bill_payment') {
-        if (!purchaseData.accountNumber) {
-          setError('Ingresa el número de cuenta');
-          setProcessing(false);
-          return;
-        }
+    if (purchaseData.productType === 'bill_payment') {
+      // ═══════════════════════════════════════════════════
+      // VALIDACIÓN DE CUENTA
+      // ═══════════════════════════════════════════════════
+      if (!purchaseData.accountNumber) {
+        setError('Ingresa el número de cuenta');
+        setProcessing(false);
+        return;
+      }
 
+      // ✅ MODIFICADO: Verificar si tiene api_group_code
+      if (selectedVendorProduct && selectedVendorProduct.api_group_code) {
+        // ✅ Tiene mapping → Usar backend
+        console.log('Using backend validation for account (with API mapping)');
+        
+        response = await purchasesService.validateAccount(
+          selectedProduct.product_id,
+          purchaseData.accountNumber
+        );
+      } else {
+        // ❌ NO tiene mapping → Usar mock
+        console.log('Using mock validation for account (no API mapping)');
+        
         if (apiSimulator.isEnabled()) {
           response = await apiSimulator.validateAccount(purchaseData.accountNumber);
         } else {
-          throw new Error('API real no implementada aún');
+          throw new Error('API real no implementada y sin mappings configurados');
         }
+      }
 
-        if (response.status === 200) {
-          const montoBase = parseFloat(response.data.monto_base);
+      // ✅ CORREGIDO: Procesar respuesta con mejor manejo de errores
+      console.log('Account validation response:', response);
+
+      // Verificar que la respuesta sea exitosa
+      if (response && (response.status === 200 || response.status === 'success')) {
+        // Verificar que los datos sean válidos
+        const isValid = response.data?.valid === true;
+        
+        if (isValid) {
+          const montoBase = parseFloat(response.data.monto_base || 0);
           const billCurrency = purchaseData.vendorCurrency || selectedProduct.product_currency;
 
           setPurchaseData(prev => ({
@@ -294,50 +319,106 @@ const ShopView = ({ user, showNotification }) => {
             billPaymentAmount: '',
             validationData: {
               monto_base: montoBase,
-              indicador: response.data.indicador,
-              account_holder: response.data.account_holder,
+              indicador: response.data.indicador || 'T',
+              account_holder: response.data.account_holder || '',
               bill_currency: billCurrency
             }
           }));
 
           setPurchaseStep(2.6);
         } else {
-          setError(response.message || 'Cuenta inválida');
+          // Validación falló
+          const errorMsg = response.data?.message || response.message || 'Cuenta inválida';
+          console.error('Account validation failed:', errorMsg);
+          setError(errorMsg);
         }
-
       } else {
-        if (!purchaseData.phoneNumber) {
-          setError('Ingresa el número de teléfono');
-          setProcessing(false);
-          return;
-        }
+        // Error de API o conexión
+        const errorMsg = response?.message || 'Error al validar cuenta. Por favor intenta de nuevo.';
+        console.error('Account validation error:', errorMsg);
+        setError(errorMsg);
+      }
 
+    } else {
+      // ═══════════════════════════════════════════════════
+      // VALIDACIÓN DE TELÉFONO
+      // ═══════════════════════════════════════════════════
+      if (!purchaseData.phoneNumber) {
+        setError('Ingresa el número de teléfono');
+        setProcessing(false);
+        return;
+      }
+
+      // ✅ MODIFICADO: Verificar si tiene api_group_code
+      if (selectedVendorProduct && selectedVendorProduct.api_group_code) {
+        // ✅ Tiene mapping → Usar backend
+        console.log('Using backend validation for phone (with API mapping)');
+        
+        response = await purchasesService.validatePhone(
+          selectedProduct.product_id,
+          purchaseData.phoneNumber
+        );
+      } else {
+        // ❌ NO tiene mapping → Usar mock
+        console.log('Using mock validation for phone (no API mapping)');
+        
         if (apiSimulator.isEnabled()) {
           response = await apiSimulator.validatePhone(purchaseData.phoneNumber);
         } else {
-          throw new Error('API real no implementada aún');
+          throw new Error('API real no implementada y sin mappings configurados');
         }
+      }
 
-        if (response.status === 200) {
+      // ✅ CORREGIDO: Procesar respuesta con mejor manejo de errores
+      console.log('Phone validation response:', response);
+
+      // Verificar que la respuesta sea exitosa
+      if (response && (response.status === 200 || response.status === 'success')) {
+        // Verificar que los datos sean válidos
+        const isValid = response.data?.valid === true;
+        
+        if (isValid) {
           setPurchaseData(prev => ({
             ...prev,
             isValidated: true,
             validationData: { phone_valid: true }
           }));
 
-          // ✅ NUEVO: Siempre ir a PASO 3 (definir monto)
           setPurchaseStep(3);
+          console.log('✅ Phone validation successful, moving to step 3');
         } else {
-          setError(response.message || 'Teléfono inválido');
+          // Validación falló
+          const errorMsg = response.data?.message || response.message || 'Teléfono inválido';
+          console.error('Phone validation failed:', errorMsg);
+          setError(errorMsg);
         }
+      } else {
+        // Error de API o conexión
+        const errorMsg = response?.message || 'Error al validar teléfono. Por favor intenta de nuevo.';
+        console.error('Phone validation error:', errorMsg);
+        setError(errorMsg);
       }
-
-    } catch (err) {
-      setError('Error en validación: ' + err.message);
-    } finally {
-      setProcessing(false);
     }
-  };
+
+  } catch (err) {
+    console.error('Validation exception:', err);
+    
+    // Mensaje de error más específico
+    let errorMessage = 'Error en validación: ';
+    
+    if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+      errorMessage += 'No se pudo conectar con el servidor. Verifica tu conexión.';
+    } else if (err.message.includes('timeout')) {
+      errorMessage += 'El servidor tardó demasiado en responder. Intenta de nuevo.';
+    } else {
+      errorMessage += err.message;
+    }
+    
+    setError(errorMessage);
+  } finally {
+    setProcessing(false);
+  }
+};
 
   const handlePaymentAndProvision = async () => {
     if (!purchaseData.paymentMethod) {
@@ -387,7 +468,7 @@ const ShopView = ({ user, showNotification }) => {
       console.log('✅ Purchase response:', response);
 
       setPurchaseResult({
-        success: response.purchase_status === 'Success' || response.purchase_status === 'Pending',
+        success: response.purchase_status === 'Success' || response.purchase_status === 'Pending' || (response.purchase_status === 'Failed' && response.payment_status === 'Reversed'),
         date: response.purchase_date,
         reference: response.purchase_reference,
         purchase_status: response.purchase_status,
@@ -590,6 +671,93 @@ const ShopView = ({ user, showNotification }) => {
         y += spacing.medium;
       }
 
+      if (receiptData.reversalRef) {
+        doc.setFontSize(7);
+        doc.setTextColor(0, 128, 0);
+        doc.text(`Ref. Reversion: ${receiptData.reversalRef}`, 12, y);
+        doc.setTextColor(0, 0, 0);
+        y += spacing.medium;
+      }
+
+      // Mensaje de provisión fallida + reversión exitosa
+      if (receiptData.purchaseStatus === 'Failed' && receiptData.paymentStatus === 'Reversed') {
+        y += 2;
+        doc.setLineWidth(0.3);
+        doc.line(10, y, 95, y);
+        y += 4;
+
+        doc.setFontSize(8);
+        doc.setFont('courier', 'bold');
+        doc.setTextColor(255, 140, 0);
+        doc.text('PROVISION FALLIDA', 12, y);
+        doc.setTextColor(0, 0, 0);
+        y += spacing.medium;
+
+        doc.setFontSize(7);
+        doc.setFont('courier', 'normal');
+        const lines1 = doc.splitTextToSize('No se pudo completar la provision del servicio solicitado.', 80);
+        lines1.forEach(line => {
+          doc.text(line, 12, y);
+          y += spacing.small;
+        });
+        y += spacing.small;
+
+        doc.setTextColor(0, 128, 0);
+        doc.setFont('courier', 'bold');
+        doc.text('PAGO REVERTIDO EXITOSAMENTE', 12, y);
+        y += spacing.small;
+        doc.setFont('courier', 'normal');
+        const lines2 = doc.splitTextToSize('No se realizo ningun cargo a su tarjeta de credito.', 80);
+        lines2.forEach(line => {
+          doc.text(line, 12, y);
+          y += spacing.small;
+        });
+        doc.setTextColor(0, 0, 0);
+        y += spacing.medium;
+      }
+
+      // Mensaje de intervención manual
+      if (receiptData.requiresManualIntervention) {
+        y += 2;
+        doc.setLineWidth(0.3);
+        doc.line(10, y, 95, y);
+        y += 4;
+
+        doc.setFontSize(8);
+        doc.setFont('courier', 'bold');
+        doc.setTextColor(255, 0, 0);
+        doc.text('INTERVENCION MANUAL REQUERIDA', 12, y);
+        doc.setTextColor(0, 0, 0);
+        y += spacing.medium;
+
+        doc.setFontSize(7);
+        doc.setFont('courier', 'normal');
+        const lines3 = doc.splitTextToSize('La provision fallo y no se pudo revertir el pago automaticamente.', 80);
+        lines3.forEach(line => {
+          doc.text(line, 12, y);
+          y += spacing.small;
+        });
+        y += spacing.small;
+
+        doc.setTextColor(255, 0, 0);
+        doc.setFont('courier', 'bold');
+        doc.text('El cargo permanece en su tarjeta', 12, y);
+        y += spacing.small;
+        doc.setFont('courier', 'normal');
+        doc.setTextColor(0, 0, 0);
+
+        const lines4 = doc.splitTextToSize('Si en 48 horas no recibe la devolucion, comuniquese con: soporte@latconecta.com', 80);
+        lines4.forEach(line => {
+          doc.text(line, 12, y);
+          y += spacing.small;
+        });
+        
+        doc.setFont('courier', 'bold');
+        doc.text(`Referencia: ${receiptData.reference}`, 12, y);
+        doc.setFont('courier', 'normal');
+        y += spacing.medium;
+      }
+
       if (hasBarcode) {
         y += 2;
         doc.setLineWidth(0.3);
@@ -761,10 +929,13 @@ const ShopView = ({ user, showNotification }) => {
       fee: purchaseResult.fee,
       totalAmount: parseFloat(purchaseResult.amount),
       porcentajeDescuento: purchaseResult.porcentaje_descuento,
+      purchaseStatus: purchaseResult.purchase_status,
       paymentStatus: purchaseResult.payment_status,
       deliveryStatus: purchaseResult.delivery_status,
       paymentRef: purchaseResult.payment_ref,
       provisionRef: purchaseResult.provision_ref,
+      reversalRef: purchaseResult.reversal_ref,
+      requiresManualIntervention: purchaseResult.requires_manual_intervention,
       barcode: purchaseResult.barcode,
       barcodeImage: purchaseResult.barcode_image,
       deliveryPhone: purchaseData.deliveryPhone,
@@ -833,17 +1004,42 @@ PAGO TOTAL:       ${selectedProduct.product_currency} ${totalAmount.toFixed(2)}
 ───────────────────────────────────
 ESTADO
 ───────────────────────────────────
+Estado Compra: ${purchaseResult.purchase_status}
 Estado Pago: ${purchaseResult.payment_status}
 ${purchaseResult.delivery_status ? `Estado Provisión: ${purchaseResult.delivery_status}` : ''}
-${purchaseResult.requires_manual_intervention ? `Estado Devolución: No se pudo devolver el cobro` : ''}
 
 ${purchaseResult.payment_ref ? `Ref. Pago: ${purchaseResult.payment_ref}` : ''}
 ${purchaseResult.provision_ref ? `Ref. Provisión: ${purchaseResult.provision_ref}` : ''}
 ${purchaseResult.reversal_ref ? `Ref. Reversión: ${purchaseResult.reversal_ref}` : ''}
 ${purchaseResult.barcode ? `Código Barras: ${purchaseResult.barcode}` : ''}
+
+${purchaseResult.purchase_status === 'Failed' && purchaseResult.payment_status === 'Reversed' ? `
+───────────────────────────────────
+⚠️  PROVISIÓN FALLIDA
+───────────────────────────────────
+No se pudo completar la provisión
+del servicio solicitado.
+
+✓ PAGO REVERTIDO EXITOSAMENTE
+No se realizó ningún cargo a su 
+tarjeta de crédito.
+` : ''}
+
 ${purchaseResult.requires_manual_intervention ? `
-Si en 48 horas no recibe la devolución
-comuníquese con soporte@latcom.co` : ''}
+───────────────────────────────────
+⚠️  INTERVENCIÓN MANUAL REQUERIDA
+───────────────────────────────────
+La provisión falló y no se pudo 
+revertir el pago automáticamente.
+
+El cargo permanece en su tarjeta.
+
+Si en 48 horas no recibe la 
+devolución, comuníquese con:
+soporte@latconecta.com
+
+Referencia: ${purchaseResult.reference}
+` : ''}
 
 ${purchaseData.productType === 'smartphone' ? `───────────────────────────────────
 CONTACTO

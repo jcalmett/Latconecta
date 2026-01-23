@@ -144,7 +144,9 @@ class PurchaseCreate(PurchaseBaseSchema):
     purchase_vendor_skuid: Optional[str] = None
     purchase_vendpro_country: Optional[str] = None
     purchase_vendpro_operator: Optional[str] = None
-    purchase_vendpro_product_type: Optional[str] = None
+    purchase_vendpro_product_type: Optional[str] = Field(None, max_length=1)
+    purchase_vendpro_amount_type: Optional[str] = None  # u2190 NUEVO: F/R/V (Fixed/Range/Variable)
+    purchase_vendpro_maximum_amount: Optional[Decimal] = None  # u2190 NUEVO: Monto maximo permitido
     purchase_vendor_json: Optional[dict] = None
     purchase_vendor_date_petition: Optional[datetime] = None
     purchase_vendor_date_response: Optional[datetime] = None
@@ -308,7 +310,9 @@ class PurchaseInDB(BaseModel):
     purchase_vendor_skuid: Optional[str] = None
     purchase_vendpro_country: Optional[str] = None
     purchase_vendpro_operator: Optional[str] = None
-    purchase_vendpro_product_type: Optional[str] = None
+    purchase_vendpro_product_type: Optional[str] = Field(None, max_length=1)
+    purchase_vendpro_amount_type: Optional[str] = None  # u2190 NUEVO: F/R/V (Fixed/Range/Variable)
+    purchase_vendpro_maximum_amount: Optional[Decimal] = None  # u2190 NUEVO: Monto maximo permitido
     purchase_vendor_json: Optional[dict] = None
     purchase_vendor_date_petition: Optional[datetime] = None
     purchase_vendor_date_response: Optional[datetime] = None

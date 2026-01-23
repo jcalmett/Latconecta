@@ -231,6 +231,25 @@ const PurchaseDetailModal = ({ purchase, onClose }) => {
                 <Field label="País VendPro" value={purchase.purchase_vendpro_country} />
                 <Field label="Operador VendPro" value={purchase.purchase_vendpro_operator} />
                 <Field label="Tipo Producto VendPro" value={purchase.purchase_vendpro_product_type} />
+                <Field 
+                  label="Tipo de Monto" 
+                  value={purchase.purchase_vendpro_amount_type 
+                    ? `${purchase.purchase_vendpro_amount_type} (${
+                        purchase.purchase_vendpro_amount_type === 'F' ? 'Fixed' :
+                        purchase.purchase_vendpro_amount_type === 'R' ? 'Range' :
+                        purchase.purchase_vendpro_amount_type === 'V' ? 'Variable' : 
+                        'Unknown'
+                      })`
+                    : 'N/A'
+                  }
+                />
+                <Field 
+                  label="Monto Máximo" 
+                  value={purchase.purchase_vendpro_maximum_amount 
+                    ? `${parseFloat(purchase.purchase_vendpro_maximum_amount).toFixed(2)} ${purchase.purchase_vendor_currency || ''}`
+                    : 'N/A'
+                  }
+                />               
               </Section>
 
               {/* VENDOR - MONTOS Y TRANSACCIONES */}

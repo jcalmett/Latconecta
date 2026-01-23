@@ -33,25 +33,114 @@ class PurchasesService {
     }
   }
 
-  async validatePhone(phoneNumber, serviceId) {
+  // ✅ ACTUALIZADO: Validación de teléfono con mejor manejo de errores
+  async validatePhone(productId, phoneNumber) {
     try {
-      return await apiClient.post('/purchases/validate-phone', {
-        phone_number: phoneNumber,
-        service_id: serviceId
+      console.log(`📞 Validating phone: ${phoneNumber} for product: ${productId}`);
+      
+      const response = await fetch(`${apiClient.baseURL}/purchases/validate-phone?product_id=${productId}&phone_number=${phoneNumber}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
       });
+
+      // Siempre intentar parsear como JSON
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('❌ Error parsing JSON response:', parseError);
+        return {
+          status: 500,
+          data: { valid: false },
+          message: 'Error al procesar respuesta del servidor'
+        };
+      }
+
+      console.log('📥 Validation response:', data);
+
+      // Normalizar respuesta
+      // El backend puede retornar diferentes formatos dependiendo del error
+      if (response.ok && data) {
+        return {
+          status: data.status || 200,
+          data: data.data || { valid: false },
+          message: data.message || 'Validación completada'
+        };
+      } else {
+        // Error HTTP
+        console.error('❌ HTTP error:', response.status, data);
+        return {
+          status: response.status,
+          data: { valid: false },
+          message: data.detail || data.message || 'Error al validar teléfono'
+        };
+      }
     } catch (error) {
-      throw new Error(error.message || 'Error al validar teléfono');
+      console.error('❌ Network error in validatePhone:', error);
+      
+      // Error de red o conexión
+      return {
+        status: 500,
+        data: { valid: false },
+        message: 'No se pudo conectar con el servidor. Verifica tu conexión.'
+      };
     }
   }
 
-  async validateAccount(accountNumber, serviceId) {
+  // ✅ ACTUALIZADO: Validación de cuenta con mejor manejo de errores
+  async validateAccount(productId, accountNumber) {
     try {
-      return await apiClient.post('/purchases/validate-account', {
-        account_number: accountNumber,
-        service_id: serviceId
+      console.log(`🏦 Validating account: ${accountNumber} for product: ${productId}`);
+      
+      const response = await fetch(`${apiClient.baseURL}/purchases/validate-account?product_id=${productId}&account_number=${accountNumber}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
       });
+
+      // Siempre intentar parsear como JSON
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('❌ Error parsing JSON response:', parseError);
+        return {
+          status: 500,
+          data: { valid: false },
+          message: 'Error al procesar respuesta del servidor'
+        };
+      }
+
+      console.log('📥 Validation response:', data);
+
+      // Normalizar respuesta
+      if (response.ok && data) {
+        return {
+          status: data.status || 200,
+          data: data.data || { valid: false, monto_base: 0, indicador: 'T', account_holder: '' },
+          message: data.message || 'Validación completada'
+        };
+      } else {
+        // Error HTTP
+        console.error('❌ HTTP error:', response.status, data);
+        return {
+          status: response.status,
+          data: { valid: false, monto_base: 0, indicador: 'T', account_holder: '' },
+          message: data.detail || data.message || 'Error al validar cuenta'
+        };
+      }
     } catch (error) {
-      throw new Error(error.message || 'Error al validar cuenta');
+      console.error('❌ Network error in validateAccount:', error);
+      
+      // Error de red o conexión
+      return {
+        status: 500,
+        data: { valid: false, monto_base: 0, indicador: 'T', account_holder: '' },
+        message: 'No se pudo conectar con el servidor. Verifica tu conexión.'
+      };
     }
   }
 

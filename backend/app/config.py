@@ -54,6 +54,18 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # =========================================================================
+    # CONFIGURACIÓN DE IZIPAY - PASARELA DE PAGOS
+    # =========================================================================
+    IZIPAY_API_URL: str = "https://api.micuentaweb.pe"
+    IZIPAY_USERNAME: str = ""
+    IZIPAY_PASSWORD: str = ""
+
+    # Control de login con vendors
+    # False en development (usa mock/simulador)
+    # True en uat/production (login real con vendors)
+    ENABLE_VENDOR_LOGIN: bool = False
+
+    # =========================================================================
     # CONFIGURACIÓN DE MOCK (Solo para DEVELOPMENT)
     # =========================================================================
     # Tasa de éxito de transacciones mock (0.0 a 1.0)
@@ -70,7 +82,7 @@ class Settings(BaseSettings):
     # =========================================================================
     # CONFIGURACIÓN DE VENDOR SIMULATOR (Fase 2)
     # =========================================================================
-    VENDOR_SIMULATOR_ENABLED: bool = False  # True para usar simulador
+    VENDOR_SIMULATOR_ENABLED: bool = True  # True para usar simulador
     VENDOR_SIMULATOR_URL: str = "http://localhost:5001"  # URL del simulador
 
     # =========================================================================
@@ -168,7 +180,8 @@ def get_environment_info() -> dict:
         "is_development": is_development(),
         "is_uat": is_uat(),
         "is_production": is_production(),
-        "uses_mock": is_development()
+        "uses_mock": is_development(),
+        "vendor_login_enabled": settings.ENABLE_VENDOR_LOGIN
     }
 
 
@@ -206,6 +219,16 @@ def validate_environment():
         print("   → Usando APIs REALES de vendors (ambiente PRODUCCIÓN)")
         print("   → Datos de vendors leídos desde BD")
         print("   → ⚠️  Acceso MUY restringido")
+
+    # Mostrar info del vendor login
+    if settings.ENABLE_VENDOR_LOGIN:
+        print("\n🔐 VENDOR LOGIN: HABILITADO ✅")
+        print("   → Login automático al iniciar backend")
+        print("   → Renovación automática de tokens cada 5 min")
+    else:
+        print("\n🔐 VENDOR LOGIN: DESHABILITADO ⚠️")
+        print("   → Usando simulador/mock local")
+        print("   → No hay conexión con vendors reales")
 
     # Mostrar info del vendor simulator
     if settings.VENDOR_SIMULATOR_ENABLED:

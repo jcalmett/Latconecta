@@ -94,8 +94,9 @@ class Purchase(Base):
     purchase_vendpro_code = Column(String(50))
     purchase_vendpro_country = Column(String(50))
     purchase_vendpro_operator = Column(String(50))
-    purchase_vendpro_product_type = Column(String(20))
-
+    purchase_vendpro_product_type = Column(String(1))
+    purchase_vendpro_amount_type = Column(String(20))
+    purchase_vendpro_maximum_amount = Column(Numeric(10, 2))
     vendor_name = Column(String(50))
     vendor_trans_id = Column(String(100))
     vendor_provider_trans_id = Column(String(100))

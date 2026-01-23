@@ -15,9 +15,20 @@ from datetime import datetime
 class RequestFieldMapping(BaseModel):
     """
     Mapeo de un campo individual en el request
+    
+    source_field puede ser:
+    - Campo de purchase: purchase_reference, purchase_date, etc.
+    - Campo de vendor_product: vp_operator, vp_country, etc.
+    - Constante: constant:valor (ej: constant:MEX, constant:1, constant:true)
+    
+    Ejemplos:
+    - source_field="purchase_phone_number" → Toma el valor del campo purchase_phone_number
+    - source_field="constant:MEX" → Envía siempre el string "MEX"
+    - source_field="constant:1" → Envía siempre el número 1
+    - source_field="constant:true" → Envía siempre el booleano true
     """
     api_field: str = Field(..., description="Nombre del campo en la API del vendor")
-    source_field: str = Field(..., description="Campo origen (purchase_* o vp_*)")
+    source_field: str = Field(..., description="Campo origen (purchase_*, vp_*, o constant:valor)")
     data_type: str = Field(..., description="Tipo de dato: string, float, int, boolean, date")
     required: bool = Field(default=True, description="Si el campo es obligatorio")
     default_value: Optional[Any] = Field(None, description="Valor por defecto si no existe")
@@ -26,7 +37,7 @@ class RequestFieldMapping(BaseModel):
     @field_validator('data_type')
     @classmethod
     def validate_data_type(cls, v):
-        valid_types = ['string', 'float', 'int', 'boolean', 'date', 'datetime']
+        valid_types = ['string', 'float', 'int', 'decimal', 'boolean', 'date', 'datetime']
         if v not in valid_types:
             raise ValueError(f'data_type debe ser uno de: {valid_types}')
         return v
@@ -34,9 +45,16 @@ class RequestFieldMapping(BaseModel):
     @field_validator('source_field')
     @classmethod
     def validate_source_field(cls, v):
-        # Debe empezar con purchase_ o vp_
-        if not (v.startswith('purchase_') or v.startswith('vp_')):
-            raise ValueError('source_field debe empezar con purchase_ o vp_')
+        # Puede ser: purchase_*, vp_*, o constant:*
+        if not (v.startswith('purchase_') or v.startswith('vp_') or v.startswith('constant:')):
+            raise ValueError('source_field debe empezar con purchase_, vp_, o constant:')
+        
+        # Si es constante, validar que tenga un valor después de ':'
+        if v.startswith('constant:'):
+            value_part = v[9:]  # Todo después de 'constant:'
+            if not value_part or value_part.strip() == '':
+                raise ValueError('constant: debe tener un valor (ej: constant:MEX)')
+        
         return v
 
 
@@ -264,9 +282,11 @@ class AvailableField(BaseModel):
 class AvailableFieldsResponse(BaseModel):
     """
     Response con campos disponibles
+    request_fields: Campos disponibles para construir REQUEST al vendor
+    response_fields: Campos disponibles para recibir RESPONSE del vendor
     """
-    purchase_fields: List[AvailableField]
-    vendor_product_fields: List[AvailableField]
+    request_fields: List[AvailableField]
+    response_fields: List[AvailableField]
 
 
 class TestMappingRequest(BaseModel):
@@ -295,7 +315,9 @@ class TestMappingResponse(BaseModel):
 
 def get_available_purchase_fields() -> List[AvailableField]:
     """
-    Retorna lista de campos disponibles de la tabla purchases
+    Retorna lista de campos disponibles para REQUEST MAPPING (enviar al vendor)
+    Basado en: MAPEO_CAMPOS_PURCHASES_RESUMEN.xlsx - Columna "Considerado Lista Request"
+    Total: 26 campos (según Excel oficial)
     """
     return [
         AvailableField(
@@ -303,7 +325,14 @@ def get_available_purchase_fields() -> List[AvailableField]:
             field_type="string",
             description="Referencia única de la compra",
             source="purchase",
-            example="PUR-20241229-ABC123"
+            example="REF-20260119-ABC123"
+        ),
+        AvailableField(
+            field_name="purchase_date",
+            field_type="datetime",
+            description="Fecha y hora de la compra",
+            source="purchase",
+            example="2026-01-19T10:30:00"
         ),
         AvailableField(
             field_name="purchase_phone_number",
@@ -313,60 +342,276 @@ def get_available_purchase_fields() -> List[AvailableField]:
             example="+51987654321"
         ),
         AvailableField(
-            field_name="purchase_account_number",
+            field_name="purchase_currency",
             field_type="string",
-            description="Número de cuenta",
+            description="Moneda de la compra (USD, PEN, MXN, etc)",
             source="purchase",
-            example="123456789"
+            example="MXN"
+        ),
+        AvailableField(
+            field_name="purchase_base_price",
+            field_type="decimal",
+            description="Precio base del producto",
+            source="purchase",
+            example="450.00"
+        ),
+        AvailableField(
+            field_name="purchase_discount",
+            field_type="decimal",
+            description="Descuento aplicado",
+            source="purchase",
+            example="5.00"
+        ),
+        AvailableField(
+            field_name="purchase_fee",
+            field_type="decimal",
+            description="Comisión o fee del servicio",
+            source="purchase",
+            example="2.50"
         ),
         AvailableField(
             field_name="purchase_total_amount",
-            field_type="float",
-            description="Monto total de la compra",
+            field_type="decimal",
+            description="Monto total a pagar (base - descuento + fee)",
             source="purchase",
-            example="50.00"
+            example="447.50"
         ),
         AvailableField(
-            field_name="purchase_currency",
+            field_name="purchase_payment_method",
             field_type="string",
-            description="Moneda de la compra",
+            description="Método de pago (Credit Card, Debit Card, Barcode, etc.)",
             source="purchase",
-            example="PEN"
-        ),
-        AvailableField(
-            field_name="purchase_vendor_amount",
-            field_type="float",
-            description="Monto a enviar al vendor",
-            source="purchase",
-            example="48.50"
-        ),
-        AvailableField(
-            field_name="purchase_vendor_currency",
-            field_type="string",
-            description="Moneda del vendor",
-            source="purchase",
-            example="USD"
-        ),
-        AvailableField(
-            field_name="purchase_vendor_purchase_id",
-            field_type="string",
-            description="ID de transacción del vendor",
-            source="purchase",
-            example="VND-12345"
+            example="Credit Card"
         ),
         AvailableField(
             field_name="purchase_delivery_status",
             field_type="string",
-            description="Estado de entrega",
+            description="Estado de entrega del servicio",
             source="purchase",
-            example="completed"
+            example="pending"
+        ),
+        AvailableField(
+            field_name="purchase_delivery_phone",
+            field_type="string",
+            description="Teléfono de entrega (para smartphones)",
+            source="purchase",
+            example="+51912345678"
+        ),
+        AvailableField(
+            field_name="purchase_delivery_name",
+            field_type="string",
+            description="Nombre del destinatario (para smartphones)",
+            source="purchase",
+            example="Juan Pérez"
+        ),
+        AvailableField(
+            field_name="purchase_delivery_address",
+            field_type="string",
+            description="Dirección de entrega (para smartphones)",
+            source="purchase",
+            example="Av. Principal 123, Lima"
+        ),
+        AvailableField(
+            field_name="purchase_receip_image",
+            field_type="string",
+            description="URL de la imagen del recibo",
+            source="purchase",
+            example="https://cdn.latconecta.com/receipts/12345.png"
+        ),
+        AvailableField(
+            field_name="purchase_account_number",
+            field_type="string",
+            description="Número de cuenta a pagar (para bill payment)",
+            source="purchase",
+            example="333333333333333"
+        ),
+        AvailableField(
+            field_name="purchase_vendor_code",
+            field_type="string",
+            description="Código del vendor (LATCOM, DTONE, etc)",
+            source="purchase",
+            example="LATCOM"
+        ),
+        AvailableField(
+            field_name="purchase_product_type",
+            field_type="string",
+            description="Tipo de producto del vendor",
+            source="purchase",
+            example="bill_payment"
+        ),
+        AvailableField(
+            field_name="purchase_vendpro_code",
+            field_type="string",
+            description="Código de producto en el vendor",
+            source="purchase",
+            example="LTBILL001"
+        ),
+        AvailableField(
+            field_name="purchase_vendor_skuid",
+            field_type="string",
+            description="SKU del producto en el vendor",
+            source="purchase",
+            example="LTBILLSKU1"
+        ),
+        AvailableField(
+            field_name="purchase_vendpro_country",
+            field_type="string",
+            description="País del producto (del vendor)",
+            source="purchase",
+            example="MEX"
+        ),
+        AvailableField(
+            field_name="purchase_vendpro_operator",
+            field_type="string",
+            description="Operador del producto (del vendor)",
+            source="purchase",
+            example="Latamgroup"
+        ),
+        AvailableField(
+            field_name="purchase_vendpro_product_type",
+            field_type="string",
+            description="Tipo de producto del vendor (1 o 2)",
+            source="purchase",
+            example="2"
+        ),
+        AvailableField(
+            field_name="purchase_vendpro_amount_type",
+            field_type="string",
+            description="Tipo de monto del vendor product (F/R/V)",
+            source="purchase",
+            example="R"
+        ),
+        AvailableField(
+            field_name="purchase_vendpro_maximum_amount",
+            field_type="decimal",
+            description="Monto máximo permitido del vendor product",
+            source="purchase",
+            example="1000.00"
+        ),
+        AvailableField(
+            field_name="purchase_vendor_currency",
+            field_type="string",
+            description="Moneda en la que cobra el vendor",
+            source="purchase",
+            example="MXN"
+        ),
+        AvailableField(
+            field_name="purchase_vendor_amount",
+            field_type="decimal",
+            description="Monto que se paga al vendor",
+            source="purchase",
+            example="450.00"
+        ),
+        AvailableField(
+            field_name="purchase_vendor_cost",
+            field_type="decimal",
+            description="Costo del producto para nosotros",
+            source="purchase",
+            example="445.00"
+        ),
+        AvailableField(
+            field_name="purchase_exch_rate",
+            field_type="decimal",
+            description="Tipo de cambio aplicado",
+            source="purchase",
+            example="19.50"
+        ),
+        AvailableField(
+            field_name="vendor_name",
+            field_type="string",
+            description="Nombre del vendor",
+            source="purchase",
+            example="LATCOM"
+        )
+    ]
+
+
+def get_available_vendor_product_fields() -> List[AvailableField]:
+    """
+    Retorna lista de campos disponibles para RESPONSE MAPPING (recibir del vendor)
+    Basado en: MAPEO_CAMPOS_PURCHASES_RESUMEN.xlsx - Columna "Considerado Lista Response"
+    Total: 21 campos (20 del Excel + purchase_vendor_amount agregado)
+    
+    Nota: purchase_vendor_amount se incluye en RESPONSE porque puede ser actualizado
+    por el vendor con el monto final confirmado.
+    """
+    return [
+        AvailableField(
+            field_name="purchase_payment_status",
+            field_type="string",
+            description="Estado del pago (Success, Failed, Pending)",
+            source="purchase",
+            example="Success"
+        ),
+        AvailableField(
+            field_name="purchase_payment_ref",
+            field_type="string",
+            description="Referencia del pago",
+            source="purchase",
+            example="PAY-20260119-XYZ789"
+        ),
+        AvailableField(
+            field_name="purchase_credit_card_last_digits",
+            field_type="string",
+            description="Últimos 4 dígitos de la tarjeta",
+            source="purchase",
+            example="1234"
+        ),
+        AvailableField(
+            field_name="purchase_barcode_code",
+            field_type="string",
+            description="Código de barras generado",
+            source="purchase",
+            example="BAR123456789"
+        ),
+        AvailableField(
+            field_name="purchase_barcode_image",
+            field_type="string",
+            description="URL de la imagen del código de barras",
+            source="purchase",
+            example="https://storage.com/barcodes/BAR123456789.png"
+        ),
+        AvailableField(
+            field_name="purchase_delivery_status",
+            field_type="string",
+            description="Estado de entrega/provisión del servicio",
+            source="purchase",
+            example="Success"
+        ),
+        AvailableField(
+            field_name="purchase_provision_ref",
+            field_type="string",
+            description="Referencia de la provisión del vendor",
+            source="purchase",
+            example="PROV-VND-12345"
+        ),
+        AvailableField(
+            field_name="purchase_reversal_ref",
+            field_type="string",
+            description="Referencia de reversión (si aplica)",
+            source="purchase",
+            example="REV-VND-67890"
+        ),
+        AvailableField(
+            field_name="purchase_vendor_json",
+            field_type="string",
+            description="JSON completo de la respuesta del vendor (para auditoría)",
+            source="purchase",
+            example='{"status": "success", "transaction_id": "TXN123"}'
+        ),
+        AvailableField(
+            field_name="purchase_vendor_date_petition",
+            field_type="datetime",
+            description="Fecha y hora del request al vendor",
+            source="purchase",
+            example="2026-01-19T10:30:00"
         ),
         AvailableField(
             field_name="purchase_vendor_date_response",
             field_type="datetime",
-            description="Fecha de respuesta del vendor",
+            description="Fecha y hora de la respuesta del vendor",
             source="purchase",
-            example="2024-12-29T10:30:00"
+            example="2026-01-19T10:30:02"
         ),
         AvailableField(
             field_name="purchase_vendor_response_code",
@@ -374,69 +619,82 @@ def get_available_purchase_fields() -> List[AvailableField]:
             description="Código de respuesta del vendor",
             source="purchase",
             example="200"
+        ),
+        AvailableField(
+            field_name="purchase_vendor_response_description",
+            field_type="string",
+            description="Descripción de la respuesta del vendor",
+            source="purchase",
+            example="Transaction completed successfully"
+        ),
+        AvailableField(
+            field_name="purchase_vendor_purchase_id",
+            field_type="string",
+            description="ID de la compra en el sistema del vendor",
+            source="purchase",
+            example="VND-PURCHASE-98765"
+        ),
+        AvailableField(
+            field_name="purchase_vendor_amount",
+            field_type="decimal",
+            description="Monto confirmado por el vendor (puede actualizarse en response)",
+            source="purchase",
+            example="450.00"
+        ),
+        AvailableField(
+            field_name="purchase_status",
+            field_type="string",
+            description="Estado general de la compra (Success, Failed, Pending)",
+            source="purchase",
+            example="Success"
+        ),
+        AvailableField(
+            field_name="vendor_name",
+            field_type="string",
+            description="Nombre del vendor",
+            source="purchase",
+            example="LATCOM"
+        ),
+        AvailableField(
+            field_name="vendor_trans_id",
+            field_type="string",
+            description="Transaction ID del vendor",
+            source="purchase",
+            example="TXN-LATCOM-12345"
+        ),
+        AvailableField(
+            field_name="vendor_provider_trans_id",
+            field_type="string",
+            description="Transaction ID del proveedor final (si aplica)",
+            source="purchase",
+            example="PROV-TXN-67890"
+        ),
+        AvailableField(
+            field_name="vendor_request",
+            field_type="string",
+            description="JSON del request enviado al vendor (para auditoría)",
+            source="purchase",
+            example='{"phone": "+51987654321", "amount": 50}'
+        ),
+        AvailableField(
+            field_name="vendor_response",
+            field_type="string",
+            description="JSON de la respuesta del vendor (para auditoría)",
+            source="purchase",
+            example='{"status": "success", "transaction_id": "TXN123"}'
         )
     ]
 
 
-def get_available_vendor_product_fields() -> List[AvailableField]:
-    """
-    Retorna lista de campos disponibles de vendor_products
-    """
-    return [
-        AvailableField(
-            field_name="vp_skuid",
-            field_type="string",
-            description="SKU único del producto vendor",
-            source="vendor_product",
-            example="PE_BITEL_50_SKU"
-        ),
-        AvailableField(
-            field_name="vp_code",
-            field_type="string",
-            description="Código del producto vendor",
-            source="vendor_product",
-            example="BITEL_50"
-        ),
-        AvailableField(
-            field_name="vp_name",
-            field_type="string",
-            description="Nombre del producto vendor",
-            source="vendor_product",
-            example="Recarga Bitel S/50"
-        ),
-        AvailableField(
-            field_name="vp_country",
-            field_type="string",
-            description="País del producto",
-            source="vendor_product",
-            example="PER"
-        ),
-        AvailableField(
-            field_name="vp_operator",
-            field_type="string",
-            description="Operador del producto",
-            source="vendor_product",
-            example="bitel"
-        ),
-        AvailableField(
-            field_name="vp_currency",
-            field_type="string",
-            description="Moneda del producto",
-            source="vendor_product",
-            example="PEN"
-        ),
-        AvailableField(
-            field_name="vp_amount",
-            field_type="float",
-            description="Monto del producto",
-            source="vendor_product",
-            example="50.00"
-        ),
-        AvailableField(
-            field_name="vp_product_type",
-            field_type="int",
-            description="Tipo de producto",
-            source="vendor_product",
-            example="1"
-        )
-    ]
+# ============================================================================
+# FUNCIÓN AUXILIAR PARA ENDPOINT
+# ============================================================================
+
+def get_available_request_fields() -> List[AvailableField]:
+    """Alias para get_available_purchase_fields - Campos para REQUEST"""
+    return get_available_purchase_fields()
+
+
+def get_available_response_fields() -> List[AvailableField]:
+    """Alias para get_available_vendor_product_fields - Campos para RESPONSE"""
+    return get_available_vendor_product_fields()

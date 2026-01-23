@@ -22,8 +22,8 @@ from app.schemas.vendor_api_mapping import (
     AvailableFieldsResponse,
     TestMappingRequest,
     TestMappingResponse,
-    get_available_purchase_fields,
-    get_available_vendor_product_fields,
+    get_available_request_fields,
+    get_available_response_fields,
     get_available_operation_types
 )
 from app.utils.dependencies import get_current_user
@@ -101,8 +101,8 @@ async def get_available_fields():
     - vendor_product_fields: Campos de la tabla vendor_products
     """
     return AvailableFieldsResponse(
-        purchase_fields=get_available_purchase_fields(),
-        vendor_product_fields=get_available_vendor_product_fields()
+        request_fields=get_available_request_fields(),
+        response_fields=get_available_response_fields()
     )
 
 
@@ -722,8 +722,8 @@ async def validate_mapping_data(
         errors.append("request_mapping debe tener al menos 1 campo")
 
     # Validar cada field
-    available_sources = [f.field_name for f in get_available_purchase_fields()] + \
-                        [f.field_name for f in get_available_vendor_product_fields()]
+    available_sources = [f.field_name for f in get_available_request_fields()] + \
+                        [f.field_name for f in get_available_response_fields()]
 
     if "fields" in request_mapping:
         for idx, field in enumerate(request_mapping["fields"]):

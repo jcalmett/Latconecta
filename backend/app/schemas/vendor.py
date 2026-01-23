@@ -163,7 +163,7 @@ class VendorProductBase(BaseModel):
     vp_amount_type: Optional[str] = Field(None, max_length=20)
     vp_minimum_amount: Optional[Decimal] = None
     vp_maximum_amount: Optional[Decimal] = None
-    vp_product_type: Optional[int] = None
+    vp_product_type: Optional[str] = Field(None, max_length=1)
     vp_service_type: Optional[str] = Field(None, max_length=50)
     vp_commission: Optional[Decimal] = None
     vp_cost: Optional[Decimal] = None
@@ -188,7 +188,7 @@ class VendorProductUpdate(BaseModel):
     vp_amount_type: Optional[str] = Field(None, max_length=20)
     vp_minimum_amount: Optional[Decimal] = None
     vp_maximum_amount: Optional[Decimal] = None
-    vp_product_type: Optional[int] = None
+    vp_product_type: Optional[str] = Field(None, max_length=1)
     vp_service_type: Optional[str] = Field(None, max_length=50)
     vp_commission: Optional[Decimal] = None
     vp_cost: Optional[Decimal] = None
