@@ -1,5 +1,5 @@
 /**
- * SISTEMA DE IMAGENES FALLBACK - LATCONECTA
+ * SISTEMA DE IMAGENES FALLBACK - LATCONECTA ADMIN
  * ==========================================
  *
  * Este modulo maneja las imagenes fallback para todas las entidades del sistema.
@@ -9,7 +9,13 @@
  * import { getImageUrl, FALLBACK_IMAGES } from '../utils/imageHelper';
  *
  * const imageUrl = getImageUrl(entity.photo_url, 'product');
+ * 
+ * MIGRACIÓN UBUNTU 2026-01-30:
+ * - Ahora usa uploadHelper para construcción dinámica de URLs
+ * - Compatible con rutas relativas y URLs completas (retrocompatibilidad)
  */
+
+import { getUploadUrl } from './uploadHelper';
 
 // Rutas de las imagenes fallback en public/assets
 export const FALLBACK_IMAGES = {
@@ -31,7 +37,8 @@ export const FALLBACK_IMAGES = {
  */
 export const getImageUrl = (imageUrl, entityType = 'default') => {
   if (imageUrl && imageUrl.trim() !== '') {
-    return imageUrl;
+    // ✅ MIGRACIÓN UBUNTU: Usar uploadHelper para construcción dinámica
+    return getUploadUrl(imageUrl);
   }
   return FALLBACK_IMAGES[entityType] || FALLBACK_IMAGES.default;
 };
@@ -41,7 +48,7 @@ export const getImageUrl = (imageUrl, entityType = 'default') => {
  *
  * @param {string|null|undefined} imageUrl - URL de la imagen del backend
  * @param {string} entityType - Tipo de entidad
- * @param {string} backendUrl - URL base del backend
+ * @param {string} backendUrl - URL base del backend (DEPRECATED - se usa variable de entorno)
  * @returns {string} URL completa de la imagen
  */
 export const getImageUrlWithBackend = (imageUrl, entityType = 'default', backendUrl = 'http://127.0.0.1:8100') => {
@@ -49,19 +56,8 @@ export const getImageUrlWithBackend = (imageUrl, entityType = 'default', backend
     return FALLBACK_IMAGES[entityType] || FALLBACK_IMAGES.default;
   }
 
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-    return imageUrl;
-  }
-
-  if (imageUrl.startsWith('/assets/')) {
-    return imageUrl;
-  }
-
-  if (imageUrl.startsWith('/uploads/')) {
-    return `${backendUrl}${imageUrl}`;
-  }
-
-  return `${backendUrl}${imageUrl}`;
+  // ✅ MIGRACIÓN UBUNTU: Usar uploadHelper para construcción dinámica
+  return getUploadUrl(imageUrl);
 };
 
 /**

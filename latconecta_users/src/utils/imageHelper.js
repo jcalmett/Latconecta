@@ -1,9 +1,13 @@
 /**
- * Helper para manejo de imágenes
+ * Helper para manejo de imágenes - Latconecta Users
  * Construye URLs correctas para imágenes del backend
+ * 
+ * MIGRACIÓN UBUNTU 2026-01-30:
+ * - Ahora usa uploadHelper para construcción dinámica de URLs
+ * - Compatible con rutas relativas y URLs completas (retrocompatibilidad)
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:8100';
+import { getUploadUrl } from './uploadHelper';
 
 /**
  * Obtiene la URL completa de una imagen
@@ -16,23 +20,8 @@ export const getImageUrl = (imagePath, type = 'general') => {
     return FALLBACK_IMAGES[type] || FALLBACK_IMAGES.general;
   }
 
-  // Si ya es una URL completa, retornarla
-  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-    return imagePath;
-  }
-
-  // Si es una ruta relativa, construir URL completa
-  if (imagePath.startsWith('/uploads/')) {
-    return `${API_BASE_URL}${imagePath}`;
-  }
-
-  // Si empieza con /assets/, es una imagen local
-  if (imagePath.startsWith('/assets/')) {
-    return imagePath;
-  }
-
-  // Si es solo el nombre del archivo
-  return `${API_BASE_URL}/uploads/${type}s/${imagePath}`;
+  // ✅ MIGRACIÓN UBUNTU: Usar uploadHelper para construcción dinámica
+  return getUploadUrl(imagePath);
 };
 
 /**

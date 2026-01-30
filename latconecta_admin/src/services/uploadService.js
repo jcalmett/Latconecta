@@ -1,7 +1,7 @@
 import apiClient from '../config/api';
 
 /**
- * Servicio para gestionar subida y eliminación de archivos
+ * Servicio para gestión de subida y eliminación de archivos
  */
 const uploadService = {
   /**
@@ -24,9 +24,9 @@ const uploadService = {
 
       // El backend devuelve { success: true, url: "/uploads/..." }
       if (response.data.success && response.data.url) {
-        // Convertir la ruta relativa a URL completa
-        const baseURL = apiClient.defaults.baseURL.replace('/api/v1', '');
-        return baseURL + response.data.url;
+        // ✅ MIGRACIÓN UBUNTU: Devolver solo ruta relativa, no URL completa
+        // La URL completa se construirá dinámicamente al mostrar según ambiente
+        return response.data.url;
       }
 
       throw new Error('Respuesta inválida del servidor');

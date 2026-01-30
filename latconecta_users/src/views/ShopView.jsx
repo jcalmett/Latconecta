@@ -9,6 +9,7 @@ import exchangeRateService from '../services/exchangeRateService';
 import vendorProductsService from '../services/vendorProductsService';
 import { getImageUrl, FALLBACK_IMAGES } from '../utils/imageHelper';
 import companiesService from '../services/companiesService';
+import { getUploadUrl } from '../utils/uploadHelper';
 import PurchasePopup from '../components/PurchasePopup';
 import jsPDF from 'jspdf';
 import countriesService from '../services/countriesService';
@@ -882,7 +883,8 @@ const handleValidation = async () => {
 
       const token = localStorage.getItem('token') || localStorage.getItem('bitel_token');
 
-      const response = await fetch('http://127.0.0.1:8100/api/v1/upload/receipts', {
+      const baseURL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8100/api/v1';
+      const response = await fetch(`${baseURL}/upload/receipts`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -909,7 +911,7 @@ const handleValidation = async () => {
     if (!purchaseResult) return;
 
     if (purchaseResult.receipt_pdf_url) {
-      const fullUrl = `http://127.0.0.1:8100${purchaseResult.receipt_pdf_url}`;
+      const fullUrl = getUploadUrl(purchaseResult.receipt_pdf_url);
       window.open(fullUrl, '_blank');
       return;
     }
@@ -943,7 +945,7 @@ const handleValidation = async () => {
       deliveryAddress: purchaseData.deliveryAddress,
     }).then(pdfUrl => {
       if (pdfUrl) {
-        const fullUrl = `http://127.0.0.1:8100${pdfUrl}`;
+        const fullUrl = getUploadUrl(pdfUrl);
         window.open(fullUrl, '_blank');
         setPurchaseResult(prev => ({
           ...prev,
