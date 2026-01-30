@@ -31,6 +31,7 @@ from app.services.purchase_calculator_service import purchase_calculator_service
 from app.services.exchange_rate_service import exchange_rate_service
 from app.services.mock_api_service import mock_api_service
 from app.services.universal_vendor_service import UniversalVendorService  # ← AGREGADO para vendor simulator
+from app.barcode import barcode_service
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,8 @@ def _map_purchase_to_response(purchase: Purchase) -> 'PurchaseResponse':
         purchase_barcode_code=purchase.purchase_barcode_code,
         purchase_barcode_image=purchase.purchase_barcode_image,
         purchase_receip_image=purchase.purchase_receip_image,
+        izipay_order_code=getattr(purchase, 'izipay_order_code', None),
+        izipay_form_token=getattr(purchase, 'izipay_form_token', None),
         purchase_balance_currency=purchase.purchase_balance_currency,
         purchase_initial_balance=Decimal(str(purchase.purchase_initial_balance)) if purchase.purchase_initial_balance else None,
         purchase_final_balance=Decimal(str(purchase.purchase_final_balance)) if purchase.purchase_final_balance else None,
@@ -218,6 +221,10 @@ class PurchaseResponse(BaseModel):
     purchase_barcode_code: Optional[str] = None
     purchase_barcode_image: Optional[str] = None
     purchase_receip_image: Optional[str] = None
+
+    # IZIPAY (pagos con tarjeta)
+    izipay_order_code: Optional[str] = None  # Link con payment_orders
+    izipay_form_token: Optional[str] = None  # Token para abrir formulario
 
     # Balance del VENDOR
     purchase_balance_currency: Optional[str] = None
@@ -439,37 +446,53 @@ async def create_purchase(
         payment_status = 'Pending'
         barcode = None
         barcode_image = None
+        izipay_order_code = None  # Link con payment_orders table
+        izipay_form_token = None  # Token para frontend
 
         if request.payment_method == 'card':
-            # Simular pago con tarjeta
-            payment_result = mock_api_service.process_card_payment(
-                amount=float(calculation.purchase_total_amount)
-            )
-
-            if payment_result['success']:
-                payment_ref = payment_result['payment_ref']
-                payment_status = 'Success'
-                logger.info(f"Card payment successful: ref={payment_ref}")
-            else:
-                logger.error(f"Card payment failed: {payment_result.get('error_message')}")
+            # ==================== PAGO CON TARJETA - IZIPAY ====================
+            # Crear orden de pago IZIPAY
+            # El formulario se abrirá en el frontend con el form_token
+            # El pago quedará Pending hasta que el usuario complete el formulario
+            
+            from app.payments import service as payment_service
+            
+            try:
+                payment_order = payment_service.create_payment_order(
+                    amount=float(calculation.purchase_total_amount)
+                )
+                
+                # Guardar datos de IZIPAY para tracking
+                izipay_order_code = payment_order['order_code']
+                izipay_form_token = payment_order.get('formToken')
+                
+                # El pago queda PENDING hasta que usuario complete formulario IZIPAY
+                payment_status = 'Pending'
+                payment_ref = None  # Se asignará en el callback de confirmación
+                
+                logger.info(f"💳 IZIPAY order created: {izipay_order_code}")
+                logger.info(f"📝 Form token generated (mode: {'mock' if izipay_form_token == 'SANDBOX_FORM_TOKEN_TEMPORAL' else 'real'})")
+                
+            except Exception as e:
+                logger.error(f"❌ IZIPAY order creation failed: {str(e)}")
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Payment failed: {payment_result.get('error_message')}"
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Error creating payment order: {str(e)}"
                 )
 
         elif request.payment_method == 'barcode':
-            # Generar código de barras
-            barcode_result = mock_api_service.generate_barcode(
-                amount=float(calculation.purchase_total_amount)
+            # Generar código de barras con formato real: LC260123160001000012.00
+            barcode_result = barcode_service.generate_barcode(
+                amount=calculation.purchase_total_amount,  # Decimal, no float
             )
 
             if barcode_result['success']:
                 barcode = barcode_result['barcode']
                 barcode_image = barcode_result['barcode_image']
                 payment_status = 'Pending'
-                logger.info(f"Barcode generated: {barcode}")
+                logger.info(f"✅ Barcode generated: {barcode}")
             else:
-                logger.error(f"Barcode generation failed: {barcode_result.get('error_message')}")
+                logger.error(f"❌ Barcode generation failed: {barcode_result.get('error_message')}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Barcode generation failed: {barcode_result.get('error_message')}"
@@ -781,6 +804,14 @@ async def create_purchase(
         await db.refresh(purchase)
 
         logger.info(f"Purchase saved: ID={purchase.purchase_id}, REF={purchase.purchase_reference}")
+
+        # ==================== PASO 7.5: AGREGAR DATOS IZIPAY (temporales) ====================
+        # Estos campos aún no están en el modelo de BD, los agregamos como atributos
+        # para retornarlos al frontend
+        if request.payment_method == 'card' and izipay_order_code:
+            purchase.izipay_order_code = izipay_order_code
+            purchase.izipay_form_token = izipay_form_token
+            logger.info(f"📝 IZIPAY data added to response: order={izipay_order_code}")
 
         # ==================== PASO 8: RETORNAR RESPONSE ====================
 
