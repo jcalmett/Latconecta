@@ -36,12 +36,14 @@ class Settings(BaseSettings):
     # CONFIGURACIÓN CORS
     # =========================================================================
     CORS_ORIGINS: list = [
-        "http://localhost:5173",  # Latconecta-Admin
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",  # Latconecta-Users
-        "http://127.0.0.1:5174",
-        "http://localhost:3000",  # React alternativo
-        "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://77.42.92.151:5173",  # Admin en servidor
+    "http://77.42.92.151:5174",  # Users en servidor
+    "http://77.42.92.151",        # Sin puerto
+
     ]
 
     # =========================================================================
@@ -100,6 +102,14 @@ class Settings(BaseSettings):
     LATCOM_API_KEY: Optional[str] = None
     LATCOM_USER_UID: Optional[str] = None
     LATCOM_TIMEOUT: int = 45
+
+
+    # Additional settings
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://77.42.92.151:5173,http://77.42.92.151:5174,http://77.42.92.151"
+    UPLOAD_DIR: str = "uploads"
+    MAX_UPLOAD_SIZE: int = 5242880
+    RATE_LIMIT_PER_MINUTE: int = 60
+    LOG_LEVEL: str = "INFO"
 
     # Mock legacy
     MOCK_MODE: str = "success"  # success, timeout, product_not_found, etc.

@@ -101,4 +101,9 @@ desktop.ini
 .cache/
 *.tsbuildinfo
 *.bak
-*.tmp
+*.tmpvendor_simulator/.venv/
+*.save
+*.log
+vendor_simulator/.venv/
+*.save
+*.log
