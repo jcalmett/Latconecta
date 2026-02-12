@@ -56,11 +56,14 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # =========================================================================
-    # CONFIGURACIÓN DE IZIPAY - PASARELA DE PAGOS
+    # CONFIGURACIÓN DE IZIPAY - PASARELA DE PAGOS (Nuevo SDK)
     # =========================================================================
-    IZIPAY_API_URL: str = "https://api.micuentaweb.pe"
-    IZIPAY_USERNAME: str = ""
-    IZIPAY_PASSWORD: str = ""
+    IZIPAY_API_URL: str = "https://sandbox-api-pw.izipay.pe"
+    IZIPAY_MERCHANT_CODE: str = ""
+    IZIPAY_API_KEY: str = ""
+    IZIPAY_HMAC_SHA256: str = ""
+    IZIPAY_TOKEN_ENDPOINT: str = "/security/v1/Token/Generate"
+    IZIPAY_RSA_PUBLIC_KEY: str = ""
 
     # Control de login con vendors
     # False en development (usa mock/simulador)

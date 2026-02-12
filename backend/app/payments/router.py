@@ -1,17 +1,21 @@
 # backend/app/payments/router.py
 """
-Payments Router - IZIPAY Integration
-Endpoints para manejo de pagos con tarjeta usando IZIPAY
+Payments Router - IZIPAY New SDK Integration
+Endpoints:
+  POST /payments/token    -> Genera token de sesión (backend -> Izipay API)
+  POST /payments/validate -> Valida firma HMAC del resultado (frontend -> backend)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, status
+import hashlib
+import hmac
+import base64
+import os
+import json
 import logging
 
-from app.database import get_db
-from app.models.purchase import Purchase
 from . import schemas, service
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,165 +24,123 @@ router = APIRouter(
     tags=["Payments"]
 )
 
-
-@router.post("/create")
-def create_payment(payload: schemas.PaymentCreateRequest):
-    """
-    Crea una orden de pago en modo sandbox.
-    No persiste en base de datos.
-    Retorna datos mínimos necesarios para iniciar Izipay Web Core.
-    
-    Returns:
-        {
-            "order_code": "abc-123-xyz",
-            "amount": 50.00,
-            "currency": "PEN",
-            "formToken": "SANDBOX_FORM_TOKEN_TEMPORAL"
-        }
-    """
-    return service.create_payment_order(payload.amount)
+IZIPAY_MERCHANT_CODE = settings.IZIPAY_MERCHANT_CODE
+IZIPAY_HMAC_SHA256 = settings.IZIPAY_HMAC_SHA256
+IZIPAY_RSA_PUBLIC_KEY = settings.IZIPAY_RSA_PUBLIC_KEY.replace("\\n", "\n")
 
 
-@router.post("/confirm")
-async def confirm_payment(
-    payload: schemas.PaymentConfirmRequest,
-    db: AsyncSession = Depends(get_db)
-):
+@router.post("/token", response_model=schemas.PaymentCreateResponse)
+async def create_token(payload: schemas.PaymentCreateRequest):
     """
-    Confirma el resultado del pago IZIPAY y actualiza el purchase
+    Genera un token de sesión llamando a Izipay API.
+    El frontend usa este token como 'authorization' en checkout.LoadForm().
     
-    Este endpoint es llamado por el FRONTEND después de que:
-    1. Usuario completa el formulario IZIPAY
-    2. IZIPAY procesa el pago (aprobado/rechazado)
-    3. Frontend recibe el resultado
-    
-    Args:
-        payload: {
-            "order_code": "ORD-abc123",
-            "success": true/false
-        }
-    
-    Process:
-        1. Buscar purchase por izipay_order_code
-        2. Actualizar estados según resultado
-        3. Si success=true: Ejecutar provisión
-        4. Retornar resultado actualizado
-    
-    Returns:
-        {
-            "purchase_id": 123,
-            "purchase_status": "Success" | "Failed",
-            "payment_status": "Success" | "Failed",
-            "message": "Payment confirmed successfully"
-        }
+    También retorna merchantCode y la RSA public key para el SDK.
     """
-    logger.info(f"💳 Payment confirmation received: order={payload.order_code}, success={payload.success}")
+    logger.info(f"💳 Token request: order={payload.order_number}, amount={payload.amount}")
     
-    try:
-        # ==================== BUSCAR PURCHASE ====================
-        
-        # Buscar purchase que tiene este izipay_order_code
-        # NOTA: Como izipay_order_code aún no está en el modelo de BD,
-        # temporalmente buscamos por purchase_reference o purchase_payment_ref
-        
-        # Por ahora, buscamos el purchase más reciente con payment_method='card' y status='Pending'
-        # En producción, esto debería buscar por izipay_order_code cuando esté en el modelo
-        
-        stmt = select(Purchase).where(
-            Purchase.purchase_payment_method == 'card',
-            Purchase.purchase_status == 'Pending'
-        ).order_by(Purchase.purchase_id.desc())
-        
-        result = await db.execute(stmt)
-        purchase = result.scalar_one_or_none()
-        
-        if not purchase:
-            logger.error(f"❌ Purchase not found for order_code: {payload.order_code}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Purchase not found for order: {payload.order_code}"
-            )
-        
-        logger.info(f"📋 Purchase found: ID={purchase.purchase_id}, REF={purchase.purchase_reference}")
-        
-        # ==================== ACTUALIZAR ESTADOS ====================
-        
-        if payload.success:
-            # ✅ PAGO EXITOSO
-            purchase.purchase_payment_status = 'Success'
-            purchase.purchase_status = 'Success'
-            purchase.purchase_payment_ref = f"IZIPAY-{payload.order_code}"
-            
-            logger.info(f"✅ Payment APPROVED for purchase {purchase.purchase_id}")
-            
-            # TODO: EJECUTAR PROVISIÓN AL VENDOR
-            # Aquí debería llamarse al universal_vendor_service para provisionar
-            # Por ahora lo dejamos pendiente porque requiere integración completa
-            
-            # from app.services.universal_vendor_service import UniversalVendorService
-            # vendor_service = UniversalVendorService(db)
-            # provision_result = await vendor_service.provision(...)
-            
-        else:
-            # ❌ PAGO RECHAZADO
-            purchase.purchase_payment_status = 'Failed'
-            purchase.purchase_status = 'Failed'
-            
-            logger.warning(f"❌ Payment REJECTED for purchase {purchase.purchase_id}")
-        
-        # Guardar cambios
-        await db.commit()
-        await db.refresh(purchase)
-        
-        logger.info(f"💾 Purchase updated: status={purchase.purchase_status}")
-        
-        # ==================== RETORNAR RESPONSE ====================
-        
-        return {
-            "success": True,
-            "purchase_id": purchase.purchase_id,
-            "purchase_reference": purchase.purchase_reference,
-            "purchase_status": purchase.purchase_status,
-            "payment_status": purchase.purchase_payment_status,
-            "payment_ref": purchase.purchase_payment_ref,
-            "message": "Payment confirmed successfully" if payload.success else "Payment rejected"
-        }
-        
-    except HTTPException:
-        raise
+    result = await service.generate_session_token(
+        order_number=payload.order_number,
+        amount=payload.amount,
+    )
     
-    except Exception as e:
-        logger.error(f"❌ Error confirming payment: {str(e)}", exc_info=True)
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error confirming payment: {str(e)}"
+    if result["success"]:
+        return schemas.PaymentCreateResponse(
+            success=True,
+            order_number=payload.order_number,
+            amount=payload.amount,
+            currency=payload.currency,
+            token=result["token"],
+            transaction_id=result["transactionId"],
+            merchant_code=IZIPAY_MERCHANT_CODE,
+        )
+    else:
+        # Retornamos el error sin lanzar excepción para que el frontend lo maneje
+        return schemas.PaymentCreateResponse(
+            success=False,
+            order_number=payload.order_number,
+            amount=payload.amount,
+            currency=payload.currency,
+            error=result.get("error", "Unknown error"),
         )
 
 
-@router.get("/status/{order_code}")
-async def get_payment_status(
-    order_code: str,
-    db: AsyncSession = Depends(get_db)
-):
+@router.post("/validate", response_model=schemas.PaymentValidateResponse)
+async def validate_payment(payload: schemas.PaymentValidateRequest):
     """
-    Consulta el estado de un pago por order_code
+    Valida la firma HMAC-SHA256 del resultado de pago.
     
-    Útil para que el frontend verifique el estado después de abrir el formulario IZIPAY
+    El SDK Izipay devuelve en callbackResponse:
+    - payloadHttp: JSON string con los datos del pago
+    - signature: hash HMAC-SHA256 en base64
     
-    Returns:
-        {
-            "order_code": "ORD-abc123",
-            "purchase_id": 123,
-            "payment_status": "Pending" | "Success" | "Failed",
-            "purchase_status": "Pending" | "Success" | "Failed"
-        }
+    Este endpoint verifica que la firma sea válida usando la Clave HASH.
     """
-    # Similar lógica de búsqueda que en confirm
-    # Por ahora retornamos estructura básica
+    logger.info(f"🔐 Validate request: order={payload.order_number}, txn={payload.transaction_id}")
     
+    try:
+        # Calcular HMAC-SHA256 del payloadHttp con la clave HASH
+        calculated_hash = hmac.new(
+            IZIPAY_HMAC_SHA256.encode("utf-8"),
+            payload.payload_http.encode("utf-8"),
+            hashlib.sha256
+        ).digest()
+        
+        calculated_signature = base64.b64encode(calculated_hash).decode("utf-8")
+        
+        is_valid = hmac.compare_digest(calculated_signature, payload.signature)
+        
+        if is_valid:
+            logger.info(f"✅ Valid signature for order {payload.order_number}")
+            
+            # Parsear el payload para extraer estado
+            try:
+                payment_data = json.loads(payload.payload_http)
+                payment_code = payment_data.get("code", "")
+                payment_message = payment_data.get("message", "")
+                
+                # Extraer estado de la orden
+                orders = payment_data.get("response", {}).get("order", [])
+                state_message = orders[0].get("stateMessage", "") if orders else ""
+                
+            except (json.JSONDecodeError, IndexError, KeyError):
+                payment_code = ""
+                state_message = ""
+                payment_message = ""
+            
+            return schemas.PaymentValidateResponse(
+                success=True,
+                valid_signature=True,
+                order_number=payload.order_number,
+                payment_status=state_message or ("Autorizado" if payment_code == "00" else "Denegado"),
+                message=payment_message,
+            )
+        else:
+            logger.warning(f"⚠️ Invalid signature for order {payload.order_number}")
+            return schemas.PaymentValidateResponse(
+                success=False,
+                valid_signature=False,
+                order_number=payload.order_number,
+                message="Firma inválida - datos posiblemente alterados",
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ Validation error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error validating payment: {str(e)}"
+        )
+
+
+@router.get("/config")
+async def get_payment_config():
+    """
+    Retorna la configuración pública necesaria para el SDK del frontend.
+    NO expone claves secretas.
+    """
     return {
-        "order_code": order_code,
-        "payment_status": "Pending",
-        "message": "Endpoint en desarrollo"
+        "merchantCode": IZIPAY_MERCHANT_CODE,
+        "keyRSA": IZIPAY_RSA_PUBLIC_KEY,
+        "environment": "sandbox",  # cambiar a "production" en prod
+        "sdkUrl": "https://sandbox-checkout.izipay.pe/payments/v1/js/index.js",
     }
