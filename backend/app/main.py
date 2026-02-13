@@ -180,7 +180,7 @@ app.include_router(mock_vendors.router, prefix="/api/v1/mock", tags=["Mock Vendo
 app.include_router(upload.router, prefix="/api/v1")
 
 # Payments router
-app.include_router(payments_router)
+app.include_router(payments_router, prefix="/api/v1")
 
 # Servir archivos estáticos
 uploads_dir = Path("uploads")

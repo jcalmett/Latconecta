@@ -35,6 +35,40 @@ const CountriesTab = ({
     return value.toString().replace(',', '.');
   };
 
+  /**
+   * Extraer mensaje legible de errores de API
+   * Maneja tanto strings como arrays de objetos de validación Pydantic
+   */
+  const extractErrorMessage = (error) => {
+    const detail = error.response?.data?.detail;
+
+    if (!detail) {
+      return error.message || "Error desconocido";
+    }
+
+    // Si detail es string, retornar directamente
+    if (typeof detail === "string") {
+      return detail;
+    }
+
+    // Si detail es array (errores de validación Pydantic), extraer mensajes
+    if (Array.isArray(detail)) {
+      return detail
+        .map((err) => {
+          const field = err.loc ? err.loc.slice(1).join(".") : "campo";
+          return `${field}: ${err.msg}`;
+        })
+        .join("; ");
+    }
+
+    // Si es objeto con msg
+    if (detail.msg) {
+      return detail.msg;
+    }
+
+    return "Error en la operación";
+  };
+
   useEffect(() => {
     if (editingItem) {
       setFormData({
@@ -98,19 +132,33 @@ const CountriesTab = ({
         }
       }
 
-      const dataToSend = {
-        ...formData,
+      // Construir payload base con los campos del formulario
+      const baseData = {
+        country_name: formData.country_name,
+        country_code: formData.country_code,
+        country_flag_photo: formData.country_flag_photo || null,
+        country_photo: formData.country_photo || null,
+        country_description: formData.country_description || null,
         country_er_usd: formData.country_er_usd ? parseFloat(normalizeDecimal(formData.country_er_usd)) : 3.75,
         country_er_date: formData.country_er_date || null,
-        updated_by: user?.email || "admin",
+        status: formData.status || "active",
       };
 
       if (editingItem) {
-        await countriesService.update(editingItem.country_id, dataToSend);
+        // UPDATE: incluir updated_by (aceptado por CountryUpdate)
+        const updateData = {
+          ...baseData,
+          updated_by: user?.email || "admin",
+        };
+        await countriesService.update(editingItem.country_id, updateData);
         showNotification(`País "${formData.country_name}" actualizado`);
       } else {
-        dataToSend.created_by = user?.email || "admin";
-        await countriesService.create(dataToSend);
+        // CREATE: incluir created_by, NO enviar updated_by (no existe en CountryCreate)
+        const createData = {
+          ...baseData,
+          created_by: user?.email || "admin",
+        };
+        await countriesService.create(createData);
         showNotification(`País "${formData.country_name}" creado`);
       }
 
@@ -118,7 +166,7 @@ const CountriesTab = ({
       resetForm();
     } catch (error) {
       console.error("Error al guardar país:", error);
-      const errorMsg = error.response?.data?.detail || "Error al guardar el país";
+      const errorMsg = extractErrorMessage(error);
       showNotification(errorMsg, "error");
     }
   };
@@ -135,7 +183,7 @@ const CountriesTab = ({
           await loadCountries();
         } catch (error) {
           console.error("Error al eliminar país:", error);
-          const errorMsg = error.response?.data?.detail || "Error al eliminar el país";
+          const errorMsg = extractErrorMessage(error);
           showNotification(errorMsg, "error");
         }
       },

@@ -813,9 +813,10 @@ const ProductsTab = ({
                           className="w-full px-4 py-1.5 border rounded-lg"
                         >
                           <option value="USD">USD - Dólares</option>
-                          <option value="MXN">MXN - Pesos</option>
+                          <option value="MXN">MXN - Pesos Mexico</option>
                           <option value="PEN">PEN - Soles</option>
-                          <option value="VED">VED - Bolivar</option>                         
+                          <option value="COP">COP - Peso Colombiano</option>                         
+                          <option value="VED">VES - Bolivar</option>                         
                         </select>
                       </div>
 

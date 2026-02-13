@@ -572,7 +572,7 @@ const CompaniesTab = ({
                           <option value="">Ninguna</option>
                           <option value="PEN">PEN</option>
                           <option value="MXN">MXN</option>
-                          <option value="CLP">CLP</option>
+                          <option value="VES">VES</option>
                           <option value="COP">COP</option>
                           <option value="USD">USD</option>
                         </select>

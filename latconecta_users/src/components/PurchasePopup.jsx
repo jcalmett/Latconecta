@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Loader2, AlertCircle, Download, FileText, Check, CreditCard, Smartphone } from 'lucide-react';
 import { getImageUrl, FALLBACK_IMAGES } from '../utils/imageHelper';
 import apiSimulator from '../services/apiSimulatorService';
+import paymentGateway from '../services/paymentGatewayService';
 
 const PurchasePopup = React.memo(({
   showPurchasePopup,
@@ -27,6 +28,14 @@ const PurchasePopup = React.memo(({
 }) => {
   if (!showPurchasePopup || !selectedProduct) return null;
 
+  // --- Payment Gateway State ---
+  const [showGatewayCheckout, setShowGatewayCheckout] = useState(false);
+  const [gatewayResult, setGatewayResult] = useState(null);
+
+  // Verificar qué métodos de pago están habilitados por el gateway
+  const cardEnabled = paymentGateway.isCardPaymentEnabled();
+  const barcodeEnabled = paymentGateway.isBarcodePaymentEnabled();
+
   const calculateTotalToPay = (amount) => {
     const baseAmount = parseFloat(amount) || 0;
     const discountPercentage = parseFloat(selectedProduct.product_discount_percentage || 0);
@@ -36,13 +45,22 @@ const PurchasePopup = React.memo(({
   };
 
   useEffect(() => {
-    if (company?.company_barcode_available === 'No' && purchaseData.paymentMethod === 'barcode') {
-      setPurchaseData(prev => ({ ...prev, paymentMethod: 'card' }));
+    // Barcode deshabilitado si: company no lo permite O gateway no lo tiene configurado
+    const barcodeAvailable = company?.company_barcode_available === 'Si' && barcodeEnabled;
+    if (!barcodeAvailable && purchaseData.paymentMethod === 'barcode') {
+      setPurchaseData(prev => ({ ...prev, paymentMethod: cardEnabled ? 'card' : '' }));
       if (showNotification) {
-        showNotification('Código de barras no disponible. Seleccione tarjeta.', 'info');
+        showNotification('Código de barras no disponible. Seleccione otro método.', 'info');
       }
     }
-  }, [company?.company_barcode_available, purchaseData.paymentMethod, setPurchaseData, showNotification]);
+    // Si solo un método disponible, preseleccionar
+    if (cardEnabled && !barcodeAvailable && !purchaseData.paymentMethod) {
+      setPurchaseData(prev => ({ ...prev, paymentMethod: 'card' }));
+    }
+    if (!cardEnabled && barcodeAvailable && !purchaseData.paymentMethod) {
+      setPurchaseData(prev => ({ ...prev, paymentMethod: 'barcode' }));
+    }
+  }, [company?.company_barcode_available, barcodeEnabled, cardEnabled, purchaseData.paymentMethod, setPurchaseData, showNotification]);
 
   useEffect(() => {
     if (purchaseStep === 2.6 && purchaseData.conversionApplies) {
@@ -638,84 +656,155 @@ const PurchasePopup = React.memo(({
             </div>
           )}
 
-          {/* PASO 4: Método de Pago */}
+          {/* PASO 4: Método de Pago + Checkout del Gateway */}
           {purchaseStep === 4 && (
             <div>
-              <h4 className="text-xl font-bold text-bitel-blue mb-4">Selecciona Método de Pago</h4>
+              {/* --- MODO CHECKOUT: Muestra el formulario del proveedor --- */}
+              {showGatewayCheckout && (() => {
+                const CheckoutComponent = paymentGateway.getCheckoutComponent('card');
+                if (!CheckoutComponent) return null;
+                return (
+                  <CheckoutComponent
+                    amount={(() => {
+                      if (selectedProduct.product_amount_type === 'F') {
+                        return parseFloat(selectedProduct.product_total_price);
+                      } else if (selectedProduct.product_amount_type === 'R') {
+                        return parseFloat(purchaseData.variableTotalToPay || 0);
+                      } else if (selectedProduct.product_amount_type === 'V') {
+                        return calculateTotalToPay(parseFloat(purchaseData.billPaymentAmount || 0));
+                      }
+                      return 0;
+                    })()}
+                    currency={selectedProduct.product_currency || 'PEN'}
+                    orderNumber={`LC${Date.now().toString().slice(-12)}`}
+                    user={user}
+                    onResult={(result) => {
+                      console.log('📨 Gateway result:', result);
+                      setShowGatewayCheckout(false);
+                      
+                      if (result.success) {
+                        setGatewayResult(result);
+                        handlePaymentAndProvision({
+                          payment_gateway: result.provider,
+                          payment_transaction_uuid: result.transactionUuid,
+                          payment_transaction_id: result.transactionId,
+                          payment_reference_number: result.referenceNumber,
+                          payment_order_number: result.orderNumber,
+                          payment_method_detail: result.payMethod,
+                          payment_code_auth: result.codeAuth,
+                          payment_amount: result.amount,
+                          payment_currency: result.currency,
+                        });
+                      } else {
+                        setError(result.message || 'El pago no fue procesado');
+                      }
+                    }}
+                    onCancel={() => {
+                      console.log('🚫 Checkout cancelado por usuario');
+                      setShowGatewayCheckout(false);
+                    }}
+                  />
+                );
+              })()}
 
-              <div className="space-y-4 mb-6">
-                <button
-                  onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'card' }))}
-                  className={`w-full p-4 rounded-lg border-2 transition-all ${
-                    purchaseData.paymentMethod === 'card'
-                      ? 'border-bitel-blue bg-blue-50'
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <CreditCard size={24} className="text-bitel-blue" />
-                    <div className="flex-1 text-left">
-                      <div className="font-bold">Tarjeta de Crédito/Débito</div>
-                      <div className="text-sm text-gray-600">Pago inmediato</div>
-                    </div>
-                    {purchaseData.paymentMethod === 'card' && (
-                      <Check size={24} className="text-bitel-blue" />
+              {/* --- MODO SELECCIÓN: Botones de método de pago --- */}
+              {!showGatewayCheckout && (
+                <>
+                  <h4 className="text-xl font-bold text-bitel-blue mb-4">Selecciona Método de Pago</h4>
+
+                  <div className="space-y-4 mb-6">
+                    {/* Opción: Tarjeta (solo si el gateway tiene proveedor de card) */}
+                    {cardEnabled && (
+                      <button
+                        onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'card' }))}
+                        className={`w-full p-4 rounded-lg border-2 transition-all ${
+                          purchaseData.paymentMethod === 'card'
+                            ? 'border-bitel-blue bg-blue-50'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <CreditCard size={24} className="text-bitel-blue" />
+                          <div className="flex-1 text-left">
+                            <div className="font-bold">Tarjeta / Yape / Plin</div>
+                            <div className="text-sm text-gray-600">Pago inmediato</div>
+                          </div>
+                          {purchaseData.paymentMethod === 'card' && (
+                            <Check size={24} className="text-bitel-blue" />
+                          )}
+                        </div>
+                      </button>
+                    )}
+
+                    {/* Opción: Barcode (solo si company lo permite Y gateway lo tiene) */}
+                    {company?.company_barcode_available === 'Si' && barcodeEnabled && (
+                      <button
+                        onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'barcode' }))}
+                        className={`w-full p-4 rounded-lg border-2 transition-all ${
+                          purchaseData.paymentMethod === 'barcode'
+                            ? 'border-bitel-blue bg-blue-50'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl">📊</div>
+                          <div className="flex-1 text-left">
+                            <div className="font-bold">Código de Barras</div>
+                            <div className="text-sm text-gray-600">Paga en tienda autorizada</div>
+                          </div>
+                          {purchaseData.paymentMethod === 'barcode' && (
+                            <Check size={24} className="text-bitel-blue" />
+                          )}
+                        </div>
+                      </button>
                     )}
                   </div>
-                </button>
 
-                {company?.company_barcode_available === 'Si' && (
-                  <button
-                    onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'barcode' }))}
-                    className={`w-full p-4 rounded-lg border-2 transition-all ${
-                      purchaseData.paymentMethod === 'barcode'
-                        ? 'border-bitel-blue bg-blue-50'
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="text-2xl">📊</div>
-                      <div className="flex-1 text-left">
-                        <div className="font-bold">Código de Barras</div>
-                        <div className="text-sm text-gray-600">Paga en tienda autorizada</div>
-                      </div>
-                      {purchaseData.paymentMethod === 'barcode' && (
-                        <Check size={24} className="text-bitel-blue" />
-                      )}
+                  {error && (
+                    <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm text-red-600">{error}</p>
                     </div>
-                  </button>
-                )}
-              </div>
+                  )}
 
-              {error && (
-                <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-sm text-red-600">{error}</p>
-                </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        if (purchaseData.productType === 'smartphone') {
+                          setPurchaseStep(2.5);
+                        } else if (purchaseData.productType === 'bill_payment' && selectedProduct.product_amount_type === 'V') {
+                          setPurchaseStep(2.6);
+                        } else {
+                          setPurchaseStep(3);
+                        }
+                      }}
+                      className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600"
+                    >
+                      Atrás
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!purchaseData.paymentMethod) {
+                          setError('Selecciona un método de pago');
+                          return;
+                        }
+                        setError(null);
+                        
+                        if (purchaseData.paymentMethod === 'card' && cardEnabled) {
+                          // Abrir checkout del proveedor de tarjeta
+                          setShowGatewayCheckout(true);
+                        } else {
+                          // Barcode: flujo actual sin cambios
+                          handlePaymentAndProvision();
+                        }
+                      }}
+                      disabled={!purchaseData.paymentMethod}
+                      className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
+                    >
+                      Procesar Compra
+                    </button>
+                  </div>
+                </>
               )}
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    if (purchaseData.productType === 'smartphone') {
-                      setPurchaseStep(2.5);
-                    } else if (purchaseData.productType === 'bill_payment' && selectedProduct.product_amount_type === 'V') {
-                      setPurchaseStep(2.6);
-                    } else {
-                      setPurchaseStep(3);
-                    }
-                  }}
-                  className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600"
-                >
-                  Atrás
-                </button>
-                <button
-                  onClick={handlePaymentAndProvision}
-                  disabled={!purchaseData.paymentMethod}
-                  className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
-                >
-                  Procesar Compra
-                </button>
-              </div>
             </div>
           )}
 

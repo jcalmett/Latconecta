@@ -160,6 +160,18 @@ class PurchaseCreateRequest(BaseModel):
     # Método de pago
     payment_method: Literal['card', 'barcode']
 
+    # Payment Gateway Data (datos de la transacción del proveedor de pago)
+    # Estos campos llegan cuando el frontend ya procesó el pago con Izipay/Stripe/etc.
+    payment_gateway: Optional[str] = None                  # 'izipay', 'stripe', etc.
+    payment_transaction_uuid: Optional[str] = None         # UUID para reversión
+    payment_transaction_id: Optional[str] = None           # ID generado por nosotros
+    payment_reference_number: Optional[str] = None         # Ref del adquirente
+    payment_order_number: Optional[str] = None             # LC-{timestamp}
+    payment_method_detail: Optional[str] = None            # YAPE_CODE, CARD, PLIN
+    payment_code_auth: Optional[str] = None                # Código autorización
+    payment_amount: Optional[Decimal] = None               # Monto cobrado
+    payment_currency: Optional[str] = None                 # Moneda del cobro
+
     # Metadatos
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
@@ -450,35 +462,21 @@ async def create_purchase(
         izipay_form_token = None  # Token para frontend
 
         if request.payment_method == 'card':
-            # ==================== PAGO CON TARJETA - IZIPAY ====================
-            # Crear orden de pago IZIPAY
-            # El formulario se abrirá en el frontend con el form_token
-            # El pago quedará Pending hasta que el usuario complete el formulario
+            # ==================== PAGO CON TARJETA - YA COBRADO POR GATEWAY ====================
+            # Con la nueva arquitectura, el pago ya fue procesado por el frontend
+            # (Izipay/Stripe/Conekta) ANTES de llegar aquí.
+            # Los datos del gateway vienen en el request como payment_gateway, 
+            # payment_transaction_uuid, payment_reference_number, etc.
+            # Solo registramos los datos y marcamos como Success.
             
-            from app.payments import service as payment_service
+            payment_status = 'Success'
+            payment_ref = getattr(request, 'payment_reference_number', None) or getattr(request, 'payment_transaction_id', None)
+            izipay_order_code = getattr(request, 'payment_order_number', None)
             
-            try:
-                payment_order = payment_service.create_payment_order(
-                    amount=float(calculation.purchase_total_amount)
-                )
-                
-                # Guardar datos de IZIPAY para tracking
-                izipay_order_code = payment_order['order_code']
-                izipay_form_token = payment_order.get('formToken')
-                
-                # El pago queda PENDING hasta que usuario complete formulario IZIPAY
-                payment_status = 'Pending'
-                payment_ref = None  # Se asignará en el callback de confirmación
-                
-                logger.info(f"💳 IZIPAY order created: {izipay_order_code}")
-                logger.info(f"📝 Form token generated (mode: {'mock' if izipay_form_token == 'SANDBOX_FORM_TOKEN_TEMPORAL' else 'real'})")
-                
-            except Exception as e:
-                logger.error(f"❌ IZIPAY order creation failed: {str(e)}")
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Error creating payment order: {str(e)}"
-                )
+            logger.info(f"💳 Card payment already processed by gateway: {getattr(request, 'payment_gateway', 'unknown')}")
+            logger.info(f"   Transaction UUID: {getattr(request, 'payment_transaction_uuid', 'N/A')}")
+            logger.info(f"   Reference: {payment_ref}")
+            logger.info(f"   Method: {getattr(request, 'payment_method_detail', 'N/A')}")
 
         elif request.payment_method == 'barcode':
             # Generar código de barras con formato real: LC260123160001000012.00

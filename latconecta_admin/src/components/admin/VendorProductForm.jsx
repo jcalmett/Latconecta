@@ -374,7 +374,8 @@ const VendorProductForm = ({ vendorProduct, onClose, onSuccess = () => {} }) => 
                 <option value="PEN">PEN</option>
                 <option value="USD">USD</option>
                 <option value="MXN">MXN</option>
-                <option value="VED">VED</option>
+                <option value="COP">COP</option>               
+                <option value="VES">VES</option>
               </select>
             </div>
 

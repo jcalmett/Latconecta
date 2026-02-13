@@ -421,7 +421,7 @@ const handleValidation = async () => {
   }
 };
 
-  const handlePaymentAndProvision = async () => {
+  const handlePaymentAndProvision = async (gatewayData = null) => {
     if (!purchaseData.paymentMethod) {
       setError('Selecciona un método de pago');
       return;
@@ -459,7 +459,21 @@ const handleValidation = async () => {
         delivery_name: purchaseData.deliveryName || null,
         delivery_phone: purchaseData.deliveryPhone || null,
         delivery_address: purchaseData.deliveryAddress || null,
-        user_email: user?.user_email || null
+        user_email: user?.user_email || null,
+
+        // --- Payment Gateway Data (datos de la transacción del proveedor de pago) ---
+        // CRÍTICOS para reversión si la provisión falla
+        ...(gatewayData && {
+          payment_gateway: gatewayData.payment_gateway,
+          payment_transaction_uuid: gatewayData.payment_transaction_uuid,
+          payment_transaction_id: gatewayData.payment_transaction_id,
+          payment_reference_number: gatewayData.payment_reference_number,
+          payment_order_number: gatewayData.payment_order_number,
+          payment_method_detail: gatewayData.payment_method_detail,
+          payment_code_auth: gatewayData.payment_code_auth,
+          payment_amount: gatewayData.payment_amount,
+          payment_currency: gatewayData.payment_currency,
+        }),
       };
 
       console.log('📤 Enviando purchase request:', purchaseRequest);

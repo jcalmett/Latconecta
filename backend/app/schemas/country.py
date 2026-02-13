@@ -22,7 +22,7 @@ class CountryBase(BaseModel):
     country_er_usd: Optional[Decimal] = Field(
         default=3.75,
         ge=0,
-        le=99.999999,
+        le=9999.999999,
         description="Tasa de cambio a USD"
     )
     country_er_date: Optional[datetime] = Field(
@@ -70,7 +70,7 @@ class CountryUpdate(BaseModel):
     country_description: Optional[str] = Field(None, max_length=500)
 
     # Tasa de cambio - ✅ CORREGIDO
-    country_er_usd: Optional[Decimal] = Field(None, ge=0, le=99.999999)
+    country_er_usd: Optional[Decimal] = Field(None, ge=0, le=9999.999999)
     country_er_date: Optional[datetime] = None
 
     status: Optional[str] = Field(None, pattern="^(active|inactive)$")
