@@ -6,6 +6,9 @@ USO:
 1. Configurar respuestas en config/mock_config.json
 2. O usar variables de entorno
 3. O cambiar directamente en este archivo (para pruebas rápidas)
+4. O desde el MockControlPanel en el frontend (en tiempo real)
+
+✅ ACTUALIZADO: Agregado ANULACION_GATEWAY para controlar anulación real de pagos
 """
 
 import os
@@ -20,11 +23,11 @@ logger = logging.getLogger(__name__)
 
 class MockAPIService:
     """Servicio para simular APIs externas"""
-    
+
     def __init__(self):
         # ==================== CONFIGURACIÓN DE RESPUESTAS ====================
         # Cambiar estos valores para probar diferentes escenarios
-        
+
         self.config = {
             # VALIDACIONES
             'VALNRO': {
@@ -39,7 +42,7 @@ class MockAPIService:
                 'indicador': 'T',        # 'T' = Total, 'R' = Parcial permitido
                 'delay_ms': 300
             },
-            
+
             # PAGOS
             'PAGOTARJETA': {
                 'enabled': True,
@@ -51,7 +54,7 @@ class MockAPIService:
                 'response': 'success',  # 'success' | 'error'
                 'delay_ms': 200
             },
-            
+
             # PROVISIÓN (por tipo de producto)
             'PROVISION_TOPUP': {
                 'enabled': True,
@@ -78,26 +81,36 @@ class MockAPIService:
                 'response': 'success',
                 'delay_ms': 1000
             },
-            
-            # REVERSIÓN
+
+            # REVERSIÓN (NIVEL 1 - mock, sin APIs externas)
             'REVERSION': {
                 'enabled': True,
                 'response': 'success',  # 'success' | 'error'
                 'delay_ms': 400
-            }
+            },
+
+            # ✅ NUEVO: ANULACIÓN VIA GATEWAY (NIVEL 2 - APIs reales)
+            # Controla si la anulación real (IZIPAY/Conekta/Stripe) se ejecuta
+            # 'success' → llama al gateway real para anular
+            # 'error'   → simula fallo de anulación sin llamar al gateway
+            'ANULACION_GATEWAY': {
+                'enabled': True,
+                'response': 'success',  # 'success' | 'error'
+                'delay_ms': 500
+            },
         }
-        
+
         # Intentar cargar desde archivo (opcional)
         self._load_from_file()
-        
+
         # Logs de configuración inicial
         logger.info("🎭 MockAPIService inicializado")
         self._log_config()
-    
+
     def _load_from_file(self):
         """Cargar configuración desde archivo JSON (opcional)"""
         config_file = Path(__file__).parent.parent / "config" / "mock_config.json"
-        
+
         if config_file.exists():
             try:
                 with open(config_file, 'r') as f:
@@ -106,7 +119,7 @@ class MockAPIService:
                     logger.info(f"📄 Configuración cargada desde {config_file}")
             except Exception as e:
                 logger.warning(f"No se pudo cargar {config_file}: {e}")
-    
+
     def _log_config(self):
         """Mostrar configuración actual en logs"""
         logger.info("=" * 60)
@@ -115,13 +128,13 @@ class MockAPIService:
             status = "✅" if cfg['response'] == 'success' else "❌"
             logger.info(f"  {api:25} → {status} {cfg['response']}")
         logger.info("=" * 60)
-    
+
     # ==================== VALIDACIONES ====================
-    
+
     def validate_phone(self, phone_number: str) -> Dict[str, Any]:
         """
         Simula validación de número telefónico (VALNRO)
-        
+
         Returns:
             {
                 'valid': True/False,
@@ -130,7 +143,7 @@ class MockAPIService:
             }
         """
         config = self.config['VALNRO']
-        
+
         if config['response'] == 'success':
             return {
                 'valid': True,
@@ -144,11 +157,11 @@ class MockAPIService:
                 'phone_number': phone_number,
                 'error_message': 'Número no válido (simulado)'
             }
-    
+
     def validate_account(self, account_number: str) -> Dict[str, Any]:
         """
         Simula validación de cuenta (VALCUENTA)
-        
+
         Returns:
             {
                 'valid': True/False,
@@ -160,7 +173,7 @@ class MockAPIService:
             }
         """
         config = self.config['VALCUENTA']
-        
+
         if config['response'] == 'success':
             return {
                 'valid': True,
@@ -176,13 +189,13 @@ class MockAPIService:
                 'account_number': account_number,
                 'error_message': 'Cuenta no encontrada (simulado)'
             }
-    
+
     # ==================== PAGOS ====================
-    
+
     def process_card_payment(self, amount: float, card_data: Dict = None) -> Dict[str, Any]:
         """
         Simula procesamiento de pago con tarjeta (PAGOTARJETA)
-        
+
         Returns:
             {
                 'success': True/False,
@@ -193,7 +206,7 @@ class MockAPIService:
             }
         """
         config = self.config['PAGOTARJETA']
-        
+
         if config['response'] == 'success':
             return {
                 'success': True,
@@ -210,11 +223,11 @@ class MockAPIService:
                 'error_message': 'Tarjeta rechazada (simulado)',
                 'timestamp': datetime.now().isoformat()
             }
-    
+
     def generate_barcode(self, amount: float) -> Dict[str, Any]:
         """
         Simula generación de código de barras (BARCODE)
-        
+
         Returns:
             {
                 'success': True/False,
@@ -226,7 +239,7 @@ class MockAPIService:
             }
         """
         config = self.config['BARCODE']
-        
+
         if config['response'] == 'success':
             barcode_number = f"BC{datetime.now().strftime('%Y%m%d%H%M%S')}"
             return {
@@ -243,17 +256,17 @@ class MockAPIService:
                 'error_code': 'BARCODE_ERROR',
                 'error_message': 'Error generando código de barras (simulado)'
             }
-    
+
     # ==================== PROVISIÓN ====================
-    
+
     def provision_service(
-        self, 
+        self,
         product_type: Literal['topup', 'package', 'transfer', 'bill_payment', 'smartphone'],
         provision_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Simula provisión del servicio según el tipo de producto
-        
+
         Returns:
             {
                 'success': True/False,
@@ -265,14 +278,14 @@ class MockAPIService:
         # Mapear tipo de producto a configuración
         config_key = f"PROVISION_{product_type.upper()}"
         config = self.config.get(config_key, self.config['PROVISION_TOPUP'])
-        
+
         if config['response'] == 'success':
             # Delivery status según tipo
             if product_type == 'smartphone':
                 delivery_status = 'ordered'
             else:
                 delivery_status = 'completed'
-            
+
             return {
                 'success': True,
                 'provision_ref': f"PROV-{product_type.upper()}-{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -287,13 +300,13 @@ class MockAPIService:
                 'error_message': f'Error en provisión de {product_type} (simulado)',
                 'timestamp': datetime.now().isoformat()
             }
-    
+
     # ==================== REVERSIÓN ====================
-    
+
     def reverse_payment(self, payment_ref: str, amount: float) -> Dict[str, Any]:
         """
-        Simula reversión de pago (REVERSION)
-        
+        Simula reversión de pago (REVERSION) - NIVEL 1
+
         Returns:
             {
                 'success': True/False,
@@ -304,7 +317,7 @@ class MockAPIService:
             }
         """
         config = self.config['REVERSION']
-        
+
         if config['response'] == 'success':
             return {
                 'success': True,
@@ -322,13 +335,51 @@ class MockAPIService:
                 'error_message': 'Error en reversión (simulado)',
                 'timestamp': datetime.now().isoformat()
             }
-    
+
+    # ==================== ✅ NUEVO: ANULACIÓN GATEWAY ====================
+
+    def should_call_real_gateway_cancel(self) -> bool:
+        """
+        Verifica si se debe llamar al gateway real para anulación.
+
+        Controlado desde el MockControlPanel con ANULACION_GATEWAY:
+        - 'success' → SÍ llamar al gateway real (IZIPAY/Conekta/Stripe)
+        - 'error'   → NO llamar, simular fallo directo
+
+        Returns:
+            True si debe llamar al gateway real
+        """
+        config = self.config.get('ANULACION_GATEWAY', {})
+        return config.get('response') == 'success'
+
+    def simulate_gateway_cancel_failure(self, payment_ref: str, amount: float) -> Dict[str, Any]:
+        """
+        Simula un fallo de anulación del gateway (cuando ANULACION_GATEWAY='error')
+
+        Returns:
+            dict con formato normalizado de fallo
+        """
+        logger.warning(f"🎭 MOCK: Simulando fallo de anulación gateway para {payment_ref}")
+        return {
+            'success': False,
+            'gateway': 'mock',
+            'cancel_id': None,
+            'authorization_code_cancel': None,
+            'message': 'Anulación fallida (simulado por MockControlPanel)',
+            'raw_response': {
+                'mock': True,
+                'original_payment_ref': payment_ref,
+                'amount': amount,
+                'timestamp': datetime.now().isoformat()
+            }
+        }
+
     # ==================== CONFIGURACIÓN DINÁMICA ====================
-    
+
     def set_api_response(self, api_name: str, response: Literal['success', 'error']):
         """
         Cambiar respuesta de una API en tiempo de ejecución
-        
+
         Ejemplo:
             mock_service.set_api_response('PAGOTARJETA', 'error')
             # Ahora todos los pagos fallarán
@@ -340,14 +391,14 @@ class MockAPIService:
         else:
             logger.warning(f"⚠️ API {api_name} no encontrada en configuración")
             return False
-    
+
     def reset_all_success(self):
         """Configurar todas las APIs para retornar éxito"""
         for api in self.config.keys():
             self.config[api]['response'] = 'success'
         logger.info("✅ Todas las APIs configuradas en SUCCESS")
         self._log_config()
-    
+
     def reset_all_error(self):
         """Configurar todas las APIs para retornar error"""
         for api in self.config.keys():

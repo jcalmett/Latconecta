@@ -3,6 +3,7 @@
 # Integración con cualquier vendor sin código nuevo
 # ✅ ACTUALIZADO CON api_group_code
 # ✅ ACTUALIZADO CON vendor simulator support (Fase 2)
+# ✅ ACTUALIZADO CON extra_headers en api_key_header (LATCOM)
 # ========================================
 
 import httpx
@@ -279,6 +280,11 @@ class UniversalVendorService:
     ) -> Dict[str, str]:
         """
         Construye headers del request
+
+        Tipos soportados:
+        - bearer: Authorization: Bearer {token}
+        - api_key_header: {header_name}: {api_key} + extra_headers opcionales
+        - basic: Authorization: Basic {base64(user:pass)}
         """
         headers = {
             "Content-Type": "application/json",
@@ -294,6 +300,16 @@ class UniversalVendorService:
         elif auth_type == 'api_key_header':
             header_name = auth_config.get('header_name', 'X-API-Key')
             headers[header_name] = vendor_info['api_key']
+            # ✅ NUEVO: Soporte para headers adicionales de autenticación
+            # Permite configurar múltiples headers desde auth_config
+            # Ejemplo LATCOM: x-api-key + x-customer-id
+            extra_headers = auth_config.get('extra_headers', {})
+            for key, value in extra_headers.items():
+                if value == '{vendor_username}':
+                    value = vendor_info.get('username', '')
+                elif value == '{vendor_api_key}':
+                    value = vendor_info.get('api_key', '')
+                headers[key] = value
 
         elif auth_type == 'basic':
             import base64

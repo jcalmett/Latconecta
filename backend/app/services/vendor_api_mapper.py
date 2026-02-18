@@ -3,6 +3,7 @@
 # Motor de transformación configurable
 # NO REQUIERE CÓDIGO NUEVO POR VENDOR
 # ✅ ACTUALIZADO: Soporta formato JSONPath
+# ✅ ACTUALIZADO: Transformación country_alpha3_to_alpha2
 # ========================================
 
 from typing import Dict, Any, List, Optional
@@ -16,6 +17,30 @@ class VendorAPIMapper:
     Motor que transforma datos de Latconecta a formato de vendor API
     basado en configuración de BD
     """
+
+    # Tabla de conversión ISO 3166-1 alpha-3 → alpha-2
+    COUNTRY_ALPHA3_TO_ALPHA2 = {
+        'ARG': 'AR',
+        'BOL': 'BO',
+        'BRA': 'BR',
+        'CHL': 'CL',
+        'COL': 'CO',
+        'CRI': 'CR',
+        'CUB': 'CU',
+        'DOM': 'DO',
+        'ECU': 'EC',
+        'GTM': 'GT',
+        'HND': 'HN',
+        'MEX': 'MX',
+        'NIC': 'NI',
+        'PAN': 'PA',
+        'PER': 'PE',
+        'PRY': 'PY',
+        'SLV': 'SV',
+        'URY': 'UY',
+        'USA': 'US',
+        'VEN': 'VE',
+    }
 
     def __init__(self, mapping_config: Dict[str, Any]):
         """
@@ -145,29 +170,29 @@ class VendorAPIMapper:
 
         transformations = self.value_transformations[field_name]
 
-        # Trim
+        # 1. Trim
         if transformations.get('trim') and isinstance(value, str):
             value = value.strip()
 
-        # Remove spaces
+        # 2. Remove spaces
         if transformations.get('remove_spaces') and isinstance(value, str):
             value = value.replace(' ', '')
 
-        # Format number
+        # 3. Format number
         if 'format' in transformations:
             if isinstance(value, (int, float, Decimal)):
                 format_str = transformations['format']
                 value = format_str % float(value)
 
-        # To string
+        # 4. To string
         if transformations.get('to_string'):
             value = str(value)
 
-        # To integer
+        # 5. To integer
         if transformations.get('to_integer'):
             value = int(float(value))
 
-        # Add country prefix
+        # 6. Add country prefix
         if transformations.get('add_country_prefix'):
             country_source = transformations.get('country_source')
             if country_source:
@@ -175,10 +200,17 @@ class VendorAPIMapper:
                 country_prefix = self._get_country_prefix(country_code)
                 value = f"{country_prefix}{value}"
 
-        # Strip country code
+        # 7. Strip country code
         if transformations.get('strip_country_code'):
             # Eliminar prefijos comunes: +51, 51, etc.
             value = re.sub(r'^\+?\d{1,3}', '', str(value))
+
+        # 8. Country alpha-3 → alpha-2 (ej: VEN → VE, PER → PE, MEX → MX)
+        if transformations.get('country_alpha3_to_alpha2'):
+            value = self.COUNTRY_ALPHA3_TO_ALPHA2.get(
+                str(value).upper(),
+                str(value)[:2]  # Fallback: tomar primeros 2 caracteres
+            )
 
         return value
 
@@ -243,14 +275,14 @@ class VendorAPIMapper:
     def parse_response(self, vendor_response: Dict[str, Any]) -> Dict[str, Any]:
         """
         Parsea respuesta del vendor a formato Latconecta
-        
+
         El response_mapping tiene formato:
         {
           "vendor_field": "latconecta_field",
           "trans_id": "vendor_trans_id",
           "status": "purchase_status"
         }
-        
+
         Donde KEY = campo en response del vendor
               VALUE = campo destino en Latconecta
         """
@@ -309,7 +341,7 @@ class VendorAPIMapper:
             # ✅ NUEVO: Extraer campo del JSONPath si aplica
             if isinstance(success_field, str) and success_field.startswith('$.'):
                 success_field = success_field[2:]
-            
+
             success_values = success_config.get('success_values', [])
             actual_value = self._get_nested_value(response_data, success_field)
             return actual_value in success_values

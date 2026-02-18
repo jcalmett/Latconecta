@@ -56,14 +56,50 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # =========================================================================
-    # CONFIGURACIÓN DE IZIPAY - PASARELA DE PAGOS (Nuevo SDK)
+    # CONFIGURACIÓN DE DEPLOYMENT (País de instalación)
+    # =========================================================================
+    # País donde está instalado el sistema (determina gateway de pagos,
+    # barcode API, y regulaciones locales).
+    # IMPORTANTE: Esto NO es el catálogo de países (tabla countries en BD).
+    # Los countries en BD agrupan servicios/productos disponibles para venta.
+    # DEPLOYMENT_COUNTRY indica DESDE DÓNDE se vende y CÓMO se cobra.
+    #
+    # Valores: PE (Perú), MX (México), US (USA)
+    DEPLOYMENT_COUNTRY: str = "PE"
+
+    # Gateway de pagos activo para esta instalación
+    # PE → izipay  (tarjeta, Yape, Plin)
+    # MX → conekta (tarjeta, OXXO, SPEI) - futuro
+    # US → stripe  (tarjeta, Apple Pay)  - futuro
+    PAYMENT_GATEWAY: str = "izipay"
+
+    # =========================================================================
+    # CONFIGURACIÓN DE IZIPAY - PASARELA DE PAGOS (Peru)
+    # Solo aplica cuando PAYMENT_GATEWAY=izipay
     # =========================================================================
     IZIPAY_API_URL: str = "https://sandbox-api-pw.izipay.pe"
     IZIPAY_MERCHANT_CODE: str = ""
     IZIPAY_API_KEY: str = ""
     IZIPAY_HMAC_SHA256: str = ""
     IZIPAY_TOKEN_ENDPOINT: str = "/security/v1/Token/Generate"
+    IZIPAY_CANCEL_PATH: str = "/cancel/api/Transaction/Cancel"
     IZIPAY_RSA_PUBLIC_KEY: str = ""
+
+    # =========================================================================
+    # CONFIGURACIÓN DE CONEKTA - PASARELA DE PAGOS (México) - FUTURO
+    # Solo aplica cuando PAYMENT_GATEWAY=conekta
+    # =========================================================================
+    # CONEKTA_API_KEY: str = ""
+    # CONEKTA_API_VERSION: str = "2.1.0"
+    # CONEKTA_LOCALE: str = "es"
+
+    # =========================================================================
+    # CONFIGURACIÓN DE STRIPE - PASARELA DE PAGOS (USA) - FUTURO
+    # Solo aplica cuando PAYMENT_GATEWAY=stripe
+    # =========================================================================
+    # STRIPE_SECRET_KEY: str = ""
+    # STRIPE_PUBLISHABLE_KEY: str = ""
+    # STRIPE_WEBHOOK_SECRET: str = ""
 
     # Control de login con vendors
     # False en development (usa mock/simulador)

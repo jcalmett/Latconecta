@@ -1,7 +1,8 @@
 // frontend/src/components/IzipayCheckout.jsx
 /**
  * Izipay Checkout Component (Nuevo SDK - Modo Pop-up)
- * 
+ * ✅ ACTUALIZADO: Captura datos de anulación del validate response
+ *
  * Flujo:
  * 1. Recibe token de sesión del backend
  * 2. Configura iziConfig con datos de la orden
@@ -9,7 +10,8 @@
  * 4. Llama checkout.LoadForm({authorization, keyRSA, callbackResponse})
  * 5. El SDK abre el pop-up de pago
  * 6. callbackResponse recibe el resultado
- * 7. Se valida firma en backend
+ * 7. Se valida firma en backend (ahora retorna datos para anulación)
+ * 8. Se pasan los datos de anulación al componente padre via onResult
  */
 import { useState, useCallback } from "react";
 import { requestSessionToken, validatePayment, getPaymentConfig } from "../services/paymentService";
@@ -41,7 +43,7 @@ export default function IzipayCheckout({ amount, currency, orderNumber, onResult
       // --- PASO 3: Generar transactionId y dateTimeTransaction ---
       const now = new Date();
       const transactionId = tokenData.transaction_id || `${Date.now()}`;
-      const dateTimeTransaction = now.toISOString().replace(/[-:T]/g, "").slice(0, 14);
+      const dateTimeTransaction = (Math.floor(Date.now()) * 1000).toString();
 
       // --- PASO 4: Configurar iziConfig para pop-up ---
       const iziConfig = {
@@ -54,16 +56,16 @@ export default function IzipayCheckout({ amount, currency, orderNumber, onResult
           currency: currency,
           amount: amount,
           processType: "AT",
-           merchantBuyerId: `BUYER_${Date.now()}`,
+          merchantBuyerId: `BUYER_${Date.now()}`,
           dateTimeTransaction: dateTimeTransaction,
         },
         appearance: {
           customize: {
-          elements: [
-            { paymentMethod: 'YAPE_CODE', order: 1 },
-            { paymentMethod: 'PAGO_PUSH', order: 2 },
-            { paymentMethod: 'CARD', order: 3 },
-          ]
+            elements: [
+              { paymentMethod: 'YAPE_CODE', order: 1 },
+              { paymentMethod: 'PAGO_PUSH', order: 2 },
+              { paymentMethod: 'CARD', order: 3 },
+            ]
           }
         },
 
@@ -90,7 +92,7 @@ export default function IzipayCheckout({ amount, currency, orderNumber, onResult
       // --- PASO 5: Verificar que el SDK esté cargado ---
       if (typeof window.Izipay === "undefined") {
         throw new Error(
-          "SDK de Izipay no cargado. Verifica que index.html incluya el script de sandboxcheckout.izipay.pe"
+          "SDK de Izipay no cargado. Verifica que index.html incluya el script de sandbox-checkout.izipay.pe"
         );
       }
 
@@ -111,10 +113,27 @@ export default function IzipayCheckout({ amount, currency, orderNumber, onResult
               transactionId
             );
 
-            console.log("🔐 Validation result:", validation);
+            console.log("🔍 Validation result:", validation);
 
             if (validation.valid_signature) {
               setStatus("success");
+
+              // ✅ NUEVO: Construir datos para anulación desde el validate response
+              const cancelData = {
+                gateway: "izipay",
+                transaction_id: transactionId,
+                order_number: orderNumber,
+                amount: validation.amount || amount,
+                currency: validation.currency || currency,
+                unique_id: validation.unique_id,
+                authorization_code: validation.authorization_code,
+                transaction_datetime: validation.transaction_datetime,
+                pay_method: validation.pay_method || "CARD",
+                channel: validation.channel || "ecommerce",
+              };
+
+              console.log("📋 Cancel data prepared:", cancelData);
+
               onResult?.({
                 success: true,
                 code: response.code,
@@ -123,6 +142,8 @@ export default function IzipayCheckout({ amount, currency, orderNumber, onResult
                 orderNumber: orderNumber,
                 transactionId: transactionId,
                 response: response,
+                // ✅ NUEVO: Datos para anulación
+                cancelData: cancelData,
               });
             } else {
               setStatus("error");
