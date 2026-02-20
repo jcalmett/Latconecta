@@ -402,8 +402,9 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="PEN">PEN</option>
+                      <option value="VES">VES</option>
+                      <option value="USD">USD</option>
                       <option value="MXN">MXN</option>
-                      <option value="EUR">EUR</option>
                       <option value="COP">COP</option>
                     </select>
                   </div>

@@ -48,6 +48,7 @@ app = FastAPI(
     * **Purchases** - Transacciones y compras
     * **Vendor API Mappings** - Mapeo de APIs de vendors
     * **Mock Vendors** - Sistema de mock para testing
+    * **Operations Config** - Control centralizado de operaciones
     """,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -63,9 +64,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ═══════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════
 # MIDDLEWARE PARA CORS EN ARCHIVOS ESTÁTICOS
-# ═══════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════
 
 @app.middleware("http")
 async def add_cors_headers_to_static_files(request: Request, call_next):
@@ -147,15 +148,15 @@ from app.routers import (
     services, 
     companies, 
     purchases,
-    exchange_rate,  # ← NUEVO 
+    exchange_rate,
     upload, 
     countries, 
     vendors, 
     vendor_products, 
     latconecta,
-    vendor_api_mappings,  # ⭐ NUEVO
-    mock_vendors,         # ⭐ NUEVO
-    mock_config
+    vendor_api_mappings,
+    mock_vendors,
+    operations_config,     # ✅ NUEVO: Reemplaza mock_config
 )
 
 # Registrar routers con PREFIXES CORRECTOS
@@ -170,9 +171,11 @@ app.include_router(vendors.router, prefix="/api/v1/vendors", tags=["Vendors"])
 app.include_router(vendor_products.router, prefix="/api/v1/vendor-products", tags=["Vendor Products"])
 app.include_router(latconecta.router, prefix="/api/v1/latconecta", tags=["Latconecta"])
 app.include_router(exchange_rate.router, prefix="/api/v1/exchange-rate", tags=["Exchange Rate"])
-app.include_router(mock_config.router, prefix="/api/v1/mock", tags=["Mock Config"])
 
-# ⭐ NUEVOS ROUTERS
+# ✅ NUEVO: Control centralizado de operaciones (reemplaza mock_config)
+app.include_router(operations_config.router, prefix="/api/v1/operations", tags=["Operations Config"])
+
+# Vendor API Mappings y Mock Vendors (se mantienen)
 app.include_router(vendor_api_mappings.router, prefix="/api/v1/vendor-api-mappings", tags=["Vendor API Mappings"])
 app.include_router(mock_vendors.router, prefix="/api/v1/mock", tags=["Mock Vendors"])
 

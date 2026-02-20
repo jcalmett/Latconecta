@@ -4,13 +4,13 @@ import { X, ShoppingCart, CreditCard, Smartphone, Check, AlertCircle, Loader2, D
 import servicesService from '../services/servicesService';
 import productsService from '../services/productsService';
 import purchasesService from '../services/purchasesService';
-import apiSimulator from '../services/apiSimulatorService';
 import exchangeRateService from '../services/exchangeRateService';
 import vendorProductsService from '../services/vendorProductsService';
 import { getImageUrl, FALLBACK_IMAGES } from '../utils/imageHelper';
 import companiesService from '../services/companiesService';
 import { getUploadUrl } from '../utils/uploadHelper';
 import PurchasePopup from '../components/PurchasePopup';
+import OperationsPanel from '../components/OperationsPanel';
 import jsPDF from 'jspdf';
 import countriesService from '../services/countriesService';
 
@@ -291,16 +291,15 @@ const handleValidation = async () => {
           selectedProduct.product_id,
           purchaseData.accountNumber
         );
-      } else {
-        // ❌ NO tiene mapping → Usar mock
-        console.log('Using mock validation for account (no API mapping)');
-        
-        if (apiSimulator.isEnabled()) {
-          response = await apiSimulator.validateAccount(purchaseData.accountNumber);
-        } else {
-          throw new Error('API real no implementada y sin mappings configurados');
-        }
-      }
+
+ } else {
+    // Sin mapping → Backend decide (fase1 simula, fase2 sin mapping simula también)
+    console.log('Using backend validation for account (no API mapping)');
+    response = await purchasesService.validateAccount(
+      selectedProduct.product_id,
+      purchaseData.accountNumber
+    );
+  }
 
       // ✅ CORREGIDO: Procesar respuesta con mejor manejo de errores
       console.log('Account validation response:', response);
@@ -359,16 +358,16 @@ const handleValidation = async () => {
           selectedProduct.product_id,
           purchaseData.phoneNumber
         );
-      } else {
-        // ❌ NO tiene mapping → Usar mock
-        console.log('Using mock validation for phone (no API mapping)');
-        
-        if (apiSimulator.isEnabled()) {
-          response = await apiSimulator.validatePhone(purchaseData.phoneNumber);
-        } else {
-          throw new Error('API real no implementada y sin mappings configurados');
-        }
-      }
+
+  } else {
+    // Sin mapping → Backend decide
+    console.log('Using backend validation for phone (no API mapping)');
+    response = await purchasesService.validatePhone(
+      selectedProduct.product_id,
+      purchaseData.phoneNumber
+    );
+  }
+
 
       // ✅ CORREGIDO: Procesar respuesta con mejor manejo de errores
       console.log('Phone validation response:', response);
@@ -473,6 +472,7 @@ const handleValidation = async () => {
           payment_code_auth: gatewayData.payment_code_auth,
           payment_amount: gatewayData.payment_amount,
           payment_currency: gatewayData.payment_currency,
+          payment_transaction_datetime: gatewayData.payment_transaction_datetime,
         }),
       };
 
@@ -510,7 +510,12 @@ const handleValidation = async () => {
       const errorMsg = error.message || 'Error al procesar la compra';
       const isPaymentError = errorMsg.includes('Payment failed') ||
                              errorMsg.includes('Tarjeta rechazada') ||
-                             errorMsg.includes('Barcode generation failed');
+                             errorMsg.includes('Barcode generation failed') ||
+                             errorMsg.includes('rechazado') ||
+                             errorMsg.includes('fallido') ||
+                             errorMsg.includes('simulado') ||
+                             errorMsg.includes('Insufficient') ||
+                             errorMsg.includes('vendor balance');
 
       if (isPaymentError) {
         setError(errorMsg);
@@ -1360,6 +1365,7 @@ Dirección: ${purchaseData.deliveryAddress}
       </div>
 
       <ProductDetailModal />
+      <OperationsPanel />
       <PurchasePopup
         showPurchasePopup={showPurchasePopup}
         selectedProduct={selectedProduct}

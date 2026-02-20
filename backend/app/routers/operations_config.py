@@ -11,7 +11,7 @@ Endpoints para:
 """
 
 from fastapi import APIRouter, HTTPException, status
-from typing import Literal, Dict, Any, Optional
+from typing import Literal, Any, Optional
 from pydantic import BaseModel
 
 from app.services.operations_config_service import ops_config
@@ -26,10 +26,6 @@ class OperationUpdate(BaseModel):
     mode: Literal['fase1', 'fase2']
     fase1_response: Literal['success', 'fail'] = 'success'
 
-
-class BatchUpdate(BaseModel):
-    """Actualizar múltiples operaciones"""
-    operations: Dict[str, OperationUpdate]
 
 
 class ValCuentaParams(BaseModel):
@@ -72,6 +68,27 @@ async def get_payment_config():
     return ops_config.get_payment_config()
 
 
+
+@router.post("/config/val-cuenta-params")
+async def update_val_cuenta_params(params: ValCuentaParams):
+    """
+    Configurar parámetros de simulación de validación de cuenta.
+
+    POST /api/v1/operations/config/val-cuenta-params
+    { "monto_base": 150.00, "indicador": "R" }
+    """
+    ops_config.set_val_cuenta_params(
+        monto_base=params.monto_base,
+        indicador=params.indicador,
+        account_holder=params.account_holder
+    )
+
+    return {
+        "success": True,
+        "params": ops_config.config['val_cuenta'].get('fase1_params', {}),
+    }
+
+
 @router.post("/config/{operation}")
 async def update_operation(operation: str, update: OperationUpdate):
     """
@@ -100,52 +117,8 @@ async def update_operation(operation: str, update: OperationUpdate):
     }
 
 
-@router.post("/config/batch")
-async def update_batch(batch: BatchUpdate):
-    """
-    Actualizar múltiples operaciones de un golpe.
-
-    POST /api/v1/operations/config/batch
-    {
-        "operations": {
-            "pago_tarjeta": { "mode": "fase2", "fase1_response": "success" },
-            "provision_topup": { "mode": "fase1", "fase1_response": "fail" }
-        }
-    }
-    """
-    results = {}
-    for op_name, update in batch.operations.items():
-        success = ops_config.set_operation(
-            operation=op_name,
-            mode=update.mode,
-            fase1_response=update.fase1_response
-        )
-        results[op_name] = {"success": success}
-
-    return {
-        "success": True,
-        "results": results,
-    }
 
 
-@router.post("/config/val-cuenta-params")
-async def update_val_cuenta_params(params: ValCuentaParams):
-    """
-    Configurar parámetros de simulación de validación de cuenta.
-
-    POST /api/v1/operations/config/val-cuenta-params
-    { "monto_base": 150.00, "indicador": "R" }
-    """
-    ops_config.set_val_cuenta_params(
-        monto_base=params.monto_base,
-        indicador=params.indicador,
-        account_holder=params.account_holder
-    )
-
-    return {
-        "success": True,
-        "params": ops_config.config['val_cuenta'].get('fase1_params', {}),
-    }
 
 
 # ==================== PRESETS (Escenarios) ====================

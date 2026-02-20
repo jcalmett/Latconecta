@@ -6,7 +6,7 @@
  *   - Billing usa datos del usuario autenticado (prop user)
  *   - onResult incluye datos para reversión (transactionUuid, referenceNumber)
  *   - Prop onCancel para volver al paso 4
- * 
+ *
  * Flujo:
  * 1. Recibe token de sesión del backend
  * 2. Configura iziConfig con datos de la orden
@@ -129,39 +129,34 @@ export default function IzipayCheckout({ amount, currency, orderNumber, user, on
             console.log("🔐 Validation result:", validation);
 
             if (validation.valid_signature) {
-              // --- Extraer datos para reversión ---
-              const orderData = response.response?.order?.[0] || {};
-              const transactionUuid = orderData.uniqueId || null;
-              const referenceNumber = orderData.referenceNumber || null;
-              const payMethod = response.response?.payMethod || "UNKNOWN";
-              const codeAuth = orderData.codeAuth || null;
+              // --- Preparar cancelData para reversión automática ---
+              const cancelData = {
+                gateway: "izipay",
+                transaction_id: transactionId,
+                order_number: orderNumber,
+                amount: validation.amount || String(amount),
+                currency: validation.currency || currency,
+                unique_id: validation.unique_id,
+                authorization_code: validation.authorization_code,
+                transaction_datetime: validation.transaction_datetime,
+                pay_method: validation.pay_method || "CARD",
+                channel: validation.channel || "ecommerce",
+              };
 
-              console.log("✅ Pago exitoso. Datos para reversión:", {
-                transactionUuid,
-                referenceNumber,
-                payMethod,
-                codeAuth,
-              });
+              console.log("📋 Cancel data prepared:", cancelData);
 
               setStatus("success");
               onResult?.({
                 success: true,
                 provider: "izipay",
-                // --- Datos CRÍTICOS para reversión ---
-                transactionUuid: transactionUuid,
-                referenceNumber: referenceNumber,
-                // --- Datos de la transacción ---
-                transactionId: transactionId,
-                orderNumber: orderNumber,
-                amount: amount,
-                currency: currency,
-                payMethod: payMethod,
-                codeAuth: codeAuth,
-                // --- Mensaje ---
                 code: response.code,
                 message: response.messageUser || "Operación exitosa",
                 paymentStatus: validation.payment_status,
+                orderNumber: orderNumber,
+                transactionId: transactionId,
                 rawResponse: response,
+                // Datos para reversión automática
+                cancelData: cancelData,
               });
             } else {
               setStatus("error");

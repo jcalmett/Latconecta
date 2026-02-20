@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { X, Loader2, AlertCircle, Download, FileText, Check, CreditCard, Smartphone } from 'lucide-react';
 import { getImageUrl, FALLBACK_IMAGES } from '../utils/imageHelper';
-import apiSimulator from '../services/apiSimulatorService';
-import paymentGateway from '../services/paymentGatewayService';
+import opsConfigService from '../services/operationsConfigService';
+import IzipayCheckout from './payment/IzipayCheckout';
 
 const PurchasePopup = React.memo(({
   showPurchasePopup,
@@ -24,17 +24,28 @@ const PurchasePopup = React.memo(({
   handleDownloadReceipt,
   handleDownloadReceiptPDF,
   user,
-  company
+  company,
+  handleCheckBalance
 }) => {
   if (!showPurchasePopup || !selectedProduct) return null;
 
   // --- Payment Gateway State ---
-  const [showGatewayCheckout, setShowGatewayCheckout] = useState(false);
-  const [gatewayResult, setGatewayResult] = useState(null);
-
-  // Verificar qué métodos de pago están habilitados por el gateway
-  const cardEnabled = paymentGateway.isCardPaymentEnabled();
-  const barcodeEnabled = paymentGateway.isBarcodePaymentEnabled();
+const [showGatewayCheckout, setShowGatewayCheckout] = useState(false);
+const [gatewayResult, setGatewayResult] = useState(null);
+const [paymentConfig, setPaymentConfig] = useState(null);
+// Cargar config de pagos del backend al montar o al llegar al paso 4
+useEffect(() => {
+if (purchaseStep === 4 || showPurchasePopup) {
+opsConfigService.getPaymentConfig().then(cfg => {
+console.log('📋 Payment config:', cfg);
+setPaymentConfig(cfg);
+});
+}
+}, [purchaseStep, showPurchasePopup]);
+const cardEnabled = paymentConfig?.card?.enabled !== false;
+const barcodeEnabled = paymentConfig?.barcode?.enabled !== false;
+const cardMode = paymentConfig?.card?.mode || 'fase1';
+const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
 
   const calculateTotalToPay = (amount) => {
     const baseAmount = parseFloat(amount) || 0;
@@ -45,8 +56,8 @@ const PurchasePopup = React.memo(({
   };
 
   useEffect(() => {
-    // Barcode deshabilitado si: company no lo permite O gateway no lo tiene configurado
-    const barcodeAvailable = company?.company_barcode_available === 'Si' && barcodeEnabled;
+  const barcodeAvailable = company?.company_barcode_available === 'Si' && barcodeEnabled;
+    
     if (!barcodeAvailable && purchaseData.paymentMethod === 'barcode') {
       setPurchaseData(prev => ({ ...prev, paymentMethod: cardEnabled ? 'card' : '' }));
       if (showNotification) {
@@ -250,7 +261,9 @@ const PurchasePopup = React.memo(({
                       if (setError) setError('Complete todos los campos de entrega');
                       return;
                     }
-                    setPurchaseStep(4);
+                    if (handleCheckBalance) {
+                      handleCheckBalance().then(ok => { if (ok) setPurchaseStep(4); });
+                    } else { setPurchaseStep(4); }
                   }}
                   className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90"
                 >
@@ -428,7 +441,9 @@ const PurchasePopup = React.memo(({
                       return;
                     }
 
-                    setPurchaseStep(4);
+                    if (handleCheckBalance) {
+                      handleCheckBalance().then(ok => { if (ok) setPurchaseStep(4); });
+                    } else { setPurchaseStep(4); }
                   }}
                   className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90"
                 >
@@ -494,6 +509,8 @@ const PurchasePopup = React.memo(({
                       onClick={() => {
                         if (purchaseData.productType === 'smartphone') {
                           setPurchaseStep(2.5);
+                        } else if (handleCheckBalance) {
+                          handleCheckBalance().then(ok => { if (ok) setPurchaseStep(4); });
                         } else {
                           setPurchaseStep(4);
                         }
@@ -627,6 +644,8 @@ const PurchasePopup = React.memo(({
 
                         if (purchaseData.productType === 'smartphone') {
                           setPurchaseStep(2.5);
+                        } else if (handleCheckBalance) {
+                          handleCheckBalance().then(ok => { if (ok) setPurchaseStep(4); });
                         } else {
                           setPurchaseStep(4);
                         }
@@ -660,11 +679,9 @@ const PurchasePopup = React.memo(({
           {purchaseStep === 4 && (
             <div>
               {/* --- MODO CHECKOUT: Muestra el formulario del proveedor --- */}
-              {showGatewayCheckout && (() => {
-                const CheckoutComponent = paymentGateway.getCheckoutComponent('card');
-                if (!CheckoutComponent) return null;
-                return (
-                  <CheckoutComponent
+
+                   {showGatewayCheckout && (
+                   <IzipayCheckout
                     amount={(() => {
                       if (selectedProduct.product_amount_type === 'F') {
                         return parseFloat(selectedProduct.product_total_price);
@@ -685,15 +702,16 @@ const PurchasePopup = React.memo(({
                       if (result.success) {
                         setGatewayResult(result);
                         handlePaymentAndProvision({
-                          payment_gateway: result.provider,
-                          payment_transaction_uuid: result.transactionUuid,
+                          payment_gateway: 'izipay',
+                          payment_transaction_uuid: result.cancelData?.unique_id,
                           payment_transaction_id: result.transactionId,
-                          payment_reference_number: result.referenceNumber,
+                          payment_reference_number: result.cancelData?.unique_id,
                           payment_order_number: result.orderNumber,
-                          payment_method_detail: result.payMethod,
-                          payment_code_auth: result.codeAuth,
-                          payment_amount: result.amount,
-                          payment_currency: result.currency,
+                          payment_method_detail: result.cancelData?.pay_method || 'CARD',
+                          payment_code_auth: result.cancelData?.authorization_code,
+                          payment_amount: result.cancelData?.amount,
+                          payment_currency: result.cancelData?.currency,
+                          payment_transaction_datetime: result.cancelData?.transaction_datetime,
                         });
                       } else {
                         setError(result.message || 'El pago no fue procesado');
@@ -704,8 +722,7 @@ const PurchasePopup = React.memo(({
                       setShowGatewayCheckout(false);
                     }}
                   />
-                );
-              })()}
+              )}
 
               {/* --- MODO SELECCIÓN: Botones de método de pago --- */}
               {!showGatewayCheckout && (
@@ -789,13 +806,19 @@ const PurchasePopup = React.memo(({
                         }
                         setError(null);
                         
-                        if (purchaseData.paymentMethod === 'card' && cardEnabled) {
-                          // Abrir checkout del proveedor de tarjeta
-                          setShowGatewayCheckout(true);
+                        if (purchaseData.paymentMethod === 'card') {
+                        if (cardMode === 'fase2') {
+                        // FASE 2: Abrir IZIPAY SDK real
+                        setShowGatewayCheckout(true);
                         } else {
-                          // Barcode: flujo actual sin cambios
-                          handlePaymentAndProvision();
+                        // FASE 1: Pago simulado, va directo al backend
+                        handlePaymentAndProvision();
                         }
+                        } else if (purchaseData.paymentMethod === 'barcode') {
+                        // Siempre va al backend (el backend decide fase1/fase2)
+                        handlePaymentAndProvision();
+                        }
+
                       }}
                       disabled={!purchaseData.paymentMethod}
                       className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
