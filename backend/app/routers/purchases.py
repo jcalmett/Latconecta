@@ -545,6 +545,17 @@ async def validate_phone(product_id: int, phone_number: str, db: AsyncSession = 
         if vp.api_group_code:
             from app.services.universal_vendor_service import validate_vendor_phone
             result = await validate_vendor_phone(db=db, vendor_code=product.product_vendor_code, api_group_code=vp.api_group_code, phone_number=phone_number, additional_data={'vp_operator': vp.vp_operator, 'vp_country': vp.vp_country, 'vp_code': vp.vp_code})
+
+            # Si el vendor no tiene mapping de validación → ejecutar validación local de prefijos
+            if result.get('message') == 'Validation not required by vendor':
+                from app.services.phone_validation_service import validate_phone_local
+                local_result = validate_phone_local(
+                    phone_number=phone_number,
+                    country=vp.vp_country or '',
+                    operator=vp.vp_operator or ''
+                )
+                return {"status": 200, "data": {"valid": local_result.get('valid', False), "phone_number": phone_number, "message": local_result.get('message', '')}, "message": "Phone validation via local rules"}
+
             return {"status": 200, "data": {"valid": result.get('valid', False), "phone_number": phone_number, "message": result.get('message', '')}, "message": "Phone validation via API mapping"}
         else:
             sim = ops_config.simulate_response('val_telefono', {'phone_number': phone_number})

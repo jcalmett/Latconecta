@@ -349,7 +349,7 @@ class OperationsConfigService:
                 return {
                     'success': True,
                     'barcode': barcode_number,
-                    'barcode_image': f"https://barcode.example.com/{barcode_number}.png",
+                    'barcode_image': f"https://barcodeapi.org/api/CODE128/{barcode_number}",
                     'amount': request_data.get('amount', 0),
                     'expiration': timestamp.isoformat(),
                 }

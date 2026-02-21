@@ -2,7 +2,7 @@
 VENDOR SIMULATOR - Fase 3
 Simula el API real de LATCOM según especificación actualizada
 ✅ Endpoints: /api/v1/topup, /api/v1/balance, /api/v1/transaction/:id
-✅ Autenticación: x-customer-id + x-api-key (headers)
+✅ Autenticación: x-customer-id + x-api-key (headers) - solo presencia, no valores
 ✅ Validaciones: país, carrier, teléfono, montos
 ✅ Respuestas: formato idéntico al API real de LATCOM
 """
@@ -21,10 +21,11 @@ LOG_FILE = 'vendor_simulator.log'
 PORT = 5001
 
 # ================================================================
-# CREDENCIALES SIMULADAS (mismas que en tabla vendors)
+# CREDENCIALES SIMULADAS
 # ================================================================
 VALID_CUSTOMER_ID = "LATCONECTA_001"
-VALID_API_KEY = "sim_test_key_latconecta_2026"  # Para pruebas locales
+# ✅ NOTA: El simulator solo verifica presencia de headers, no valores específicos.
+# Las credenciales reales se gestionan en la tabla vendors de la BD.
 
 # ================================================================
 # CONFIGURACIÓN DE PAÍSES (según especificación LATCOM)
@@ -120,15 +121,17 @@ def error_response(error_code, error_message, status_code, transaction_id=None):
 
 
 def validate_auth_headers():
-    """Validar headers de autenticación x-customer-id y x-api-key"""
+    """
+    Validar headers de autenticación x-customer-id y x-api-key
+    ✅ ACTUALIZADO: Solo verifica presencia de headers, no valores específicos.
+    La validación real de credenciales ocurre contra el vendor real (LATCOM).
+    Las credenciales se gestionan en la tabla vendors de la BD.
+    """
     customer_id = request.headers.get('x-customer-id', '')
     api_key = request.headers.get('x-api-key', '')
 
     if not customer_id or not api_key:
         return False, "Missing x-api-key or x-customer-id header"
-
-    if customer_id != VALID_CUSTOMER_ID or api_key != VALID_API_KEY:
-        return False, "Invalid API key or Customer ID"
 
     return True, None
 
@@ -142,8 +145,8 @@ def validate_auth_headers():
 def latcom_topup():
     """
     Procesar topup/recarga
-    Mappings: LC01T (grupo 001), LC02T (grupo 002)
-    
+    Mapping: LC01T (grupo 001, provision)
+
     Request: {carrier, phone, amount, country, reference}
     Response: {success, transaction_id, carrier, phone, amount, currency,
                country, status, authorization_code, timestamp, reference}
@@ -475,7 +478,7 @@ if __name__ == '__main__':
     print("    - *    /<cualquier-ruta> (404)")
     print("=" * 60)
     print(f"Auth: x-customer-id={VALID_CUSTOMER_ID}")
-    print(f"Auth: x-api-key={VALID_API_KEY}")
+    print("Auth: x-api-key=<valor desde tabla vendors en BD>")
     print("=" * 60)
     print("Esperando requests de Latconecta...")
     print("")

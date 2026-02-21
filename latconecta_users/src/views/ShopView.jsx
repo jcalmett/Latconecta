@@ -434,7 +434,6 @@ const handleValidation = async () => {
       }
     }
 
-    setPurchaseStep(6);
     setProcessing(true);
     setError(null);
 
