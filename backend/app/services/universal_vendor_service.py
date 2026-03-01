@@ -64,10 +64,10 @@ class UniversalVendorService:
         """
 
         result = await self.db.execute(
-            text(query),  # ← ENVUELTO en text()
+            text(query),
             {
                 "vendor_code": vendor_code,
-                "api_group_code": api_group_code,  # ⭐ NUEVO
+                "api_group_code": api_group_code,
                 "operation_type": operation_type
             }
         )
@@ -76,7 +76,7 @@ class UniversalVendorService:
         if not row:
             logger.error(
                 f"No mapping found for vendor={vendor_code}, "
-                f"group={api_group_code}, operation={operation_type}"  # ⭐ ACTUALIZADO
+                f"group={api_group_code}, operation={operation_type}"
             )
             return None
 
@@ -91,7 +91,7 @@ class UniversalVendorService:
             "success_indicators": row.success_indicators,
             "timeout_seconds": row.timeout_seconds or 30,
             "headers": row.headers or {},
-            "mapping_code": row.mapping_code  # ← AGREGADO para logs
+            "mapping_code": row.mapping_code
         }
 
     async def get_vendor_info(self, vendor_code: str) -> Optional[Dict[str, Any]]:
@@ -112,7 +112,7 @@ class UniversalVendorService:
         """
 
         result = await self.db.execute(
-            text(query),  # ← ENVUELTO en text()
+            text(query),
             {"vendor_code": vendor_code}
         )
 
@@ -149,9 +149,10 @@ class UniversalVendorService:
         """
 
         # 1. Obtener configuración
+        logger.info(f"🔍 Buscando mapping: vendor={vendor_code}, group={api_group_code}, op={operation_type}")
         mapping_config = await self.get_vendor_mapping(
             vendor_code,
-            api_group_code,  # ⭐ NUEVO
+            api_group_code,
             operation_type
         )
 
@@ -164,6 +165,8 @@ class UniversalVendorService:
                     f"vendor={vendor_code}, group={api_group_code}, operation={operation_type}"
                 )
             }
+
+        logger.info(f"✅ Mapping encontrado: {mapping_config.get('endpoint_url')}")
 
         vendor_info = await self.get_vendor_info(vendor_code)
         if not vendor_info:
@@ -186,25 +189,21 @@ class UniversalVendorService:
 
             # 4. Preparar headers
             headers = self._build_headers(
-                mapping_config.get('auth_type', 'none'),  # ← VALIDAR None
-                mapping_config.get('auth_config') or {},  # ← VALIDAR None
+                mapping_config.get('auth_type', 'none'),
+                mapping_config.get('auth_config') or {},
                 vendor_info,
-                mapping_config.get('headers') or {}  # ← VALIDAR None
+                mapping_config.get('headers') or {}
             )
 
             # 5. Construir URL completa
-            # ⭐ MODIFICADO para soportar vendor simulator
             if settings.VENDOR_SIMULATOR_ENABLED:
-                # Usar vendor simulado
                 url = f"{settings.VENDOR_SIMULATOR_URL}{mapping_config['endpoint_url']}"
                 logger.info(f"🎭 Using VENDOR SIMULATOR: {url}")
             else:
-                # Usar vendor real
                 url = f"{vendor_info['base_url']}{mapping_config['endpoint_url']}"
                 logger.info(f"🌐 Using REAL VENDOR: {url}")
 
             # 5.5. Agregar mapping_code al header (para logs del simulador)
-            # ⭐ AGREGADO para vendor simulator
             if settings.VENDOR_SIMULATOR_ENABLED:
                 headers['X-Mapping-Code'] = mapping_config.get('mapping_code', 'UNKNOWN')
 
@@ -233,20 +232,17 @@ class UniversalVendorService:
             is_success = mapper.is_success_response(response.status_code, response_data)
 
             if is_success:
-                # Mapear campos de respuesta
                 parsed_response = mapper.parse_response(response_data)
-
                 return {
                     "success": True,
                     "status": "success",
                     **parsed_response,
                     "raw_response": response_data,
-                    "vendor_request": request_body,  # ✅ AGREGADO para auditoría
-                    "vendor_response": response_data,  # ✅ AGREGADO para auditoría
-                    "extracted_data": parsed_response  # ✅ AGREGADO para claridad
+                    "vendor_request": request_body,
+                    "vendor_response": response_data,
+                    "extracted_data": parsed_response
                 }
             else:
-                # Error del vendor
                 return {
                     "status": "error",
                     "error_code": response_data.get('error_code', 'VENDOR_ERROR'),
@@ -264,7 +260,9 @@ class UniversalVendorService:
             }
 
         except Exception as e:
+            import traceback
             logger.error(f"[{vendor_code}/{api_group_code}] Error: {str(e)}")
+            logger.error(f"[{vendor_code}/{api_group_code}] Traceback: {traceback.format_exc()}")
             return {
                 "status": "error",
                 "error_code": "INTEGRATION_ERROR",
@@ -288,10 +286,9 @@ class UniversalVendorService:
         """
         headers = {
             "Content-Type": "application/json",
-            **(additional_headers or {})  # ← CORREGIDO: manejar None
+            **(additional_headers or {})
         }
 
-        # Configurar autenticación
         if auth_type == 'bearer':
             header_name = auth_config.get('header_name', 'Authorization')
             token_prefix = auth_config.get('token_prefix', 'Bearer ')
@@ -300,9 +297,6 @@ class UniversalVendorService:
         elif auth_type == 'api_key_header':
             header_name = auth_config.get('header_name', 'X-API-Key')
             headers[header_name] = vendor_info['api_key']
-            # ✅ NUEVO: Soporte para headers adicionales de autenticación
-            # Permite configurar múltiples headers desde auth_config
-            # Ejemplo LATCOM: x-api-key + x-customer-id
             extra_headers = auth_config.get('extra_headers', {})
             for key, value in extra_headers.items():
                 if value == '{vendor_username}':
@@ -327,40 +321,24 @@ class UniversalVendorService:
 async def process_vendor_topup(
     db: AsyncSession,
     vendor_code: str,
-    api_group_code: str,  # ⭐ NUEVO PARÁMETRO REQUERIDO
+    api_group_code: str,
     purchase_data: Dict[str, Any],
     vendor_product_data: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Procesa recarga con vendor usando servicio universal
-
-    Args:
-        db: Sesión de BD
-        vendor_code: Código del vendor
-        api_group_code: Código del grupo de APIs ⭐ NUEVO
-        purchase_data: Datos de la compra
-        vendor_product_data: Datos del vendor product
-
-    Returns:
-        Resultado de la operación
     """
-
     service = UniversalVendorService(db)
-
-    # Combinar datos para el mapper
     combined_data = {
         **purchase_data,
         **vendor_product_data
     }
-
-    # Ejecutar request
     result = await service.execute_vendor_request(
         vendor_code=vendor_code,
-        api_group_code=api_group_code,  # ⭐ NUEVO
-        operation_type='provision',  # ⭐ ACTUALIZADO (antes 'topup')
+        api_group_code=api_group_code,
+        operation_type='provision',
         data=combined_data
     )
-
     return result
 
 
@@ -377,27 +355,15 @@ async def validate_vendor_phone(
 ) -> Dict[str, Any]:
     """
     Valida un número de teléfono con el vendor
-
-    Args:
-        db: Sesión de BD
-        vendor_code: Código del vendor
-        api_group_code: Código del grupo de APIs
-        phone_number: Número a validar
-        additional_data: Datos adicionales opcionales
-
-    Returns:
-        Resultado de la validación
     """
     service = UniversalVendorService(db)
 
-    # ✅ VERIFICAR SI EXISTE MAPPING DE VALIDACIÓN
     validation_mapping = await service.get_vendor_mapping(
         vendor_code=vendor_code,
         api_group_code=api_group_code,
         operation_type='validation'
     )
 
-    # ✅ SI NO HAY MAPPING DE VALIDACIÓN → Retornar éxito automático
     if not validation_mapping:
         logger.info(
             f"No validation mapping found for {vendor_code}/{api_group_code}. "
@@ -410,7 +376,6 @@ async def validate_vendor_phone(
             "phone_number": phone_number
         }
 
-    # Si hay mapping, ejecutar validación real
     data = {
         "purchase_phone_number": phone_number,
         **(additional_data or {})
@@ -434,29 +399,15 @@ async def query_vendor_transaction(
 ) -> Dict[str, Any]:
     """
     Consulta el estado de una transacción en el vendor
-
-    Args:
-        db: Sesión de BD
-        vendor_code: Código del vendor
-        api_group_code: Código del grupo de APIs
-        transaction_id: ID de la transacción a consultar
-
-    Returns:
-        Estado de la transacción
     """
     service = UniversalVendorService(db)
-
-    data = {
-        "purchase_vendor_purchase_id": transaction_id
-    }
-
+    data = {"purchase_vendor_purchase_id": transaction_id}
     result = await service.execute_vendor_request(
         vendor_code=vendor_code,
         api_group_code=api_group_code,
         operation_type='query',
         data=data
     )
-
     return result
 
 
@@ -469,124 +420,16 @@ async def reverse_vendor_transaction(
 ) -> Dict[str, Any]:
     """
     Revierte una transacción en el vendor
-
-    Args:
-        db: Sesión de BD
-        vendor_code: Código del vendor
-        api_group_code: Código del grupo de APIs
-        transaction_id: ID de la transacción a revertir
-        reason: Razón de la reversión (opcional)
-
-    Returns:
-        Resultado de la reversión
     """
     service = UniversalVendorService(db)
-
     data = {
         "purchase_vendor_purchase_id": transaction_id,
         "reversal_reason": reason or "Customer request"
     }
-
     result = await service.execute_vendor_request(
         vendor_code=vendor_code,
         api_group_code=api_group_code,
         operation_type='reversal',
         data=data
     )
-
     return result
-
-
-# ========================================
-# EJEMPLO DE USO EN ROUTER (ACTUALIZADO)
-# ========================================
-
-"""
-# En tu router de purchases:
-
-from .services.universal_vendor_service import (
-    process_vendor_topup,
-    validate_vendor_phone,
-    query_vendor_transaction
-)
-
-@router.post("/purchases")
-async def create_purchase(
-    purchase_data: PurchaseCreate,
-    db: AsyncSession = Depends(get_db)
-):
-    # 1. Obtener vendor product (ahora incluye api_group_code)
-    vendor_product = await db.get(VendorProduct, purchase_data.vp_id)
-
-    # 2. OPCIONAL: Validar teléfono primero
-    validation_result = await validate_vendor_phone(
-        db=db,
-        vendor_code=vendor_product.vendor_code,
-        api_group_code=vendor_product.api_group_code,  # ⭐ NUEVO
-        phone_number=purchase_data.phone_number
-    )
-
-    if validation_result["status"] != "success":
-        raise HTTPException(400, "Número de teléfono inválido")
-
-    # 3. Crear purchase en BD
-    new_purchase = Purchase(**purchase_data.dict())
-    db.add(new_purchase)
-    await db.commit()
-
-    # 4. Procesar con vendor (¡AHORA CON api_group_code!)
-    result = await process_vendor_topup(
-        db=db,
-        vendor_code=vendor_product.vendor_code,
-        api_group_code=vendor_product.api_group_code,  # ⭐ NUEVO - FUNDAMENTAL
-        purchase_data={
-            "purchase_phone_number": purchase_data.phone_number,
-            "purchase_vendor_amount": purchase_data.amount,
-            "purchase_vendor_currency": "PEN",
-            "purchase_reference": new_purchase.purchase_reference
-        },
-        vendor_product_data={
-            "vp_skuid": vendor_product.vp_skuid,
-            "vp_country": vendor_product.vp_country,
-            "vp_code": vendor_product.vp_code
-        }
-    )
-
-    # 5. Actualizar purchase con resultado
-    if result["status"] == "success":
-        new_purchase.purchase_vendor_purchase_id = result.get("purchase_vendor_purchase_id")
-        new_purchase.purchase_delivery_status = "Success"
-
-        # OPCIONAL: Confirmar transacción si el vendor lo requiere
-        # confirmation = await service.execute_vendor_request(...)
-
-    else:
-        new_purchase.purchase_delivery_status = "Failed"
-        new_purchase.purchase_vendor_response_code = result.get("error_code")
-
-    await db.commit()
-
-    return new_purchase
-
-
-@router.get("/purchases/{purchase_id}/status")
-async def check_purchase_status(
-    purchase_id: int,
-    db: AsyncSession = Depends(get_db)
-):
-    # 1. Obtener purchase
-    purchase = await db.get(Purchase, purchase_id)
-
-    # 2. Obtener vendor product para api_group_code
-    vendor_product = await db.get(VendorProduct, purchase.vp_id)
-
-    # 3. Consultar estado en vendor
-    result = await query_vendor_transaction(
-        db=db,
-        vendor_code=vendor_product.vendor_code,
-        api_group_code=vendor_product.api_group_code,  # ⭐ NUEVO
-        transaction_id=purchase.purchase_vendor_purchase_id
-    )
-
-    return result
-"""

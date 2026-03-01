@@ -33,13 +33,10 @@ const productsService = {
   getByService: async (serviceId) => {
   try {
     console.log(`🔵 Obteniendo productos del servicio ${serviceId}...`);
-    const allProducts = await apiClient.get('/products/');
-    console.log('🔍 TODOS los productos:', allProducts); // ← AGREGAR ESTA LÍNEA
-    const filteredProducts = Array.isArray(allProducts) 
-      ? allProducts.filter(p => p.service_id === serviceId)
-      : [];
-    console.log(`✅ Productos del servicio ${serviceId}:`, filteredProducts);
-    return filteredProducts;
+    const response = await apiClient.get('/products', { params: { service_id: serviceId } });
+    const products = Array.isArray(response.data) ? response.data : response;
+    console.log(`✅ Productos del servicio ${serviceId}:`, products);
+    return products;
   } catch (error) {
     console.error(`❌ Error al obtener productos del servicio ${serviceId}:`, error);
     throw error;

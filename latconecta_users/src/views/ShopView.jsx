@@ -68,7 +68,7 @@ const ShopView = ({ user, showNotification }) => {
     loadData();
   }, [urlCountry, urlService, urlCompany]);
 
-  const loadData = async () => {
+const loadData = async () => {
     try {
       setLoading(true);
 
@@ -82,22 +82,27 @@ const ShopView = ({ user, showNotification }) => {
         setCountry(Array.isArray(countryData) ? countryData[0] : countryData);
       }
 
+      // ✅ CORRECCIÓN: resolvedCompany captura el company antes de llamar loadProducts
+      let resolvedCompany = null;
+
       if (urlCompany) {
         const companiesData = await companiesService.getAll();
         const companiesArray = Array.isArray(companiesData) ? companiesData : [companiesData];
         const foundCompany = companiesArray.find(c => c.company_name === urlCompany);
-
         if (foundCompany) {
+          resolvedCompany = foundCompany;
           setCompany(foundCompany);
           console.log('🟢 Compañía seleccionada:', foundCompany.company_name);
         } else {
           console.warn('⚠️ Compañía no encontrada:', urlCompany);
           const companyData = await companiesService.getActive();
-          setCompany(Array.isArray(companyData) ? companyData[0] : companyData);
+          resolvedCompany = Array.isArray(companyData) ? companyData[0] : companyData;
+          setCompany(resolvedCompany);
         }
       } else {
         const companyData = await companiesService.getActive();
-        setCompany(Array.isArray(companyData) ? companyData[0] : companyData);
+        resolvedCompany = Array.isArray(companyData) ? companyData[0] : companyData;
+        setCompany(resolvedCompany);
       }
 
       const servicesData = await servicesService.getAll();
@@ -106,17 +111,16 @@ const ShopView = ({ user, showNotification }) => {
 
       if (urlService && activeServices.length > 0) {
         const foundService = activeServices.find(s => s.service_name === urlService);
-
         if (foundService) {
           setSelectedService(foundService);
-          await loadProducts(foundService.service_id);
+          await loadProducts(foundService.service_id, resolvedCompany?.company_id);
         } else {
           setSelectedService(activeServices[0]);
-          await loadProducts(activeServices[0].service_id);
+          await loadProducts(activeServices[0].service_id, resolvedCompany?.company_id);
         }
       } else if (activeServices.length > 0) {
         setSelectedService(activeServices[0]);
-        await loadProducts(activeServices[0].service_id);
+        await loadProducts(activeServices[0].service_id, resolvedCompany?.company_id);
       }
 
     } catch (error) {
@@ -129,16 +133,16 @@ const ShopView = ({ user, showNotification }) => {
     }
   };
 
-  const loadProducts = async (serviceId) => {
+  const loadProducts = async (serviceId, companyId = null) => {
     try {
       const productsData = await productsService.getByService(serviceId);
       let activeProducts = Array.isArray(productsData)
         ? productsData.filter(p => p.product_status === 'active')
         : [];
 
-      if (company && company.company_id) {
-        activeProducts = activeProducts.filter(p => p.company_id === company.company_id);
-        console.log(`🔎 Productos filtrados por compañía ${company.company_name}:`, activeProducts.length);
+      if (companyId) {
+        activeProducts = activeProducts.filter(p => p.company_id === companyId);
+        console.log(`🔎 Productos filtrados por compañía ${companyId}:`, activeProducts.length);
       }
 
       setProducts(activeProducts);
@@ -157,7 +161,7 @@ const ShopView = ({ user, showNotification }) => {
     }
 
     setSelectedService(service);
-    await loadProducts(service.service_id);
+    await loadProducts(service.service_id, company?.company_id);
   };
 
   const handleProductClick = (product) => {

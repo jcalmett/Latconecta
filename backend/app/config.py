@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     IZIPAY_TOKEN_ENDPOINT: str = "/security/v1/Token/Generate"
     IZIPAY_CANCEL_PATH: str = "/cancel/api/Transaction/Cancel"
     IZIPAY_RSA_PUBLIC_KEY: str = ""
+    IZIPAY_CANCEL_ENDPOINT: str = ""
 
     # =========================================================================
     # CONFIGURACIÓN DE CONEKTA - PASARELA DE PAGOS (México) - FUTURO

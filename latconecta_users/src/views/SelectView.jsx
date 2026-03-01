@@ -176,7 +176,7 @@ const SelectView = () => {
 
   const handleCompanyClick = (company) => {
     // Navegar a ShopView con parámetros
-    navigate(`/shop?country=${selectedCountry.country_code}&service=${selectedService.service_name}&company=${company.company_name}`);
+    navigate(`/shop?country=${selectedCountry.country_code}&service=${encodeURIComponent(selectedService.service_name)}&company=${encodeURIComponent(company.company_name)}`);
   };
 
   return (
