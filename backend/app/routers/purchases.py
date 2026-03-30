@@ -415,6 +415,7 @@ async def create_purchase(request: PurchaseCreateRequest, db: AsyncSession = Dep
                     prov_result = await vendor_service.execute_vendor_request(
                         vendor_code=vendor.vendor_code, api_group_code=vendor_product.api_group_code,
                         operation_type='provision', data=provision_data)
+                    print(f"DEBUG prov_result: {prov_result}", flush=True)
                     vendor_request_json = json.dumps(prov_result.get('vendor_request', provision_data))
                     vendor_response_json = json.dumps(prov_result.get('vendor_response', {}))
 

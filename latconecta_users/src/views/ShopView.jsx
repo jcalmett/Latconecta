@@ -170,7 +170,8 @@ const loadData = async () => {
   };
 
   const handleBuyClick = async () => {
-    const productType = detectProductType(selectedProduct);
+console.log('🔍 selectedService al comprar:', selectedService?.service_name, selectedService?.service_id);
+    const productType = detectProductType(selectedService);
 
     setShowProductDetail(false);
     setShowPurchasePopup(true);
@@ -253,21 +254,15 @@ const loadData = async () => {
     }
   };  
 
-  const detectProductType = (product) => {
-    const name = product.product_name?.toLowerCase() || '';
-    const type = product.product_type?.toLowerCase() || '';
-
-    if (type === 'bill_payment' || name.includes('recibo') || name.includes('pago')) {
-      return 'bill_payment';
-    }
-    if (type === 'transfer' || name.includes('transferencia') || name.includes('yape')) {
-      return 'transfer';
-    }
-    if (type === 'smartphone' || name.includes('smartphone') || name.includes('celular')) {
-      return 'smartphone';
-    }
-    return 'topup';
-  };
+const detectProductType = (service) => {
+  const serviceName = service?.service_name || '';
+  if (serviceName === 'TopUps') return 'topup';
+  if (serviceName === 'Paquetes') return 'package';
+  if (serviceName === 'Bill Payment') return 'bill_payment';
+  if (serviceName === 'Transfers') return 'transfer';
+  if (serviceName === 'Smartphones') return 'smartphone';
+  return 'topup';
+};
 
 const handleValidation = async () => {
   setProcessing(true);

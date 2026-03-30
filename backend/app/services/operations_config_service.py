@@ -83,8 +83,8 @@ class OperationsConfigService:
 
         # Config adicional para val_cuenta (parámetros de simulación)
         self.config['val_cuenta']['fase1_params'] = {
-            'monto_base': 85.50,
-            'indicador': 'T',
+            'monto_base': 8550.00,
+            'indicador': 'R',
             'account_holder': 'Juan Pérez (Simulado)',
         }
 
@@ -271,7 +271,7 @@ class OperationsConfigService:
     def preset_bill_payment_total(self):
         """Escenario: Bill Payment solo total"""
         self.preset_all_fase1_success()
-        self.set_val_cuenta_params(monto_base=85.50, indicador='T')
+        self.set_val_cuenta_params(monto_base=8550.00, indicador='T')
         logger.info("📄 PRESET: Bill Payment total")
 
     # ==================== SIMULACIÓN ====================
@@ -313,8 +313,8 @@ class OperationsConfigService:
                 return {
                     'valid': True,
                     'account_number': request_data.get('account_number', ''),
-                    'monto_base': params.get('monto_base', 85.50),
-                    'indicador': params.get('indicador', 'T'),
+                    'monto_base': params.get('monto_base', 8550.00),
+                    'indicador': params.get('indicador', 'R'),
                     'account_holder': params.get('account_holder', 'Juan Pérez (Simulado)'),
                     'service_type': 'Luz'
                 }

@@ -182,10 +182,7 @@ class UniversalVendorService:
         try:
             # 3. Construir request body
             request_body = mapper.build_request(data)
-
-            logger.info(
-                f"[{vendor_code}/{api_group_code}] Request body: {json.dumps(request_body)}"
-            )
+            print(f"[{vendor_code}/{api_group_code}] Request body: {json.dumps(request_body)}", flush=True)
 
             # 4. Preparar headers
             headers = self._build_headers(
@@ -248,6 +245,8 @@ class UniversalVendorService:
                     "error_code": response_data.get('error_code', 'VENDOR_ERROR'),
                     "error_message": response_data.get('error_message', 'Vendor returned error'),
                     "status_code": response.status_code,
+                    "vendor_request": request_body,
+                    "vendor_response": response_data,
                     "raw_response": response_data
                 }
 

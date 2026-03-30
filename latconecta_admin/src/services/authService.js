@@ -21,7 +21,7 @@ const authService = {
       console.log('🔵 Iniciando login para:', email);
 
       // ✅ TRAILING SLASH AGREGADO
-      const response = await apiClient.post('/auth/login/', {
+      const response = await apiClient.post('/auth/login', {
         email: email,
         password: password
       });
