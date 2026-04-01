@@ -427,6 +427,205 @@ def health_check():
     }), 200
 
 
+
+
+# ================================================================
+# CONFIGURACIÓN TISI (MEGAPUNTO)
+# ================================================================
+TISI_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.tisi_simulator_token"
+TISI_VALID_USERS = {"latconecta_test": "password_test"}
+
+TISI_PRODUCTS = {
+    # Peru
+    "66": {"operadora": "Bitel",   "pais": "PER", "min": 3.0,  "max": 100.0},
+    "67": {"operadora": "Entel",   "pais": "PER", "min": 3.0,  "max": 100.0},
+    "70": {"operadora": "Claro",   "pais": "PER", "min": 3.0,  "max": 100.0},
+    # Venezuela
+    "5580": {"operadora": "Movistar Celular", "pais": "VEN", "min": 1.38, "max": 92.15},
+    "5581": {"operadora": "Movistar Fijo",    "pais": "VEN", "min": 1.38, "max": 92.15},
+    "5582": {"operadora": "Movilnet",         "pais": "VEN", "min": 1.47, "max": 49.88},
+    "5583": {"operadora": "Digitel",          "pais": "VEN", "min": 2.75, "max": 82.52},
+}
+
+tisi_transactions_store = {}
+tisi_balance = 50000.00
+
+
+def generate_tisi_transaction_id():
+    """Generar nro_transaccion en formato TISI"""
+    return str(random.randint(10000, 99999))
+
+
+def validate_tisi_bearer():
+    """Validar Bearer token TISI"""
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return False
+    token = auth.replace("Bearer ", "").strip()
+    return token == TISI_TOKEN
+
+
+# ================================================================
+# ENDPOINT TISI: POST /Auth/token
+# Login — retorna Bearer token
+# ================================================================
+
+@app.route('/Auth/token', methods=['POST', 'OPTIONS'])
+def tisi_auth_token():
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    data = request.get_json() or {}
+    username = data.get("userName", "")
+    password = data.get("password", "")
+
+    log_request_response('/Auth/token', 'POST', {"userName": username, "password": "***"}, {}, 0)
+
+    if TISI_VALID_USERS.get(username) == password:
+        response_data = {"token": TISI_TOKEN}
+        print(f"[TISI /Auth/token] ✅ Login OK para {username}")
+        log_request_response('/Auth/token', 'POST', {"userName": username}, response_data, 200)
+        return jsonify(response_data), 200
+    else:
+        response_data = {"codigo": "98", "mensaje": "La clave de seguridad es incorrecta."}
+        print(f"[TISI /Auth/token] ❌ Login FAIL para {username}")
+        log_request_response('/Auth/token', 'POST', {"userName": username}, response_data, 401)
+        return jsonify(response_data), 401
+
+
+# ================================================================
+# ENDPOINT TISI: POST /Recarga/procesar
+# Realizar recarga — formato exacto TISI
+# ================================================================
+
+@app.route('/Recarga/procesar', methods=['POST', 'OPTIONS'])
+def tisi_recarga_procesar():
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    global tisi_balance
+
+    # Validar token
+    if not validate_tisi_bearer():
+        response_data = {"codigo": "98", "mensaje": "La clave de seguridad es incorrecta."}
+        print("[TISI /Recarga/procesar] ❌ Token inválido")
+        log_request_response('/Recarga/procesar', 'POST', None, response_data, 401)
+        return jsonify(response_data), 401
+
+    data = request.get_json() or {}
+    id_producto  = str(data.get("id_producto", ""))
+    numero       = str(data.get("numero", "")).strip()
+    importe      = data.get("importe", "")
+    nro_ref      = str(data.get("nro_transaccion_referencia", ""))
+    codigo_dist  = data.get("codigo_distribuidor", "")
+    ubigeo       = data.get("ubigeo", "")
+
+    print(f"[TISI /Recarga/procesar] id_producto={id_producto} numero={numero} importe={importe} ref={nro_ref}")
+
+    # Validar campos requeridos
+    missing = []
+    if not id_producto: missing.append("id_producto")
+    if not numero:      missing.append("numero")
+    if not importe:     missing.append("importe")
+    if not nro_ref:     missing.append("nro_transaccion_referencia")
+    if not ubigeo:      missing.append("ubigeo")
+
+    if missing:
+        response_data = {
+            "codigo": "97",
+            "mensaje": f"Datos incorrectos. Faltan: {', '.join(missing)}"
+        }
+        log_request_response('/Recarga/procesar', 'POST', data, response_data, 200)
+        return jsonify(response_data), 200
+
+    # Validar ubigeo obligatorio
+    if not ubigeo:
+        response_data = {"codigo": "87", "mensaje": "El campo ubigeo es obligatorio."}
+        log_request_response('/Recarga/procesar', 'POST', data, response_data, 200)
+        return jsonify(response_data), 200
+
+    # Validar id_producto
+    if id_producto not in TISI_PRODUCTS:
+        response_data = {"codigo": "04", "mensaje": "El producto no existe."}
+        print(f"[TISI /Recarga/procesar] ❌ Producto no existe: {id_producto}")
+        log_request_response('/Recarga/procesar', 'POST', data, response_data, 200)
+        return jsonify(response_data), 200
+
+    producto = TISI_PRODUCTS[id_producto]
+
+    # Validar número (solo dígitos)
+    if not numero.isdigit():
+        response_data = {"codigo": "30", "mensaje": "El número del cliente debe ser numérico."}
+        log_request_response('/Recarga/procesar', 'POST', data, response_data, 200)
+        return jsonify(response_data), 200
+
+    # Validar importe numérico y en rango
+    try:
+        importe_float = float(importe)
+    except (ValueError, TypeError):
+        response_data = {"codigo": "31", "mensaje": "El importe de recarga debe ser numérico."}
+        log_request_response('/Recarga/procesar', 'POST', data, response_data, 200)
+        return jsonify(response_data), 200
+
+    if importe_float < producto["min"] or importe_float > producto["max"]:
+        response_data = {
+            "codigo": "82",
+            "mensaje": f"El monto de la recarga no es válido. Rango permitido: {producto['min']} - {producto['max']}"
+        }
+        print(f"[TISI /Recarga/procesar] ❌ Monto fuera de rango: {importe_float}")
+        log_request_response('/Recarga/procesar', 'POST', data, response_data, 200)
+        return jsonify(response_data), 200
+
+    # Validar saldo
+    if importe_float > tisi_balance:
+        response_data = {"codigo": "95", "mensaje": "No cuenta con saldo suficiente."}
+        log_request_response('/Recarga/procesar', 'POST', data, response_data, 200)
+        return jsonify(response_data), 200
+
+    # Procesar recarga exitosa
+    tisi_balance -= importe_float
+    nro_transaccion = generate_tisi_transaction_id()
+
+    tisi_transactions_store[nro_ref] = {
+        "nro_transaccion": nro_transaccion,
+        "id_producto": id_producto,
+        "operadora": producto["operadora"],
+        "numero": numero,
+        "importe": importe,
+        "nro_transaccion_referencia": nro_ref
+    }
+
+    response_data = {
+        "codigo": "00",
+        "mensaje": "Operación exitosa, la recarga se hará efectiva en unos segundos.",
+        "nro_transaccion": nro_transaccion
+    }
+
+    print(f"[TISI /Recarga/procesar] ✅ OK | TXN={nro_transaccion} | {producto['operadora']} | {numero} | S/{importe_float} | Saldo={tisi_balance:.2f}")
+    log_request_response('/Recarga/procesar', 'POST', data, response_data, 200)
+    return jsonify(response_data), 200
+
+
+# ================================================================
+# ENDPOINT TISI: POST /Consulta/saldo
+# Consultar saldo TISI
+# ================================================================
+
+@app.route('/Consulta/saldo', methods=['POST', 'OPTIONS'])
+def tisi_consulta_saldo():
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    if not validate_tisi_bearer():
+        response_data = {"codigo": "98", "mensaje": "La clave de seguridad es incorrecta."}
+        return jsonify(response_data), 401
+
+    response_data = {"saldo_disponible": f"{tisi_balance:.3f}"}
+    print(f"[TISI /Consulta/saldo] ✅ Saldo: {tisi_balance:.3f}")
+    log_request_response('/Consulta/saldo', 'POST', {}, response_data, 200)
+    return jsonify(response_data), 200
+
+
 # ================================================================
 # CATCH-ALL ROUTE (DEBE IR AL FINAL)
 # ================================================================
