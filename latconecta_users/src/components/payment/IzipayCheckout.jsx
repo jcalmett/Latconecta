@@ -1,29 +1,64 @@
 // latconecta_users/src/components/payment/IzipayCheckout.jsx
 /**
  * Izipay Checkout Component (Nuevo SDK - Modo Pop-up)
- * Adaptado del sandbox probado. Cambios vs sandbox:
- *   - Imports apuntan a paymentService de latconecta_users
- *   - Billing usa datos del usuario autenticado (prop user)
- *   - onResult incluye datos para reversión (transactionUuid, referenceNumber)
- *   - Prop onCancel para volver al paso 4
  *
- * Flujo:
- * 1. Recibe token de sesión del backend
- * 2. Configura iziConfig con datos de la orden
- * 3. Instancia new Izipay({config})
- * 4. Llama checkout.LoadForm({authorization, keyRSA, callbackResponse})
- * 5. El SDK abre el pop-up de pago
- * 6. callbackResponse recibe el resultado
- * 7. Se valida firma en backend
+ * Cambios v2 respecto a v1:
+ *   - Nueva prop `autoStart` (boolean, default false):
+ *       Si true, el componente llama a LoadForm() inmediatamente al montarse,
+ *       sin mostrar el botón "Pagar con Izipay". Esto elimina el click redundante.
+ *   - Nueva prop `prefetchedToken` (string | null):
+ *       Token JWT ya obtenido por el componente padre (PurchasePopup).
+ *       Si viene, se omite la llamada a paymentService.getToken().
+ *   - Nueva prop `prefetchedConfig` (object | null):
+ *       Config pública ya obtenida por el componente padre.
+ *       Si viene, se omite la llamada a paymentService.getConfig().
+ *   - Nueva prop `prefetchedTransactionId` (string | null):
+ *       transactionId generado por el backend junto con el token.
+ *       Se usa en lugar de generar uno local con Date.now().
+ *
+ * Retrocompatibilidad:
+ *   - Si autoStart=false (o no se pasa), el comportamiento es idéntico a v1:
+ *     muestra el botón "Pagar con Izipay" y el usuario hace click.
+ *   - Todas las props anteriores (amount, currency, orderNumber, user,
+ *     onResult, onCancel) funcionan igual.
+ *
+ * Flujo con autoStart=true (Opción A implementada):
+ *   1. PurchasePopup pre-fetcha config + token al entrar al Step 4 (background).
+ *   2. Al hacer click en "Procesar Compra", PurchasePopup monta este componente
+ *      pasando autoStart=true + prefetchedToken + prefetchedConfig.
+ *   3. Este componente llama a LoadForm() en el useEffect de montaje —
+ *      dentro de la cadena de eventos del click original del usuario.
+ *   4. El popup de Izipay abre directamente, sin botón intermedio.
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import paymentService from "../../services/paymentService";
 
-export default function IzipayCheckout({ amount, currency, orderNumber, user, onResult, onCancel }) {
+export default function IzipayCheckout({
+  // Props existentes
+  amount,
+  currency,
+  orderNumber,
+  user,
+  onResult,
+  onCancel,
+  // Props nuevas para Opción A
+  autoStart = false,
+  prefetchedToken = null,
+  prefetchedConfig = null,
+  prefetchedTransactionId = null,
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState("idle"); // idle | loading | processing | success | error
 
+  // Ref para evitar doble ejecución en StrictMode de React (doble montaje en desarrollo)
+  const hasStarted = useRef(false);
+
+  /**
+   * Núcleo del flujo de pago.
+   * Reutilizado tanto por el click del botón (autoStart=false)
+   * como por el useEffect de montaje (autoStart=true).
+   */
   const startPayment = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -31,25 +66,44 @@ export default function IzipayCheckout({ amount, currency, orderNumber, user, on
 
     try {
       // --- PASO 1: Obtener configuración pública ---
-      const config = await paymentService.getConfig();
-      console.log("📋 Config obtenida:", config);
+      // Si viene pre-fetchada del padre, usarla directamente (sin llamada extra)
+      let config;
+      if (prefetchedConfig) {
+        config = prefetchedConfig;
+        console.log("📋 Config pre-fetchada recibida:", config);
+      } else {
+        config = await paymentService.getConfig();
+        console.log("📋 Config obtenida:", config);
+      }
 
       // --- PASO 2: Solicitar token de sesión al backend ---
+      // Si viene pre-fetchado del padre, usarlo directamente
       setStatus("processing");
-      const tokenData = await paymentService.getToken({
-        amount: parseFloat(amount).toFixed(2),
-        currency: currency,
-        order_number: orderNumber,
-      });
-      console.log("🔑 Token response:", tokenData);
+      let tokenData;
+      let transactionId;
+
+      if (prefetchedToken) {
+        // Token pre-fetchado disponible — no hay llamada al backend aquí
+        tokenData = { success: true, token: prefetchedToken };
+        transactionId = prefetchedTransactionId || `${Date.now()}`;
+        console.log("🔑 Token pre-fetchado recibido, transactionId:", transactionId);
+      } else {
+        // Fallback: obtener token aquí (comportamiento v1)
+        tokenData = await paymentService.getToken({
+          amount: parseFloat(amount).toFixed(2),
+          currency: currency,
+          order_number: orderNumber,
+        });
+        console.log("🔑 Token response:", tokenData);
+        transactionId = tokenData.transaction_id || `${Date.now()}`;
+      }
 
       if (!tokenData.success || !tokenData.token) {
         throw new Error(tokenData.error || "No se pudo obtener el token de sesión");
       }
 
-      // --- PASO 3: Generar transactionId y dateTimeTransaction ---
+      // --- PASO 3: Generar dateTimeTransaction ---
       const now = new Date();
-      const transactionId = tokenData.transaction_id || `${Date.now()}`;
       const dateTimeTransaction = now.toISOString().replace(/[-:T]/g, "").slice(0, 14);
 
       // --- Datos del comprador (del usuario autenticado) ---
@@ -63,7 +117,6 @@ export default function IzipayCheckout({ amount, currency, orderNumber, user, on
         transactionId: transactionId,
         action: "pay",
         merchantCode: config.merchantCode,
-
         order: {
           orderNumber: orderNumber,
           currency: currency,
@@ -75,13 +128,12 @@ export default function IzipayCheckout({ amount, currency, orderNumber, user, on
         appearance: {
           customize: {
             elements: [
-              { paymentMethod: 'YAPE_CODE', order: 1 },
-              { paymentMethod: 'PAGO_PUSH', order: 2 },
-              { paymentMethod: 'CARD', order: 3 },
-            ]
-          }
+              { paymentMethod: "YAPE_CODE", order: 1 },
+              { paymentMethod: "PAGO_PUSH", order: 2 },
+              { paymentMethod: "CARD", order: 3 },
+            ],
+          },
         },
-
         billing: {
           firstName: buyerFirstName,
           lastName: buyerLastName,
@@ -202,7 +254,29 @@ export default function IzipayCheckout({ amount, currency, orderNumber, user, on
       setStatus("error");
       setLoading(false);
     }
-  }, [amount, currency, orderNumber, user, onResult]);
+  }, [amount, currency, orderNumber, user, onResult, prefetchedToken, prefetchedConfig, prefetchedTransactionId]);
+
+  /**
+   * Modo autoStart: ejecutar LoadForm() al montarse el componente.
+   *
+   * Nota de seguridad del SDK:
+   * LoadForm() debe estar en la cadena de un evento de usuario (click).
+   * Con autoStart=true, PurchasePopup monta este componente DENTRO del
+   * handler onClick del botón "Procesar Compra", por lo que el navegador
+   * considera que la llamada sigue dentro del evento de usuario original.
+   * Esto es correcto y no genera bloqueo de popup.
+   *
+   * El ref hasStarted evita doble ejecución en React StrictMode (desarrollo),
+   * donde los efectos se ejecutan dos veces intencionalmente.
+   */
+  useEffect(() => {
+    if (autoStart && !hasStarted.current) {
+      hasStarted.current = true;
+      startPayment();
+    }
+  }, [autoStart, startPayment]);
+
+  // ─── RENDER ───────────────────────────────────────────────────────────────
 
   return (
     <div style={{ textAlign: "center", padding: "16px" }}>
@@ -212,8 +286,12 @@ export default function IzipayCheckout({ amount, currency, orderNumber, user, on
         <p><strong>Monto:</strong> {currency} {amount}</p>
       </div>
 
-      {/* Botón de pago */}
-      {status === "idle" && (
+      {/*
+        Botón "Pagar con Izipay":
+        Solo se muestra si autoStart=false (modo manual / retrocompatible).
+        Con autoStart=true nunca aparece — LoadForm() ya se disparó solo.
+      */}
+      {!autoStart && status === "idle" && (
         <div>
           <button
             onClick={startPayment}
@@ -251,10 +329,10 @@ export default function IzipayCheckout({ amount, currency, orderNumber, user, on
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading / Procesando */}
       {(status === "loading" || status === "processing") && (
         <div style={{ color: "#2563eb" }}>
-          <p>{status === "loading" ? "Conectando con Izipay..." : "Procesando pago..."}</p>
+          <p>{status === "loading" ? "Conectando con Izipay..." : "Abriendo formulario de pago..."}</p>
         </div>
       )}
 
@@ -263,7 +341,11 @@ export default function IzipayCheckout({ amount, currency, orderNumber, user, on
         <div style={{ color: "#dc2626", marginTop: "12px" }}>
           <p>❌ {error}</p>
           <button
-            onClick={() => { setStatus("idle"); setError(null); }}
+            onClick={() => {
+              setStatus("idle");
+              setError(null);
+              hasStarted.current = false;
+            }}
             style={{
               marginTop: "8px",
               padding: "8px 16px",
@@ -294,7 +376,7 @@ export default function IzipayCheckout({ amount, currency, orderNumber, user, on
         </div>
       )}
 
-      {/* Success */}
+      {/* Éxito (estado transitorio antes de que onResult cierre el componente) */}
       {status === "success" && (
         <div style={{ color: "#16a34a", marginTop: "12px" }}>
           <p>✅ Pago exitoso</p>

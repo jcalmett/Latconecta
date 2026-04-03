@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { X, Loader2, AlertCircle, Download, FileText, Check, CreditCard, Smartphone } from 'lucide-react';
 import { getImageUrl, FALLBACK_IMAGES } from '../utils/imageHelper';
 import opsConfigService from '../services/operationsConfigService';
+import paymentService from '../services/paymentService';
 import IzipayCheckout from './payment/IzipayCheckout';
 
 const PurchasePopup = React.memo(({
@@ -30,22 +31,129 @@ const PurchasePopup = React.memo(({
   if (!showPurchasePopup || !selectedProduct) return null;
 
   // --- Payment Gateway State ---
-const [showGatewayCheckout, setShowGatewayCheckout] = useState(false);
-const [gatewayResult, setGatewayResult] = useState(null);
-const [paymentConfig, setPaymentConfig] = useState(null);
-// Cargar config de pagos del backend al montar o al llegar al paso 4
-useEffect(() => {
-if (purchaseStep === 4 || showPurchasePopup) {
-opsConfigService.getPaymentConfig().then(cfg => {
-console.log('📋 Payment config:', cfg);
-setPaymentConfig(cfg);
-});
-}
-}, [purchaseStep, showPurchasePopup]);
-const cardEnabled = paymentConfig?.card?.enabled !== false;
-const barcodeEnabled = paymentConfig?.barcode?.enabled !== false;
-const cardMode = paymentConfig?.card?.mode || 'fase1';
-const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
+  const [showGatewayCheckout, setShowGatewayCheckout] = useState(false);
+  const [gatewayResult, setGatewayResult] = useState(null);
+  const [paymentConfig, setPaymentConfig] = useState(null);
+
+  // ─── OPCIÓN A: Estado del pre-fetch de token Izipay ──────────────────────
+  // orderNumber fijo: se genera UNA sola vez al entrar al Step 4 y no cambia.
+  // Esto evita el bug anterior donde Date.now() en el render generaba un
+  // orderNumber diferente en cada re-render del componente.
+  const [izipayOrderNumber, setIzipayOrderNumber] = useState(null);
+  const [izipayPrefetchedToken, setIzipayPrefetchedToken] = useState(null);
+  const [izipayPrefetchedConfig, setIzipayPrefetchedConfig] = useState(null);
+  const [izipayPrefetchedTransactionId, setIzipayPrefetchedTransactionId] = useState(null);
+  const [izipayTokenLoading, setIzipayTokenLoading] = useState(false);
+
+  // Ref para evitar doble ejecución del pre-fetch (React StrictMode en desarrollo)
+  const prefetchStarted = useRef(false);
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Cargar config de pagos del backend al montar o al llegar al paso 4
+  useEffect(() => {
+    if (purchaseStep === 4 || showPurchasePopup) {
+      opsConfigService.getPaymentConfig().then(cfg => {
+        console.log('📋 Payment config:', cfg);
+        setPaymentConfig(cfg);
+      });
+    }
+  }, [purchaseStep, showPurchasePopup]);
+
+  const cardEnabled = paymentConfig?.card?.enabled !== false;
+  const barcodeEnabled = paymentConfig?.barcode?.enabled !== false;
+  const cardMode = paymentConfig?.card?.mode || 'fase1';
+  const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
+
+  // ─── OPCIÓN A: Pre-fetch de token Izipay al entrar al Step 4 ─────────────
+  /**
+   * Cuando el usuario llega al Step 4 y el modo de tarjeta es fase2,
+   * solicitamos el token al backend en background mientras el usuario
+   * decide su método de pago. Cuando haga click en "Procesar Compra",
+   * el token ya estará disponible y LoadForm() se ejecutará sin delay.
+   *
+   * El orderNumber se genera aquí (una sola vez) para garantizar consistencia
+   * entre el token generado y el que se envía a Izipay en el SDK.
+   */
+  useEffect(() => {
+    // Solo ejecutar cuando lleguemos al step 4 con cardMode fase2
+    if (purchaseStep !== 4) return;
+    if (!paymentConfig) return;          // Esperar a que llegue la config de ops
+    if (cardMode !== 'fase2') return;    // Solo en fase2 se usa Izipay real
+    if (!cardEnabled) return;            // Si tarjeta no está habilitada, no pre-fetchar
+    if (prefetchStarted.current) return; // Evitar doble ejecución
+
+    prefetchStarted.current = true;
+
+    // Generar orderNumber fijo para toda esta transacción
+    const newOrderNumber = `LC${Date.now().toString().slice(-12)}`;
+    setIzipayOrderNumber(newOrderNumber);
+
+    // Calcular el monto según el tipo de producto
+    const getAmount = () => {
+      if (selectedProduct.product_amount_type === 'F') {
+        return parseFloat(selectedProduct.product_total_price);
+      } else if (selectedProduct.product_amount_type === 'R') {
+        return parseFloat(purchaseData.variableTotalToPay || 0);
+      } else if (selectedProduct.product_amount_type === 'V') {
+        const baseAmount = parseFloat(purchaseData.billPaymentAmount || 0);
+        const discountPercentage = parseFloat(selectedProduct.product_discount_percentage || 0);
+        const discount = baseAmount * (discountPercentage / 100);
+        const fee = parseFloat(selectedProduct.product_fee || 0);
+        return baseAmount - discount + fee;
+      }
+      return 0;
+    };
+
+    const amount = getAmount();
+    const currency = selectedProduct.product_currency || 'PEN';
+
+    console.log(`🔄 Pre-fetch token Izipay en background: order=${newOrderNumber}, amount=${amount} ${currency}`);
+    setIzipayTokenLoading(true);
+
+    // Ejecutar ambas llamadas en paralelo para mayor velocidad
+    Promise.all([
+      paymentService.getConfig(),
+      paymentService.getToken({
+        amount: parseFloat(amount).toFixed(2),
+        currency: currency,
+        order_number: newOrderNumber,
+      }),
+    ])
+      .then(([config, tokenData]) => {
+        if (tokenData.success && tokenData.token) {
+          console.log('✅ Token Izipay pre-fetchado correctamente');
+          setIzipayPrefetchedConfig(config);
+          setIzipayPrefetchedToken(tokenData.token);
+          setIzipayPrefetchedTransactionId(tokenData.transaction_id || `${Date.now()}`);
+        } else {
+          // Si el pre-fetch falla, no bloqueamos al usuario.
+          // IzipayCheckout hará su propio fetch al momento del click.
+          console.warn('⚠️ Pre-fetch token falló, IzipayCheckout hará fetch propio:', tokenData.error);
+        }
+      })
+      .catch((err) => {
+        // Error silencioso — no mostramos nada al usuario.
+        // IzipayCheckout manejará el fetch por su cuenta.
+        console.warn('⚠️ Pre-fetch token error (silencioso):', err.message);
+      })
+      .finally(() => {
+        setIzipayTokenLoading(false);
+      });
+
+  }, [purchaseStep, paymentConfig, cardMode, cardEnabled, selectedProduct, purchaseData]);
+
+  // Resetear el pre-fetch si el usuario vuelve atrás desde el Step 4
+  useEffect(() => {
+    if (purchaseStep !== 4) {
+      prefetchStarted.current = false;
+      setIzipayOrderNumber(null);
+      setIzipayPrefetchedToken(null);
+      setIzipayPrefetchedConfig(null);
+      setIzipayPrefetchedTransactionId(null);
+      setIzipayTokenLoading(false);
+    }
+  }, [purchaseStep]);
+  // ─────────────────────────────────────────────────────────────────────────
 
   const calculateTotalToPay = (amount) => {
     const baseAmount = parseFloat(amount) || 0;
@@ -56,8 +164,8 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
   };
 
   useEffect(() => {
-  const barcodeAvailable = company?.company_barcode_available === 'Si' && barcodeEnabled;
-    
+    const barcodeAvailable = company?.company_barcode_available === 'Si' && barcodeEnabled;
+
     if (!barcodeAvailable && purchaseData.paymentMethod === 'barcode') {
       setPurchaseData(prev => ({ ...prev, paymentMethod: cardEnabled ? 'card' : '' }));
       if (showNotification) {
@@ -85,14 +193,14 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
   }, [purchaseStep]);
 
   const getStepTitle = () => {
-     if (purchaseStep === 6) return 'Resultado';
-     if (purchaseStep === 5) return 'Procesando';
-     if (purchaseStep === 4) return 'Método de Pago';
-     if (purchaseStep === 3) return 'Monto';
-     if (purchaseStep === 2.6) return 'Monto a Pagar';
-     if (purchaseStep === 2.5) return 'Datos de Entrega';
-     if (purchaseStep === 2) return 'Validación';
-     return `Paso ${Math.floor(purchaseStep)}`;
+    if (purchaseStep === 6) return 'Resultado';
+    if (purchaseStep === 5) return 'Procesando';
+    if (purchaseStep === 4) return 'Método de Pago';
+    if (purchaseStep === 3) return 'Monto';
+    if (purchaseStep === 2.6) return 'Monto a Pagar';
+    if (purchaseStep === 2.5) return 'Datos de Entrega';
+    if (purchaseStep === 2) return 'Validación';
+    return `Paso ${Math.floor(purchaseStep)}`;
   };
 
   return (
@@ -392,10 +500,8 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                           const amountUSD = parseFloat(purchaseData.billPaymentAmount);
                           const amountLocal = amountUSD * purchaseData.exchangeRate;
                           const maxDebt = purchaseData.validationData?.monto_base || 0;
-
                           const diff = Math.abs(amountLocal - maxDebt);
                           const diffPercent = (diff / maxDebt) * 100;
-
                           if (diffPercent < 1) {
                             return `${maxDebt.toFixed(2)} ${purchaseData.vendorCurrency} (Pago Total)`;
                           } else {
@@ -452,7 +558,8 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
               </div>
             </div>
           )}
-          {/* ✅ PASO 3 NUEVO: Definir/Mostrar Monto (GENÉRICO) */}
+
+          {/* ✅ PASO 3: Definir/Mostrar Monto (GENÉRICO) */}
           {purchaseStep === 3 && (
             <div>
               <h4 className="text-xl font-bold text-bitel-blue mb-4">
@@ -600,23 +707,9 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       <div className="flex justify-between items-center pt-2 border-t border-gray-300">
                         <span className="font-bold text-gray-900">Total a Pagar:</span>
                         <span className="text-xl font-bold text-bitel-blue">
-                          {selectedProduct.product_currency} {purchaseData.variableTotalToPay.toFixed(2)}
+                          {selectedProduct.product_currency} {(purchaseData.variableTotalToPay || 0).toFixed(2)}
                         </span>
                       </div>
-
-                      {purchaseData.conversionApplies && (
-                        <div className="mt-2 pt-2 border-t border-gray-200">
-                          <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded">
-                            💱 <strong>Se {purchaseData.productType === 'transfer' ? 'enviarán' : 'recargarán'}:</strong> {(parseFloat(purchaseData.variableAmount) * purchaseData.exchangeRate).toFixed(2)} {purchaseData.vendorCurrency}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {error && (
-                    <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
-                      <p className="text-sm text-red-600">{error}</p>
                     </div>
                   )}
 
@@ -679,49 +772,54 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
           {purchaseStep === 4 && (
             <div>
               {/* --- MODO CHECKOUT: Muestra el formulario del proveedor --- */}
+              {showGatewayCheckout && (
+                <IzipayCheckout
+                  amount={(() => {
+                    if (selectedProduct.product_amount_type === 'F') {
+                      return parseFloat(selectedProduct.product_total_price);
+                    } else if (selectedProduct.product_amount_type === 'R') {
+                      return parseFloat(purchaseData.variableTotalToPay || 0);
+                    } else if (selectedProduct.product_amount_type === 'V') {
+                      return calculateTotalToPay(parseFloat(purchaseData.billPaymentAmount || 0));
+                    }
+                    return 0;
+                  })()}
+                  currency={selectedProduct.product_currency || 'PEN'}
+                  orderNumber={izipayOrderNumber}
+                  user={user}
+                  onResult={(result) => {
+                    console.log('📨 Gateway result:', result);
+                    setShowGatewayCheckout(false);
 
-                   {showGatewayCheckout && (
-                   <IzipayCheckout
-                    amount={(() => {
-                      if (selectedProduct.product_amount_type === 'F') {
-                        return parseFloat(selectedProduct.product_total_price);
-                      } else if (selectedProduct.product_amount_type === 'R') {
-                        return parseFloat(purchaseData.variableTotalToPay || 0);
-                      } else if (selectedProduct.product_amount_type === 'V') {
-                        return calculateTotalToPay(parseFloat(purchaseData.billPaymentAmount || 0));
-                      }
-                      return 0;
-                    })()}
-                    currency={selectedProduct.product_currency || 'PEN'}
-                    orderNumber={`LC${Date.now().toString().slice(-12)}`}
-                    user={user}
-                    onResult={(result) => {
-                      console.log('📨 Gateway result:', result);
-                      setShowGatewayCheckout(false);
-                      
-                      if (result.success) {
-                        setGatewayResult(result);
-                        handlePaymentAndProvision({
-                          payment_gateway: 'izipay',
-                          payment_transaction_uuid: result.cancelData?.unique_id,
-                          payment_transaction_id: result.transactionId,
-                          payment_reference_number: result.cancelData?.unique_id,
-                          payment_order_number: result.orderNumber,
-                          payment_method_detail: result.cancelData?.pay_method || 'CARD',
-                          payment_code_auth: result.cancelData?.authorization_code,
-                          payment_amount: result.cancelData?.amount,
-                          payment_currency: result.cancelData?.currency,
-                          payment_transaction_datetime: result.cancelData?.transaction_datetime,
-                        });
-                      } else {
-                        setError(result.message || 'El pago no fue procesado');
-                      }
-                    }}
-                    onCancel={() => {
-                      console.log('🚫 Checkout cancelado por usuario');
-                      setShowGatewayCheckout(false);
-                    }}
-                  />
+                    if (result.success) {
+                      setGatewayResult(result);
+                      handlePaymentAndProvision({
+                        payment_gateway: 'izipay',
+                        payment_transaction_uuid: result.cancelData?.unique_id,
+                        payment_transaction_id: result.transactionId,
+                        payment_reference_number: result.cancelData?.unique_id,
+                        payment_order_number: result.orderNumber,
+                        payment_method_detail: result.cancelData?.pay_method || 'CARD',
+                        payment_code_auth: result.cancelData?.authorization_code,
+                        payment_amount: result.cancelData?.amount,
+                        payment_currency: result.cancelData?.currency,
+                        payment_transaction_datetime: result.cancelData?.transaction_datetime,
+                      });
+                    } else {
+                      setError(result.message || 'El pago no fue procesado');
+                    }
+                  }}
+                  onCancel={() => {
+                    console.log('🚫 Checkout cancelado por usuario');
+                    setShowGatewayCheckout(false);
+                  }}
+                  // ─── Props Opción A: autoStart + datos pre-fetchados ──────
+                  autoStart={true}
+                  prefetchedToken={izipayPrefetchedToken}
+                  prefetchedConfig={izipayPrefetchedConfig}
+                  prefetchedTransactionId={izipayPrefetchedTransactionId}
+                  // ─────────────────────────────────────────────────────────
+                />
               )}
 
               {/* --- MODO SELECCIÓN: Botones de método de pago --- */}
@@ -730,7 +828,7 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                   <h4 className="text-xl font-bold text-bitel-blue mb-4">Selecciona Método de Pago</h4>
 
                   <div className="space-y-4 mb-6">
-                    {/* Opción: Tarjeta (solo si el gateway tiene proveedor de card) */}
+                    {/* Opción: Tarjeta */}
                     {cardEnabled && (
                       <button
                         onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'card' }))}
@@ -753,7 +851,7 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       </button>
                     )}
 
-                    {/* Opción: Barcode (solo si company lo permite Y gateway lo tiene) */}
+                    {/* Opción: Barcode */}
                     {company?.company_barcode_available === 'Si' && barcodeEnabled && (
                       <button
                         onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'barcode' }))}
@@ -805,25 +903,40 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                           return;
                         }
                         setError(null);
-                        
-                        if (purchaseData.paymentMethod === 'card') {
-                        if (cardMode === 'fase2') {
-                        // FASE 2: Abrir IZIPAY SDK real
-                        setShowGatewayCheckout(true);
-                        } else {
-                        // FASE 1: Pago simulado, va directo al backend
-                        handlePaymentAndProvision();
-                        }
-                        } else if (purchaseData.paymentMethod === 'barcode') {
-                        // Siempre va al backend (el backend decide fase1/fase2)
-                        handlePaymentAndProvision();
-                        }
 
+                        if (purchaseData.paymentMethod === 'card') {
+                          if (cardMode === 'fase2') {
+                            // ─── OPCIÓN A: Abrir Izipay directamente ────────
+                            // El token ya fue pre-fetchado en background.
+                            // Si aún no llegó (caso raro), IzipayCheckout
+                            // hará su propio fetch (fallback transparente).
+                            setShowGatewayCheckout(true);
+                            // ────────────────────────────────────────────────
+                          } else {
+                            // FASE 1: Pago simulado, va directo al backend
+                            handlePaymentAndProvision();
+                          }
+                        } else if (purchaseData.paymentMethod === 'barcode') {
+                          // Siempre va al backend (el backend decide fase1/fase2)
+                          handlePaymentAndProvision();
+                        }
                       }}
                       disabled={!purchaseData.paymentMethod}
-                      className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
+                      className={`flex-1 text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 ${
+                        // Indicador visual sutil si el token aún se está pre-fetchando
+                        purchaseData.paymentMethod === 'card' && cardMode === 'fase2' && izipayTokenLoading
+                          ? 'bg-blue-400'
+                          : 'bg-bitel-blue'
+                      }`}
                     >
-                      Procesar Compra
+                      {purchaseData.paymentMethod === 'card' && cardMode === 'fase2' && izipayTokenLoading ? (
+                        <>
+                          <Loader2 size={18} className="animate-spin" />
+                          <span>Preparando pago...</span>
+                        </>
+                      ) : (
+                        'Procesar Compra'
+                      )}
                     </button>
                   </div>
                 </>
@@ -861,13 +974,11 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
           )}
 
           {/* PASO 6: Resultado */}
-
           {purchaseStep === 6 && purchaseResult && (
             <div className="py-6">
               {/* CASO 1: Provisión falló + Reversión EXITOSA */}
               {purchaseResult.purchase_status === 'Failed' && purchaseResult.payment_status === 'Reversed' ? (
                 <>
-                  {/* Header de reversión exitosa */}
                   <div className="text-center mb-4">
                     <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <AlertCircle size={40} className="text-orange-600" />
@@ -888,10 +999,7 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                     </div>
                   </div>
 
-                  {/* Información completa */}
                   <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3">
-                    
-                    {/* Información Básica */}
                     <div className="border-b pb-2">
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                         <div>
@@ -905,7 +1013,6 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       </div>
                     </div>
 
-                    {/* Destinatario */}
                     <div className="border-b pb-2">
                       <p className="text-xs text-gray-500 mb-1">
                         {purchaseData.productType === 'bill_payment' ? 'CUENTA' :
@@ -918,14 +1025,12 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       </p>
                     </div>
 
-                    {/* Producto */}
                     <div className="border-b pb-2">
                       <p className="text-xs font-bold text-gray-700 mb-1">PRODUCTO SOLICITADO</p>
                       <p className="font-semibold text-sm">{selectedProduct.product_name}</p>
                       <p className="text-xs text-gray-600">Servicio: {selectedService.service_name}</p>
                     </div>
 
-                    {/* Montos */}
                     <div className="border-b pb-2">
                       <p className="text-xs font-bold text-gray-700 mb-1">MONTO</p>
                       <div className="space-y-0.5 text-sm">
@@ -956,7 +1061,6 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       </div>
                     </div>
 
-                    {/* Estado */}
                     <div>
                       <p className="text-xs font-bold text-gray-700 mb-1">ESTADO</p>
                       <div className="space-y-0.5 text-sm">
@@ -980,10 +1084,8 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                         )}
                       </div>
                     </div>
-
                   </div>
 
-                  {/* Botones de acción */}
                   <div className="space-y-2">
                     <div className="flex gap-2">
                       <button
@@ -1001,7 +1103,6 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                         <span>Descargar PDF</span>
                       </button>
                     </div>
-
                     <button
                       onClick={closePurchasePopup}
                       className="w-full bg-orange-500 text-white py-2.5 rounded-lg font-bold hover:bg-orange-600"
@@ -1013,24 +1114,16 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
 
               ) : purchaseResult.purchase_status === 'Failed' && purchaseResult.payment_status === 'Refunded' ? (
                 <>
-                  {/* CASO 2: Provisión falló + Pago REEMBOLSADO por pasarela */}
+                  {/* CASO 2: Provisión falló + Pago REEMBOLSADO */}
                   <div className="text-center mb-4">
                     <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <AlertCircle size={40} className="text-orange-600" />
                     </div>
-                    <h4 className="text-2xl font-bold text-orange-600 mb-1">
-                      Provisión Fallida
-                    </h4>
-                    <p className="text-sm text-gray-600 mb-2">
-                      No se pudo completar la provisión del servicio
-                    </p>
+                    <h4 className="text-2xl font-bold text-orange-600 mb-1">Provisión Fallida</h4>
+                    <p className="text-sm text-gray-600 mb-2">No se pudo completar la provisión del servicio</p>
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 mx-auto max-w-md">
-                      <p className="text-sm font-semibold text-green-700">
-                        ✓ El pago ha sido reembolsado por la pasarela
-                      </p>
-                      <p className="text-xs text-green-600 mt-1">
-                        No se realizó ningún cargo definitivo a tu tarjeta
-                      </p>
+                      <p className="text-sm font-semibold text-green-700">✓ El pago ha sido reembolsado por la pasarela</p>
+                      <p className="text-xs text-green-600 mt-1">No se realizó ningún cargo definitivo a tu tarjeta</p>
                     </div>
                   </div>
 
@@ -1075,31 +1168,20 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
 
               ) : purchaseResult.purchase_status === 'Failed' && purchaseResult.requires_manual_intervention ? (
                 <>
-                  {/* CASO 2: Provisión falló + Reversión FALLÓ - CRÍTICO */}
+                  {/* CASO 3: Provisión falló + Reversión FALLÓ - CRÍTICO */}
                   <div className="text-center mb-4">
                     <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <AlertCircle size={40} className="text-red-600" />
                     </div>
-                    <h4 className="text-2xl font-bold text-red-600 mb-1">
-                      ⚠️ Intervención Manual Requerida
-                    </h4>
-                    <p className="text-sm text-gray-600 mb-2">
-                      La provisión del servicio falló
-                    </p>
+                    <h4 className="text-2xl font-bold text-red-600 mb-1">⚠️ Intervención Manual Requerida</h4>
+                    <p className="text-sm text-gray-600 mb-2">La provisión del servicio falló</p>
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 mx-auto max-w-md">
-                      <p className="text-sm font-semibold text-red-700">
-                        ✗ No se pudo revertir el pago automáticamente
-                      </p>
-                      <p className="text-xs text-red-600 mt-1">
-                        El cargo permanece en tu tarjeta
-                      </p>
+                      <p className="text-sm font-semibold text-red-700">✗ No se pudo revertir el pago automáticamente</p>
+                      <p className="text-xs text-red-600 mt-1">El cargo permanece en tu tarjeta</p>
                     </div>
                   </div>
 
-                  {/* Información completa */}
                   <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3">
-                    
-                    {/* Información Básica */}
                     <div className="border-b pb-2">
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                         <div>
@@ -1113,7 +1195,6 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       </div>
                     </div>
 
-                    {/* Destinatario */}
                     <div className="border-b pb-2">
                       <p className="text-xs text-gray-500 mb-1">
                         {purchaseData.productType === 'bill_payment' ? 'CUENTA' :
@@ -1121,19 +1202,15 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                          purchaseData.productType === 'transfer' ? 'NÚMERO DESTINO' :
                          'NÚMERO'}
                       </p>
-                      <p className="font-semibold">
-                        {purchaseData.phoneNumber || purchaseData.accountNumber}
-                      </p>
+                      <p className="font-semibold">{purchaseData.phoneNumber || purchaseData.accountNumber}</p>
                     </div>
 
-                    {/* Producto */}
                     <div className="border-b pb-2">
                       <p className="text-xs font-bold text-gray-700 mb-1">PRODUCTO SOLICITADO</p>
                       <p className="font-semibold text-sm">{selectedProduct.product_name}</p>
                       <p className="text-xs text-gray-600">Servicio: {selectedService.service_name}</p>
                     </div>
 
-                    {/* Montos */}
                     <div className="border-b pb-2">
                       <p className="text-xs font-bold text-gray-700 mb-1">MONTO COBRADO</p>
                       <div className="space-y-0.5 text-sm">
@@ -1160,7 +1237,6 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       </div>
                     </div>
 
-                    {/* Estado */}
                     <div className="border-b pb-2">
                       <p className="text-xs font-bold text-gray-700 mb-1">ESTADO</p>
                       <div className="space-y-0.5 text-sm">
@@ -1173,27 +1249,22 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                           <span className="font-semibold text-red-600">{purchaseResult.payment_status}</span>
                         </div>
                         {purchaseResult.payment_ref && (
-                          <div className="text-xs text-gray-500">
-                            Ref. Pago: {purchaseResult.payment_ref}
-                          </div>
+                          <div className="text-xs text-gray-500">Ref. Pago: {purchaseResult.payment_ref}</div>
                         )}
                       </div>
                     </div>
 
-                    {/* Instrucciones */}
                     <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
                       <p className="text-xs font-bold text-yellow-800 mb-2">📞 ACCIÓN REQUERIDA</p>
                       <p className="text-xs text-yellow-700">
-                        No se pudo completar la devolución automática. 
-                        Si no recibes tu reembolso en las próximas 48 horas, 
-                        contacta a <span className="font-semibold">soporte@latconecta.com</span> 
-                        con la referencia: <span className="font-bold">{purchaseResult.reference}</span>
+                        No se pudo completar la devolución automática.
+                        Si no recibes tu reembolso en las próximas 48 horas,
+                        contacta a <span className="font-semibold">soporte@latconecta.com</span> con
+                        la referencia: <span className="font-bold">{purchaseResult.reference}</span>
                       </p>
                     </div>
-
                   </div>
 
-                  {/* Botones de acción */}
                   <div className="space-y-2">
                     <div className="flex gap-2">
                       <button
@@ -1211,7 +1282,6 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                         <span>Descargar PDF</span>
                       </button>
                     </div>
-
                     <button
                       onClick={closePurchasePopup}
                       className="w-full bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700"
@@ -1223,8 +1293,7 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
 
               ) : purchaseResult.success ? (
                 <>
-                  {/* CASO 3: Compra EXITOSA (código original) */}
-                  {/* Header de éxito */}
+                  {/* CASO 4: Compra EXITOSA */}
                   <div className="text-center mb-4">
                     <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <Check size={40} className="text-green-600" />
@@ -1233,16 +1302,13 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       {purchaseResult.purchase_status === 'Pending' ? '¡Compra Registrada!' : '¡Compra Exitosa!'}
                     </h4>
                     <p className="text-sm text-gray-600">
-                      {purchaseResult.purchase_status === 'Pending' 
+                      {purchaseResult.purchase_status === 'Pending'
                         ? 'Tu compra ha sido registrada y está pendiente de confirmación'
                         : 'Tu transacción ha sido completada'}
                     </p>
                   </div>
 
-                  {/* Información completa en formato compacto */}
                   <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3">
-                    
-                    {/* Sección: Información Básica */}
                     <div className="border-b pb-2">
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                         <div>
@@ -1256,7 +1322,6 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       </div>
                     </div>
 
-                    {/* Destinatario */}
                     <div className="border-b pb-2">
                       <p className="text-xs text-gray-500 mb-1">
                         {purchaseData.productType === 'bill_payment' ? 'CUENTA PAGADA' :
@@ -1264,19 +1329,15 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                          purchaseData.productType === 'transfer' ? 'NÚMERO DESTINO' :
                          'NÚMERO RECARGADO'}
                       </p>
-                      <p className="font-semibold">
-                        {purchaseData.phoneNumber || purchaseData.accountNumber}
-                      </p>
+                      <p className="font-semibold">{purchaseData.phoneNumber || purchaseData.accountNumber}</p>
                     </div>
 
-                    {/* Sección: Producto */}
                     <div className="border-b pb-2">
                       <p className="text-xs font-bold text-gray-700 mb-1">PRODUCTO</p>
                       <p className="font-semibold text-sm">{selectedProduct.product_name}</p>
                       <p className="text-xs text-gray-600">Servicio: {selectedService.service_name}</p>
                     </div>
 
-                    {/* Sección: Montos */}
                     <div className="border-b pb-2">
                       <p className="text-xs font-bold text-gray-700 mb-1">MONTO</p>
                       <div className="space-y-0.5 text-sm">
@@ -1309,7 +1370,6 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       </div>
                     </div>
 
-                    {/* Sección: Estado */}
                     <div className={purchaseResult.barcode ? 'border-b pb-2' : ''}>
                       <p className="text-xs font-bold text-gray-700 mb-1">ESTADO</p>
                       <div className="space-y-0.5 text-sm">
@@ -1324,35 +1384,28 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                           </div>
                         )}
                         {purchaseResult.payment_ref && (
-                          <div className="text-xs text-gray-500">
-                            Ref. Pago: {purchaseResult.payment_ref}
-                          </div>
+                          <div className="text-xs text-gray-500">Ref. Pago: {purchaseResult.payment_ref}</div>
                         )}
                         {purchaseResult.provision_ref && (
-                          <div className="text-xs text-gray-500">
-                            Ref. Provisión: {purchaseResult.provision_ref}
-                          </div>
+                          <div className="text-xs text-gray-500">Ref. Provisión: {purchaseResult.provision_ref}</div>
                         )}
                         {purchaseResult.reversal_ref && (
-                          <div className="text-xs text-green-600 font-semibold">
-                            Ref. Reversión: {purchaseResult.reversal_ref}
-                          </div>
+                          <div className="text-xs text-green-600 font-semibold">Ref. Reversión: {purchaseResult.reversal_ref}</div>
                         )}
                       </div>
                     </div>
 
-                    {/* Sección: Barcode (si existe) */}
                     {purchaseResult.barcode && (
                       <div className={purchaseData.productType === 'smartphone' ? 'border-b pb-2' : ''}>
                         <p className="text-xs font-bold text-gray-700 mb-1">CÓDIGO DE BARRAS</p>
                         <p className="font-mono text-center text-base font-bold my-2">{purchaseResult.barcode}</p>
                         {purchaseResult.barcode_image && (
                           <div className="flex justify-center my-2">
-                            <img 
-                              src={purchaseResult.barcode_image} 
-                              alt="Barcode" 
+                            <img
+                              src={purchaseResult.barcode_image}
+                              alt="Barcode"
                               className="max-w-full h-auto"
-                              style={{maxHeight: '80px'}}
+                              style={{ maxHeight: '80px' }}
                             />
                           </div>
                         )}
@@ -1362,7 +1415,6 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       </div>
                     )}
 
-                    {/* Sección: Datos de Entrega (solo smartphones) */}
                     {purchaseData.productType === 'smartphone' && (
                       <div>
                         <p className="text-xs font-bold text-gray-700 mb-1">CONTACTO</p>
@@ -1383,19 +1435,17 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                       </div>
                     )}
 
-                    {/* Alerta de intervención manual */}
                     {purchaseResult.requires_manual_intervention && (
                       <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
                         <p className="text-xs text-yellow-800 font-semibold">⚠️ Atención Requerida</p>
                         <p className="text-xs text-yellow-700 mt-1">
-                          No se pudo completar la devolución automática. Si no recibes tu reembolso en 48 horas, 
+                          No se pudo completar la devolución automática. Si no recibes tu reembolso en 48 horas,
                           contacta a soporte@latconecta.com con la referencia: {purchaseResult.reference}
                         </p>
                       </div>
                     )}
                   </div>
 
-                  {/* Botones de acción */}
                   <div className="space-y-2">
                     <div className="flex gap-2">
                       <button
@@ -1413,7 +1463,6 @@ const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
                         <span>Descargar PDF</span>
                       </button>
                     </div>
-
                     <button
                       onClick={closePurchasePopup}
                       className="w-full bg-bitel-blue text-white py-2.5 rounded-lg font-bold hover:opacity-90"
