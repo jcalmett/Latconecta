@@ -120,7 +120,7 @@ export default function IzipayCheckout({
         order: {
           orderNumber: orderNumber,
           currency: currency,
-          amount: amount,
+          amount: parseFloat(amount).toFixed(2),
           processType: "AT",
           merchantBuyerId: user?.user_id?.toString() || `BUYER_${Date.now()}`,
           dateTimeTransaction: dateTimeTransaction,
