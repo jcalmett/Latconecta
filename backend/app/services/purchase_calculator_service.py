@@ -6,6 +6,13 @@ CASOS SOPORTADOS:
 1. Precio Fijo (F): TopUps fijos, Paquetes, Smartphones
 2. Monto en Rango (R): Transfers, TopUps variables
 3. Monto Variable (V): Bill Payment con validación previa
+
+NOTA — Vendor products con vp_amount_type='range' y vp_amount=NULL:
+  Algunos vendors (ej: MEGAPUNTO/TISI) exponen una única API de rango en lugar
+  de SKUs por monto. En ese caso vendor_product.vp_amount es NULL porque el
+  monto exacto a enviar lo define el producto de Latconecta (product_base_price).
+  _calculate_fixed_price maneja este caso usando product_base_price como
+  vendor_amount cuando vp_amount es NULL.
 """
 
 import logging
@@ -79,7 +86,7 @@ class PurchaseCalculatorService:
             PurchaseCalculation: Objeto con todos los montos calculados
         """
 
-        # ✅ NUEVO: Detectar caso según product_amount_type (no product_type)
+        # Detectar caso según product_amount_type (no product_type)
         amount_type = product.product_amount_type
         product_type = user_data.get('product_type', '').lower()
 
@@ -121,6 +128,13 @@ class PurchaseCalculatorService:
         - Cliente paga según PRODUCTS (product_base_price + fee - discount)
         - Vendor recibe según VENDOR_PRODUCTS (vp_amount)
         - Conversión solo si monedas diferentes (sin margen en monto)
+
+        Caso especial — vendor_product con vp_amount_type='range' y vp_amount=NULL:
+          Algunos vendors (ej: MEGAPUNTO/TISI) tienen una API de rango donde el
+          monto se define por llamada, no por SKU. En ese caso vp_amount es NULL
+          y el monto a enviar al vendor es el product_base_price del producto de
+          Latconecta (que ya está dentro del rango vp_minimum_amount/vp_maximum_amount).
+          Ejemplo: Bitel S/10 → product_base_price=10.00, vp_amount=NULL → vendor recibe 10.00
         """
 
         # Cliente paga
@@ -131,8 +145,24 @@ class PurchaseCalculatorService:
         discount_amount = base_price * (discount_pct / 100)
         total_amount = base_price - discount_amount + fee
 
-        # Vendor recibe (monto fijo de vendor_product)
-        vendor_amount = Decimal(str(vendor_product.vp_amount))
+        # ─── CORRECCIÓN: vendor_amount cuando vp_amount es NULL ──────────────
+        # Si el vendor_product es de tipo rango (vp_amount_type='range') y no
+        # tiene un monto fijo (vp_amount=NULL), el monto a enviar al vendor es
+        # el product_base_price del producto de Latconecta.
+        # Esto soporta vendors como MEGAPUNTO/TISI que tienen una única API de
+        # rango en lugar de SKUs individuales por monto.
+        if vendor_product.vp_amount is not None:
+            vendor_amount = Decimal(str(vendor_product.vp_amount))
+            logger.info(f"Using vendor_product.vp_amount: {vendor_amount}")
+        else:
+            # vp_amount NULL → usar product_base_price como monto al vendor
+            vendor_amount = base_price
+            logger.info(
+                f"vendor_product.vp_amount is NULL (vp_amount_type={vendor_product.vp_amount_type}), "
+                f"using product_base_price as vendor_amount: {vendor_amount}"
+            )
+        # ─────────────────────────────────────────────────────────────────────
+
         vendor_currency = vendor_product.vp_currency
 
         # Conversión
@@ -146,7 +176,7 @@ class PurchaseCalculatorService:
             info_message = None
 
         else:
-            # ✅ USAR TC OVERRIDE SI EXISTE
+            # Usar TC override si existe
             if exchange_rate_override:
                 exch_rate = exchange_rate_override
                 logger.info(f"Using exchange rate override: {exch_rate}")
@@ -219,7 +249,7 @@ class PurchaseCalculatorService:
 
         user_amount = Decimal(str(user_amount))
 
-        # ✅ CORREGIDO: Validar rango con campos correctos
+        # Validar rango con campos correctos
         min_amount = Decimal(str(product.product_base_price or 0))
         max_amount = Decimal(str(product.product_base_price_max or 999999))
 
@@ -251,7 +281,7 @@ class PurchaseCalculatorService:
             info_message = None
 
         else:
-            # ✅ USAR TC OVERRIDE SI EXISTE
+            # Usar TC override si existe
             if exchange_rate_override:
                 exch_rate = exchange_rate_override
                 logger.info(f"Using exchange rate override: {exch_rate}")
@@ -346,7 +376,7 @@ class PurchaseCalculatorService:
                 margin_type = 'none'
 
             else:
-                # ✅ USAR TC OVERRIDE SI EXISTE
+                # Usar TC override si existe
                 if exchange_rate_override:
                     exch_rate = exchange_rate_override
                     logger.info(f"Using exchange rate override: {exch_rate}")
@@ -373,7 +403,7 @@ class PurchaseCalculatorService:
             discount_amount = base_price * (discount_pct / 100)
             total_amount = base_price - discount_amount + fee
 
-            # ⚠️ CRÍTICO: Vendor recibe MONTO EXACTO ORIGINAL
+            # CRÍTICO: Vendor recibe MONTO EXACTO ORIGINAL
             vendor_amount = bill_total_debt  # SIN RECONVERTIR
             vendor_currency = bill_currency
 
@@ -419,7 +449,7 @@ class PurchaseCalculatorService:
                 margin_type = 'none'
 
             else:
-                # ✅ USAR TC OVERRIDE SI EXISTE
+                # Usar TC override si existe
                 if exchange_rate_override:
                     exch_rate = exchange_rate_override
                     logger.info(f"Using exchange rate override: {exch_rate}")
