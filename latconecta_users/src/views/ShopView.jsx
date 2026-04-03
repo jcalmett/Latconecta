@@ -15,7 +15,7 @@ import jsPDF from 'jspdf';
 import countriesService from '../services/countriesService';
 
 const ShopView = ({ user, showNotification }) => {
-  // 🆕 Leer parámetros de URL
+  // Leer parámetros de URL
   const [searchParams] = useSearchParams();
   const urlCountry = searchParams.get('country');
   const urlService = searchParams.get('service');
@@ -68,7 +68,7 @@ const ShopView = ({ user, showNotification }) => {
     loadData();
   }, [urlCountry, urlService, urlCompany]);
 
-const loadData = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
 
@@ -82,7 +82,6 @@ const loadData = async () => {
         setCountry(Array.isArray(countryData) ? countryData[0] : countryData);
       }
 
-      // ✅ CORRECCIÓN: resolvedCompany captura el company antes de llamar loadProducts
       let resolvedCompany = null;
 
       if (urlCompany) {
@@ -170,17 +169,16 @@ const loadData = async () => {
   };
 
   const handleBuyClick = async () => {
-console.log('🔍 selectedService al comprar:', selectedService?.service_name, selectedService?.service_id);
+    console.log('🔍 selectedService al comprar:', selectedService?.service_name, selectedService?.service_id);
     const productType = detectProductType(selectedService);
 
     setShowProductDetail(false);
     setShowPurchasePopup(true);
-    setPurchaseStep(2);  // ✅ CAMBIO: antes 1, ahora directo a 2
+    setPurchaseStep(2);
     setError(null);
-    setProcessing(true);  // ✅ NUEVO
+    setProcessing(true);
 
     try {
-      // ✅ INTEGRAR lógica de handleApproveProduct aquí
       console.log('📦 Cargando vendor_product...');
 
       const vendorProduct = await vendorProductsService.getByKeys(
@@ -252,172 +250,128 @@ console.log('🔍 selectedService al comprar:', selectedService?.service_name, s
     } finally {
       setProcessing(false);
     }
-  };  
+  };
 
-const detectProductType = (service) => {
-  const serviceName = service?.service_name || '';
-  if (serviceName === 'TopUps') return 'topup';
-  if (serviceName === 'Paquetes') return 'package';
-  if (serviceName === 'Bill Payment') return 'bill_payment';
-  if (serviceName === 'Transfers') return 'transfer';
-  if (serviceName === 'Smartphones') return 'smartphone';
-  return 'topup';
-};
+  const detectProductType = (service) => {
+    const serviceName = service?.service_name || '';
+    if (serviceName === 'TopUps') return 'topup';
+    if (serviceName === 'Paquetes') return 'package';
+    if (serviceName === 'Bill Payment') return 'bill_payment';
+    if (serviceName === 'Transfers') return 'transfer';
+    if (serviceName === 'Smartphones') return 'smartphone';
+    return 'topup';
+  };
 
-const handleValidation = async () => {
-  setProcessing(true);
-  setError(null);
+  const handleValidation = async () => {
+    setProcessing(true);
+    setError(null);
 
-  try {
-    let response;
+    try {
+      let response;
 
-    if (purchaseData.productType === 'bill_payment') {
-      // ═══════════════════════════════════════════════════
-      // VALIDACIÓN DE CUENTA
-      // ═══════════════════════════════════════════════════
-      if (!purchaseData.accountNumber) {
-        setError('Ingresa el número de cuenta');
-        setProcessing(false);
-        return;
-      }
+      if (purchaseData.productType === 'bill_payment') {
+        if (!purchaseData.accountNumber) {
+          setError('Ingresa el número de cuenta');
+          setProcessing(false);
+          return;
+        }
 
-      // ✅ MODIFICADO: Verificar si tiene api_group_code
-      if (selectedVendorProduct && selectedVendorProduct.api_group_code) {
-        // ✅ Tiene mapping → Usar backend
-        console.log('Using backend validation for account (with API mapping)');
-        
+        console.log('Using backend validation for account');
         response = await purchasesService.validateAccount(
           selectedProduct.product_id,
           purchaseData.accountNumber
         );
 
- } else {
-    // Sin mapping → Backend decide (fase1 simula, fase2 sin mapping simula también)
-    console.log('Using backend validation for account (no API mapping)');
-    response = await purchasesService.validateAccount(
-      selectedProduct.product_id,
-      purchaseData.accountNumber
-    );
-  }
+        console.log('Account validation response:', response);
 
-      // ✅ CORREGIDO: Procesar respuesta con mejor manejo de errores
-      console.log('Account validation response:', response);
+        if (response && (response.status === 200 || response.status === 'success')) {
+          const isValid = response.data?.valid === true;
 
-      // Verificar que la respuesta sea exitosa
-      if (response && (response.status === 200 || response.status === 'success')) {
-        // Verificar que los datos sean válidos
-        const isValid = response.data?.valid === true;
-        
-        if (isValid) {
-          const montoBase = parseFloat(response.data.monto_base || 0);
-          const billCurrency = purchaseData.vendorCurrency || selectedProduct.product_currency;
+          if (isValid) {
+            const montoBase = parseFloat(response.data.monto_base || 0);
+            const billCurrency = purchaseData.vendorCurrency || selectedProduct.product_currency;
 
-          setPurchaseData(prev => ({
-            ...prev,
-            isValidated: true,
-            billPaymentAmount: '',
-            validationData: {
-              monto_base: montoBase,
-              indicador: response.data.indicador || 'T',
-              account_holder: response.data.account_holder || '',
-              bill_currency: billCurrency
-            }
-          }));
+            setPurchaseData(prev => ({
+              ...prev,
+              isValidated: true,
+              billPaymentAmount: '',
+              validationData: {
+                monto_base: montoBase,
+                indicador: response.data.indicador || 'T',
+                account_holder: response.data.account_holder || '',
+                bill_currency: billCurrency
+              }
+            }));
 
-          setPurchaseStep(2.6);
+            setPurchaseStep(2.6);
+          } else {
+            const errorMsg = response.data?.message || response.message || 'Cuenta inválida';
+            console.error('Account validation failed:', errorMsg);
+            setError(errorMsg);
+          }
         } else {
-          // Validación falló
-          const errorMsg = response.data?.message || response.message || 'Cuenta inválida';
-          console.error('Account validation failed:', errorMsg);
+          const errorMsg = response?.message || 'Error al validar cuenta. Por favor intenta de nuevo.';
+          console.error('Account validation error:', errorMsg);
           setError(errorMsg);
         }
+
       } else {
-        // Error de API o conexión
-        const errorMsg = response?.message || 'Error al validar cuenta. Por favor intenta de nuevo.';
-        console.error('Account validation error:', errorMsg);
-        setError(errorMsg);
-      }
+        if (!purchaseData.phoneNumber) {
+          setError('Ingresa el número de teléfono');
+          setProcessing(false);
+          return;
+        }
 
-    } else {
-      // ═══════════════════════════════════════════════════
-      // VALIDACIÓN DE TELÉFONO
-      // ═══════════════════════════════════════════════════
-      if (!purchaseData.phoneNumber) {
-        setError('Ingresa el número de teléfono');
-        setProcessing(false);
-        return;
-      }
-
-      // ✅ MODIFICADO: Verificar si tiene api_group_code
-      if (selectedVendorProduct && selectedVendorProduct.api_group_code) {
-        // ✅ Tiene mapping → Usar backend
-        console.log('Using backend validation for phone (with API mapping)');
-        
+        console.log('Using backend validation for phone');
         response = await purchasesService.validatePhone(
           selectedProduct.product_id,
           purchaseData.phoneNumber
         );
 
-  } else {
-    // Sin mapping → Backend decide
-    console.log('Using backend validation for phone (no API mapping)');
-    response = await purchasesService.validatePhone(
-      selectedProduct.product_id,
-      purchaseData.phoneNumber
-    );
-  }
+        console.log('Phone validation response:', response);
 
+        if (response && (response.status === 200 || response.status === 'success')) {
+          const isValid = response.data?.valid === true;
 
-      // ✅ CORREGIDO: Procesar respuesta con mejor manejo de errores
-      console.log('Phone validation response:', response);
+          if (isValid) {
+            setPurchaseData(prev => ({
+              ...prev,
+              isValidated: true,
+              validationData: { phone_valid: true }
+            }));
 
-      // Verificar que la respuesta sea exitosa
-      if (response && (response.status === 200 || response.status === 'success')) {
-        // Verificar que los datos sean válidos
-        const isValid = response.data?.valid === true;
-        
-        if (isValid) {
-          setPurchaseData(prev => ({
-            ...prev,
-            isValidated: true,
-            validationData: { phone_valid: true }
-          }));
-
-          setPurchaseStep(3);
-          console.log('✅ Phone validation successful, moving to step 3');
+            setPurchaseStep(3);
+            console.log('✅ Phone validation successful, moving to step 3');
+          } else {
+            const errorMsg = response.data?.message || response.message || 'Teléfono inválido';
+            console.error('Phone validation failed:', errorMsg);
+            setError(errorMsg);
+          }
         } else {
-          // Validación falló
-          const errorMsg = response.data?.message || response.message || 'Teléfono inválido';
-          console.error('Phone validation failed:', errorMsg);
+          const errorMsg = response?.message || 'Error al validar teléfono. Por favor intenta de nuevo.';
+          console.error('Phone validation error:', errorMsg);
           setError(errorMsg);
         }
-      } else {
-        // Error de API o conexión
-        const errorMsg = response?.message || 'Error al validar teléfono. Por favor intenta de nuevo.';
-        console.error('Phone validation error:', errorMsg);
-        setError(errorMsg);
       }
-    }
 
-  } catch (err) {
-    console.error('Validation exception:', err);
-    
-    // Mensaje de error más específico
-    let errorMessage = 'Error en validación: ';
-    
-    if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-      errorMessage += 'No se pudo conectar con el servidor. Verifica tu conexión.';
-    } else if (err.message.includes('timeout')) {
-      errorMessage += 'El servidor tardó demasiado en responder. Intenta de nuevo.';
-    } else {
-      errorMessage += err.message;
+    } catch (err) {
+      console.error('Validation exception:', err);
+
+      let errorMessage = 'Error en validación: ';
+
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        errorMessage += 'No se pudo conectar con el servidor. Verifica tu conexión.';
+      } else if (err.message.includes('timeout')) {
+        errorMessage += 'El servidor tardó demasiado en responder. Intenta de nuevo.';
+      } else {
+        errorMessage += err.message;
+      }
+
+      setError(errorMessage);
+    } finally {
+      setProcessing(false);
     }
-    
-    setError(errorMessage);
-  } finally {
-    setProcessing(false);
-  }
-};
+  };
 
   const handlePaymentAndProvision = async (gatewayData = null) => {
     if (!purchaseData.paymentMethod) {
@@ -437,6 +391,25 @@ const handleValidation = async () => {
     setError(null);
 
     try {
+      // ─── CORRECCIÓN 1: user_selected_amount nunca envía string vacío ────────
+      // Para productos tipo F (precio fijo), variableAmount y transferAmount son
+      // strings vacíos. Enviarlos como '' causa decimal.ConversionSyntax en el
+      // backend al hacer Decimal(''). Se normaliza a null cuando no tienen valor.
+      const rawVariableAmount = purchaseData.variableAmount
+        ? parseFloat(purchaseData.variableAmount)
+        : null;
+
+      const rawTransferAmount = purchaseData.transferAmount
+        ? parseFloat(purchaseData.transferAmount)
+        : null;
+
+      const rawBillAmount = (purchaseData.validationData?.indicador === 'R' && purchaseData.billPaymentAmount)
+        ? parseFloat(purchaseData.billPaymentAmount)
+        : null;
+
+      const userSelectedAmount = rawVariableAmount ?? rawTransferAmount ?? rawBillAmount ?? null;
+      // ─────────────────────────────────────────────────────────────────────────
+
       const purchaseRequest = {
         product_id: selectedProduct.product_id,
         product_type: purchaseData.productType,
@@ -444,12 +417,9 @@ const handleValidation = async () => {
         account_number: purchaseData.accountNumber || null,
         payment_method: purchaseData.paymentMethod,
         exchange_rate: purchaseData.exchangeRate || null,
-        
-        // ✅ Montos variables - GENÉRICO
-        user_selected_amount: purchaseData.variableAmount ||
-                             purchaseData.transferAmount ||
-                             (purchaseData.validationData?.indicador === 'R' ? purchaseData.billPaymentAmount : null),
-        
+
+        user_selected_amount: userSelectedAmount,
+
         payment_type: purchaseData.validationData?.indicador === 'R' ? 'partial' : 'full',
         bill_total_debt: purchaseData.validationData?.monto_base || null,
         bill_currency: purchaseData.vendorCurrency || null,
@@ -458,8 +428,7 @@ const handleValidation = async () => {
         delivery_address: purchaseData.deliveryAddress || null,
         user_email: user?.user_email || null,
 
-        // --- Payment Gateway Data (datos de la transacción del proveedor de pago) ---
-        // CRÍTICOS para reversión si la provisión falla
+        // Datos del gateway de pago (Izipay) — críticos para reversión
         ...(gatewayData && {
           payment_gateway: gatewayData.payment_gateway,
           payment_transaction_uuid: gatewayData.payment_transaction_uuid,
@@ -468,7 +437,11 @@ const handleValidation = async () => {
           payment_order_number: gatewayData.payment_order_number,
           payment_method_detail: gatewayData.payment_method_detail,
           payment_code_auth: gatewayData.payment_code_auth,
-          payment_amount: gatewayData.payment_amount,
+          // Normalizar payment_amount a string con 2 decimales para evitar
+          // cualquier problema de formato Decimal en el backend
+          payment_amount: gatewayData.payment_amount
+            ? parseFloat(gatewayData.payment_amount).toFixed(2)
+            : null,
           payment_currency: gatewayData.payment_currency,
           payment_transaction_datetime: gatewayData.payment_transaction_datetime,
         }),
@@ -481,7 +454,9 @@ const handleValidation = async () => {
       console.log('✅ Purchase response:', response);
 
       setPurchaseResult({
-        success: response.purchase_status === 'Success' || response.purchase_status === 'Pending' || (response.purchase_status === 'Failed' && response.payment_status === 'Reversed'),
+        success: response.purchase_status === 'Success' ||
+                 response.purchase_status === 'Pending' ||
+                 (response.purchase_status === 'Failed' && response.payment_status === 'Reversed'),
         date: response.purchase_date,
         reference: response.purchase_reference,
         purchase_status: response.purchase_status,
@@ -506,6 +481,38 @@ const handleValidation = async () => {
       console.error('❌ Error en purchase:', error);
 
       const errorMsg = error.message || 'Error al procesar la compra';
+
+      // ─── CORRECCIÓN 2: Manejo de error diferenciado post-gateway ────────────
+      // Si el pago con Izipay ya fue aprobado (gatewayData != null) y luego
+      // el backend falla (500 u otro error), NO enviamos al Step 4 porque el
+      // pago ya se procesó — el usuario podría intentar pagar de nuevo creyendo
+      // que no pagó. En su lugar, mostramos el error en el Step 6 para informar
+      // claramente qué pasó y que contacte a soporte con la referencia.
+      if (gatewayData) {
+        // Pago Izipay exitoso + error en backend: ir a Step 6 con error claro
+        setPurchaseResult({
+          success: false,
+          error: `Error al registrar la compra en el sistema. Tu pago fue procesado por Izipay ` +
+                 `(orden: ${gatewayData.payment_order_number}). ` +
+                 `Por favor contacta a soporte@latconecta.com con este número de orden.`,
+          purchase_status: 'Failed',
+          payment_status: 'Success',
+          payment_ref: gatewayData.payment_order_number || null,
+          // Campos requeridos por el Step 6 para no romper el render
+          date: new Date().toISOString(),
+          reference: gatewayData.payment_order_number || 'N/A',
+          monto_pagar: 0,
+          descuento: 0,
+          fee: 0,
+          amount: 0,
+          porcentaje_descuento: 0,
+          requires_manual_intervention: true,
+        });
+        setPurchaseStep(6);
+        return;
+      }
+
+      // Sin gatewayData: error antes o durante el pago
       const isPaymentError = errorMsg.includes('Payment failed') ||
                              errorMsg.includes('Tarjeta rechazada') ||
                              errorMsg.includes('Barcode generation failed') ||
@@ -516,21 +523,31 @@ const handleValidation = async () => {
                              errorMsg.includes('vendor balance');
 
       if (isPaymentError) {
+        // Error de pago conocido: volver al Step 4 para reintentar
         setError(errorMsg);
         setPurchaseStep(4);
       } else {
+        // Error técnico desconocido: mostrar en Step 6
         setError(errorMsg);
         setPurchaseResult({
           success: false,
-          error: errorMsg
+          error: errorMsg,
+          date: new Date().toISOString(),
+          reference: 'N/A',
+          monto_pagar: 0,
+          descuento: 0,
+          fee: 0,
+          amount: 0,
+          porcentaje_descuento: 0,
         });
-        setPurchaseStep(5);
+        setPurchaseStep(6);
       }
+      // ─────────────────────────────────────────────────────────────────────────
+
     } finally {
       setProcessing(false);
     }
   };
-  // Continuación de ShopView.jsx - PARTE 2
 
   const generateAndUploadReceiptPDF = async (receiptData) => {
     try {
@@ -697,7 +714,6 @@ const handleValidation = async () => {
         y += spacing.medium;
       }
 
-      // Mensaje de provisión fallida + reversión exitosa
       if (receiptData.purchaseStatus === 'Failed' && receiptData.paymentStatus === 'Reversed') {
         y += 2;
         doc.setLineWidth(0.3);
@@ -734,7 +750,6 @@ const handleValidation = async () => {
         y += spacing.medium;
       }
 
-      // Mensaje de intervención manual
       if (receiptData.requiresManualIntervention) {
         y += 2;
         doc.setLineWidth(0.3);
@@ -769,7 +784,7 @@ const handleValidation = async () => {
           doc.text(line, 12, y);
           y += spacing.small;
         });
-        
+
         doc.setFont('courier', 'bold');
         doc.text(`Referencia: ${receiptData.reference}`, 12, y);
         doc.setFont('courier', 'normal');
@@ -861,7 +876,7 @@ const handleValidation = async () => {
         const direccion = receiptData.deliveryAddress || 'N/A';
         if (direccion.length > 40) {
           const lineas = doc.splitTextToSize(`Dir: ${direccion}`, 80);
-          lineas.forEach((linea, index) => {
+          lineas.forEach((linea) => {
             doc.text(linea, 12, y);
             y += spacing.small;
           });
@@ -1110,7 +1125,6 @@ Dirección: ${purchaseData.deliveryAddress}
     setPurchaseResult(null);
     setError(null);
   };
-  // Continuación de ShopView.jsx - PARTE 3 (JSX)
 
   const ProductDetailModal = () => {
     if (!showProductDetail || !selectedProduct) return null;
@@ -1139,11 +1153,9 @@ Dirección: ${purchaseData.deliveryAddress}
             <p className="text-gray-700 mb-6">{selectedProduct.product_description}</p>
 
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              {/* ✅ GENÉRICO: Vista según tipo de producto */}
               {selectedProduct.product_amount_type === 'R' &&
                selectedProduct.product_base_price &&
                selectedProduct.product_base_price_max ? (
-                /* PRODUCTO CON RANGO */
                 <div className="bg-white rounded-lg p-3 border border-blue-200">
                   <div className="mb-2 p-2 bg-blue-50 rounded">
                     <div className="text-sm font-semibold text-blue-800 mb-1">
@@ -1161,7 +1173,6 @@ Dirección: ${purchaseData.deliveryAddress}
                   </div>
                 </div>
               ) : (
-                /* PRODUCTO FIJO - CÓDIGO ACTUAL (MANTENER) */
                 <div className="bg-white rounded-lg p-3 border border-gray-200">
                   <div className="flex justify-between items-center text-sm mb-1">
                     <span className="text-gray-700">Precio Base:</span>
@@ -1327,9 +1338,8 @@ Dirección: ${purchaseData.deliveryAddress}
                   <h3 className="text-xl font-bold text-bitel-blue mb-2">{product.product_name}</h3>
                   <p className="text-gray-600 text-sm mb-4 line-clamp-2">{product.product_description}</p>
                   <div className="flex justify-between items-center">
-                    {/* ✅ GENÉRICO: Mostrar rango si existe, sino precio fijo */}
-                    {product.product_amount_type === 'R' && 
-                     product.product_base_price && 
+                    {product.product_amount_type === 'R' &&
+                     product.product_base_price &&
                      product.product_base_price_max ? (
                       <div className="text-right">
                         <div className="text-sm text-gray-600">Desde</div>
