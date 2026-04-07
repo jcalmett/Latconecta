@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, RefreshCw, Eye, Filter, X, AlertCircle } from 'lucide-react';
+import { Search, RefreshCw, Eye, Filter, X, AlertCircle, FileJson } from 'lucide-react';
 import purchasesService from '../../services/purchasesService';
 import PurchaseDetailModal from './PurchaseDetailModal';
 
@@ -21,6 +21,7 @@ const SalesTab = ({ showNotification }) => {
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [showFilters, setShowFilters] = useState(true);
   const [authError, setAuthError] = useState(false);
+  const [jsonPopup, setJsonPopup] = useState(null); // { request, response, reference }
 
   // Estados de filtros - CORREGIDO: Cada filtro en su propio estado
   const [referenceFrom, setReferenceFrom] = useState('');
@@ -502,58 +503,73 @@ const SalesTab = ({ showNotification }) => {
               <table className="w-full">
                 <thead className="bg-[#008C96] text-white">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold">Referencia</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold">Fecha</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold">Teléfono</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold">Servicio</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold">Producto</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold">Monto</th>
-                    <th className="px-3 py-2 text-center text-xs font-semibold">Pago</th>
-                    <th className="px-3 py-2 text-center text-xs font-semibold">Entrega</th>
-                    <th className="px-3 py-2 text-center text-xs font-semibold">Manual</th>
-                    <th className="px-3 py-2 text-center text-xs font-semibold">Ver</th>
+                    <th className="px-2 py-1 text-left text-xs font-semibold">Referencia</th>
+                    <th className="px-2 py-1 text-left text-xs font-semibold">Fecha</th>
+                    <th className="px-2 py-1 text-left text-xs font-semibold">Teléfono</th>
+                    <th className="px-2 py-1 text-left text-xs font-semibold">Vendor</th>
+                    <th className="px-2 py-1 text-left text-xs font-semibold">Operador</th>
+                    <th className="px-2 py-1 text-left text-xs font-semibold">Servicio</th>
+                    <th className="px-2 py-1 text-left text-xs font-semibold">Producto</th>
+                    <th className="px-2 py-1 text-right text-xs font-semibold">Monto</th>
+                    <th className="px-2 py-1 text-center text-xs font-semibold">Pago</th>
+                    <th className="px-2 py-1 text-center text-xs font-semibold">Entrega</th>
+                    <th className="px-2 py-1 text-center text-xs font-semibold">IM</th>
+                    <th className="px-2 py-1 text-center text-xs font-semibold">Ver</th>
+                    <th className="px-2 py-1 text-center text-xs font-semibold">JSON</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {currentPurchases.map((purchase) => (
                     <tr key={purchase.purchase_id} className="hover:bg-gray-50">
                       {/* Referencia */}
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-0.5">
                         <span className="font-mono text-xs text-blue-600 font-semibold">
                           {purchase.purchase_reference}
                         </span>
                       </td>
 
                       {/* Fecha */}
-                      <td className="px-3 py-2 text-xs text-gray-700">
+                      <td className="px-2 py-0.5 text-xs text-gray-700">
                         {formatDate(purchase.purchase_date)}
                       </td>
 
-                      {/* Teléfono */}
-                      <td className="px-3 py-2 text-xs font-semibold text-gray-800">
-                        {purchase.purchase_phone_number || 'N/A'}
+                      {/* Teléfono — máx 9 dígitos */}
+                      <td className="px-2 py-0.5 text-xs font-semibold text-gray-800">
+                        {purchase.purchase_phone_number
+                          ? String(purchase.purchase_phone_number).slice(0, 9)
+                          : 'N/A'}
+                      </td>
+
+                      {/* Vendor */}
+                      <td className="px-2 py-0.5 text-xs text-gray-700">
+                        {purchase.purchase_vendor_code || purchase.vendor_name || 'N/A'}
+                      </td>
+
+                      {/* Operador */}
+                      <td className="px-2 py-0.5 text-xs text-gray-700">
+                        {purchase.purchase_vendpro_operator || 'N/A'}
                       </td>
 
                       {/* Servicio */}
-                      <td className="px-3 py-2 text-xs text-gray-700">
+                      <td className="px-2 py-0.5 text-xs text-gray-700">
                         {purchase.purchase_service_name || 'N/A'}
                       </td>
 
                       {/* Producto */}
-                      <td className="px-3 py-2 text-xs text-gray-700">
+                      <td className="px-2 py-0.5 text-xs text-gray-700">
                         {purchase.purchase_product_name || 'N/A'}
                       </td>
 
                       {/* Monto */}
-                      <td className="px-3 py-2 text-right">
-                        <span className="font-bold text-[#008C96] text-sm">
+                      <td className="px-2 py-0.5 text-right">
+                        <span className="font-bold text-[#008C96] text-xs">
                           {formatCurrency(purchase.purchase_total_amount, purchase.purchase_currency)}
                         </span>
                       </td>
 
                       {/* Estado Pago */}
-                      <td className="px-3 py-2 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      <td className="px-2 py-0.5 text-center">
+                        <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${
                           purchase.purchase_payment_status === 'Paid'
                             ? 'bg-green-100 text-green-700'
                             : purchase.purchase_payment_status === 'Pending'
@@ -567,9 +583,9 @@ const SalesTab = ({ showNotification }) => {
                       </td>
 
                       {/* Estado Entrega */}
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-2 py-0.5 text-center">
                         {purchase.purchase_delivery_status ? (
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${
                             purchase.purchase_delivery_status === 'Success'
                               ? 'bg-green-100 text-green-700'
                               : purchase.purchase_delivery_status === 'Pending'
@@ -583,9 +599,9 @@ const SalesTab = ({ showNotification }) => {
                         )}
                       </td>
 
-                      {/* Intervención Manual */}
-                      <td className="px-3 py-2 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      {/* IM — Intervención Manual */}
+                      <td className="px-2 py-0.5 text-center">
+                        <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${
                           purchase.requires_manual_intervention
                             ? 'bg-red-100 text-red-700'
                             : 'bg-green-100 text-green-700'
@@ -594,15 +610,54 @@ const SalesTab = ({ showNotification }) => {
                         </span>
                       </td>
 
-                      {/* Acciones */}
-                      <td className="px-3 py-2 text-center">
+                      {/* Ver detalle completo */}
+                      <td className="px-2 py-0.5 text-center">
                         <button
                           onClick={() => setSelectedPurchase(purchase)}
-                          className="p-1.5 text-[#008C96] hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Ver detalle"
+                          className="p-1 text-[#008C96] hover:bg-blue-50 rounded transition-colors"
+                          title="Ver detalle completo"
                         >
-                          <Eye size={16} />
+                          <Eye size={14} />
                         </button>
+                      </td>
+
+                      {/* JSON — Request / Response popup */}
+                      <td className="px-2 py-0.5 text-center">
+                        {(purchase.vendor_request || purchase.vendor_response || purchase.purchase_vendor_json) ? (
+                          <button
+                            onClick={() => {
+                              // La BD tiene vendor_request y vendor_response como campos separados.
+                              // purchase_vendor_json es un campo adicional de log completo.
+                              let request = purchase.vendor_request ?? null;
+                              let response = purchase.vendor_response ?? null;
+
+                              // Fallback: si no hay campos separados, parsear purchase_vendor_json
+                              if (!request && !response && purchase.purchase_vendor_json) {
+                                try {
+                                  const parsed = typeof purchase.purchase_vendor_json === 'string'
+                                    ? JSON.parse(purchase.purchase_vendor_json)
+                                    : purchase.purchase_vendor_json;
+                                  request = parsed.request ?? parsed.vendor_request ?? null;
+                                  response = parsed.response ?? parsed.vendor_response ?? parsed;
+                                } catch {
+                                  response = purchase.purchase_vendor_json;
+                                }
+                              }
+
+                              setJsonPopup({
+                                reference: purchase.purchase_reference,
+                                request,
+                                response,
+                              });
+                            }}
+                            className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                            title="Ver Request / Response JSON"
+                          >
+                            <FileJson size={14} />
+                          </button>
+                        ) : (
+                          <span className="text-gray-300 text-xs">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -622,6 +677,89 @@ const SalesTab = ({ showNotification }) => {
           purchase={selectedPurchase}
           onClose={() => setSelectedPurchase(null)}
         />
+      )}
+
+      {/* JSON Popup — Request / Response */}
+      {jsonPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="flex justify-between items-center px-5 py-3 bg-purple-700 rounded-t-xl">
+              <div className="flex items-center space-x-2">
+                <FileJson size={18} className="text-white" />
+                <span className="text-white font-bold text-sm">
+                  Request / Response — {jsonPopup.reference}
+                </span>
+              </div>
+              <button
+                onClick={() => setJsonPopup(null)}
+                className="text-white hover:text-purple-200 transition-colors"
+                title="Cerrar"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-auto p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Request */}
+              <div className="flex flex-col">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                  📤 Request enviado al vendor
+                </h3>
+                <pre className="flex-1 bg-gray-900 text-green-400 text-xs p-3 rounded-lg overflow-auto font-mono leading-relaxed">
+                  {jsonPopup.request
+                    ? (() => {
+                        try {
+                          return JSON.stringify(
+                            typeof jsonPopup.request === 'string'
+                              ? JSON.parse(jsonPopup.request)
+                              : jsonPopup.request,
+                            null, 2
+                          );
+                        } catch {
+                          return String(jsonPopup.request);
+                        }
+                      })()
+                    : '— Sin datos —'}
+                </pre>
+              </div>
+
+              {/* Response */}
+              <div className="flex flex-col">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                  📥 Response recibido del vendor
+                </h3>
+                <pre className="flex-1 bg-gray-900 text-blue-300 text-xs p-3 rounded-lg overflow-auto font-mono leading-relaxed">
+                  {jsonPopup.response
+                    ? (() => {
+                        try {
+                          return JSON.stringify(
+                            typeof jsonPopup.response === 'string'
+                              ? JSON.parse(jsonPopup.response)
+                              : jsonPopup.response,
+                            null, 2
+                          );
+                        } catch {
+                          return String(jsonPopup.response);
+                        }
+                      })()
+                    : '— Sin datos —'}
+                </pre>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => setJsonPopup(null)}
+                className="px-4 py-1.5 bg-purple-700 text-white rounded-lg text-sm font-semibold hover:bg-purple-800 transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
