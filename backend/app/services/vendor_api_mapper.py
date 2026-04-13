@@ -4,6 +4,7 @@
 # NO REQUIERE CÓDIGO NUEVO POR VENDOR
 # ✅ ACTUALIZADO: Soporta formato JSONPath
 # ✅ ACTUALIZADO: Transformación country_alpha3_to_alpha2
+# ✅ ACTUALIZADO: Soporta dynamic:current_timestamp_tisi
 # ========================================
 
 from typing import Dict, Any, List, Optional
@@ -11,6 +12,8 @@ from collections import OrderedDict
 import json
 import re
 from decimal import Decimal
+from datetime import datetime
+
 
 class VendorAPIMapper:
     """
@@ -86,9 +89,7 @@ class VendorAPIMapper:
 
             # ✅ NUEVO: Soporte para constant:valor
             if source_field.startswith('constant:'):
-                # Extraer el valor de la constante
                 constant_value = source_field.split(':', 1)[1]
-                # Convertir al tipo correcto
                 if data_type == 'integer':
                     value = int(constant_value)
                 elif data_type == 'float':
@@ -97,16 +98,17 @@ class VendorAPIMapper:
                     value = constant_value.lower() in ('true', '1', 'yes')
                 else:
                     value = constant_value
+
+            # ✅ NUEVO: Soporte para dynamic:nombre_funcion
+            elif source_field.startswith('dynamic:'):
+                dynamic_func = source_field.split(':', 1)[1]
+                value = self._resolve_dynamic_value(dynamic_func)
+
             else:
-                # Obtener valor del source
                 value = source_data.get(source_field)
 
             # Aplicar transformaciones
-            value = self._apply_transformations(
-                value,
-                source_field,
-                source_data
-            )
+            value = self._apply_transformations(value, source_field, source_data)
 
             # Convertir tipo de dato
             value = self._convert_type(value, data_type)
@@ -122,38 +124,60 @@ class VendorAPIMapper:
 
     def _build_request_jsonpath_format(self, source_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        ✅ NUEVO: Formato JSONPath: {"source_field": "$.target_field"}
+        ✅ NUEVO: Formato JSONPath: {"api_field": "source_field"}
+        Soporta:
+          - "purchase_phone_number"  → valor de source_data
+          - "constant:0001"          → valor literal
+          - "dynamic:current_timestamp_tisi" → valor generado en runtime
         """
         request = OrderedDict()
 
-        for source_field, jsonpath in self.request_mapping.items():
-            # Extraer target_field del JSONPath ($.target_field → target_field)
-            if jsonpath.startswith('$.'):
-                target_field = jsonpath[2:]  # Remover "$."
-            else:
-                target_field = jsonpath
+        for api_field, source_field in self.request_mapping.items():
 
-            # ✅ NUEVO: Soporte para constant:valor
+            # ✅ Soporte para constant:valor
             if source_field.startswith('constant:'):
-                # Extraer el valor de la constante
                 constant_value = source_field.split(':', 1)[1]
                 value = constant_value
+
+            # ✅ NUEVO: Soporte para dynamic:nombre_funcion
+            elif source_field.startswith('dynamic:'):
+                dynamic_func = source_field.split(':', 1)[1]
+                value = self._resolve_dynamic_value(dynamic_func)
+
             else:
-                # Obtener valor del source
                 value = source_data.get(source_field)
 
-            # Aplicar transformaciones si existen
-            value = self._apply_transformations(
-                value,
-                source_field,
-                source_data
-            )
+            # Aplicar transformaciones si existen para este api_field
+            value = self._apply_transformations(value, source_field, source_data)
 
             # Solo agregar si el valor no es None
             if value is not None:
-                self._set_nested_field(request, target_field, value)
+                self._set_nested_field(request, api_field, value)
 
         return request
+
+    def _resolve_dynamic_value(self, func_name: str) -> Any:
+        """
+        ✅ NUEVO: Resuelve valores dinámicos generados en runtime.
+
+        Funciones disponibles:
+        - current_timestamp_tisi: Timestamp actual en formato yyyyMMddHHmmssmss
+                                  requerido por TISI/MEGAPUNTO en campo fecha_envio
+
+        Args:
+            func_name: Nombre de la función dinámica
+
+        Returns:
+            Valor generado
+        """
+        if func_name == 'current_timestamp_tisi':
+            # Formato TISI: yyyyMMddHHmmssmss
+            # Ejemplo:      20260413132500000
+            now = datetime.now()
+            return now.strftime('%Y%m%d%H%M%S') + f"{now.microsecond // 1000:03d}"
+
+        # Fallback: función no reconocida → retorna nombre como string para debug
+        return f"UNKNOWN_DYNAMIC:{func_name}"
 
     def _apply_transformations(
         self,
@@ -202,7 +226,6 @@ class VendorAPIMapper:
 
         # 7. Strip country code
         if transformations.get('strip_country_code'):
-            # Eliminar prefijos comunes: +51, 51, etc.
             value = re.sub(r'^\+?\d{1,3}', '', str(value))
 
         # 8. Country alpha-3 → alpha-2 (ej: VEN → VE, PER → PE, MEX → MX)
@@ -242,20 +265,16 @@ class VendorAPIMapper:
         Establece valor en campo anidado (ej: 'recipientPhone.number')
         """
         if '.' not in field_path:
-            # Campo simple
             target[field_path] = value
         else:
-            # Campo anidado
             parts = field_path.split('.')
             current = target
 
-            # Navegar/crear estructura anidada
             for part in parts[:-1]:
                 if part not in current:
                     current[part] = OrderedDict()
                 current = current[part]
 
-            # Establecer valor final
             current[parts[-1]] = value
 
     def _get_country_prefix(self, country_code: str) -> str:
@@ -268,7 +287,6 @@ class VendorAPIMapper:
             'CO': '57',
             'US': '1',
             'BR': '55',
-            # Agregar más según necesidad
         }
         return prefixes.get(country_code.upper(), '')
 
@@ -290,12 +308,9 @@ class VendorAPIMapper:
         response_mapping = self.mapping_config.get('response_mapping') or {}
         parsed = {}
 
-        # Iterar sobre el mapeo: vendor_field -> latconecta_field
         for vendor_field, latconecta_field in response_mapping.items():
-            # Obtener valor del response del vendor
             value = self._get_nested_value(vendor_response, vendor_field)
             if value is not None:
-                # Guardar con el nombre del campo de Latconecta
                 parsed[latconecta_field] = value
 
         return parsed
@@ -338,7 +353,6 @@ class VendorAPIMapper:
         # Verificar campo de éxito en response
         success_field = success_config.get('success_field')
         if success_field:
-            # ✅ NUEVO: Extraer campo del JSONPath si aplica
             if isinstance(success_field, str) and success_field.startswith('$.'):
                 success_field = success_field[2:]
 
