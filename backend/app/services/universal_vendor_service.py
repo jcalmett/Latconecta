@@ -4,6 +4,7 @@
 # ✅ ACTUALIZADO CON api_group_code
 # ✅ ACTUALIZADO CON vendor simulator support (Fase 2)
 # ✅ ACTUALIZADO CON extra_headers en api_key_header (LATCOM)
+# ✅ ACTUALIZADO CON token_manager para auth bearer (MEGAPUNTO)
 # ========================================
 
 import httpx
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy import text  # ← AGREGADO para queries SQL en texto
 from .vendor_api_mapper import VendorAPIMapper
+from .token_manager import token_manager  # ← AGREGADO para tokens dinámicos
 import logging
 import json
 from app.config import settings  # ← AGREGADO para vendor simulator
@@ -96,7 +98,9 @@ class UniversalVendorService:
 
     async def get_vendor_info(self, vendor_code: str) -> Optional[Dict[str, Any]]:
         """
-        Obtiene información del vendor desde BD
+        Obtiene información del vendor desde BD.
+        Para auth_type 'bearer': incluye access_token del token_manager (dinámico).
+        Para auth_type 'api_key_header': usa vendor_api_key (estático).
         """
         query = """
             SELECT
@@ -120,9 +124,15 @@ class UniversalVendorService:
         if not row:
             return None
 
+        # ✅ NUEVO: Obtener token dinámico del token_manager para auth bearer
+        # Si no hay token en cache (ej: desarrollo sin ENABLE_VENDOR_LOGIN),
+        # retorna None — _build_headers lo manejará con warning
+        access_token = await token_manager.get_token(vendor_code)
+
         return {
             "base_url": row.vendor_url_prod if row.is_production else row.vendor_url_uat,
             "api_key": row.vendor_api_key,
+            "access_token": access_token,  # ← token dinámico para bearer
             "username": row.vendor_username,
             "password": row.vendor_password,
             "is_production": row.is_production
@@ -279,7 +289,7 @@ class UniversalVendorService:
         Construye headers del request
 
         Tipos soportados:
-        - bearer: Authorization: Bearer {token}
+        - bearer: Authorization: Bearer {access_token} ← token dinámico del token_manager
         - api_key_header: {header_name}: {api_key} + extra_headers opcionales
         - basic: Authorization: Basic {base64(user:pass)}
         """
@@ -291,7 +301,15 @@ class UniversalVendorService:
         if auth_type == 'bearer':
             header_name = auth_config.get('header_name', 'Authorization')
             token_prefix = auth_config.get('token_prefix', 'Bearer ')
-            headers[header_name] = f"{token_prefix}{vendor_info['api_key']}"
+            # ✅ CORREGIDO: usar access_token (dinámico) en lugar de api_key (estático)
+            access_token = vendor_info.get('access_token')
+            if not access_token:
+                logger.warning(
+                    "⚠️ No hay token en cache para este vendor. "
+                    "Verificar que ENABLE_VENDOR_LOGIN=True en UAT/Prod. "
+                    "En desarrollo el vendor simulator no requiere token real."
+                )
+            headers[header_name] = f"{token_prefix}{access_token or ''}"
 
         elif auth_type == 'api_key_header':
             header_name = auth_config.get('header_name', 'X-API-Key')
