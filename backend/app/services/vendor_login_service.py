@@ -17,7 +17,7 @@ class VendorLoginService:
     Servicio para ejecutar login en vendors externos
 
     Soporta:
-    - LATCOM (api_key_header — no requiere login)
+    - LATCOM (api_key_header — no requiere login bearer)
     - MEGAPUNTO/TISI (bearer — requiere login con userName/password)
     - Extensible para otros vendors
     """
@@ -35,10 +35,14 @@ class VendorLoginService:
         Returns:
             {
                 'success': bool,
-                'access_token': str or None,
+                'access_token': str,
                 'expires_in': int (segundos),
                 'error': str (si falla)
             }
+
+        Nota: vendors que no requieren login bearer retornan success=False
+        con error='NO_LOGIN_REQUIRED' — events.py los registra como fallidos
+        pero no es un error real, simplemente no necesitan token.
         """
         vendor_code = vendor.vendor_code
 
@@ -58,16 +62,14 @@ class VendorLoginService:
             elif vendor_code == 'MEGAPUNTO':
                 return await self._login_megapunto(vendor, base_url)
             else:
-                # Vendors sin login implementado no necesitan token dinámico
-                # (usan auth_type=apikey, basic, o none — no bearer)
+                # Vendors sin login bearer — no requieren token dinámico
                 logger.info(
-                    f"ℹ️ Vendor {vendor_code} no requiere login "
-                    f"(sin implementación bearer — se omite silenciosamente)"
+                    f"ℹ️ Vendor {vendor_code} no requiere login bearer "
+                    f"(usa api_key_header, basic o none)"
                 )
                 return {
-                    'success': True,
-                    'access_token': None,
-                    'expires_in': 0
+                    'success': False,
+                    'error': 'NO_LOGIN_REQUIRED'
                 }
 
         except Exception as e:
@@ -79,20 +81,18 @@ class VendorLoginService:
 
     async def _login_latcom(self, vendor: Vendor, base_url: str) -> Dict:
         """
-        Login específico para LATCOM
-
-        LATCOM usa auth_type=api_key_header — no requiere token dinámico.
-        El api_key se envía directamente en los headers de cada request.
-        Este método retorna success=True sin hacer llamada HTTP.
+        LATCOM usa auth_type=api_key_header — no requiere token bearer.
+        El api_key se envía directamente en los headers de cada request
+        via UniversalVendorService._build_headers().
+        Retorna NO_LOGIN_REQUIRED para que events.py no intente guardar token.
         """
         logger.info(
             f"ℹ️ LATCOM usa api_key_header — no requiere login bearer. "
             f"api_key configurado: {bool(vendor.vendor_api_key)}"
         )
         return {
-            'success': True,
-            'access_token': None,
-            'expires_in': 0
+            'success': False,
+            'error': 'NO_LOGIN_REQUIRED'
         }
 
     async def _login_megapunto(self, vendor: Vendor, base_url: str) -> Dict:
