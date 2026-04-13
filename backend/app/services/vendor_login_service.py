@@ -17,8 +17,8 @@ class VendorLoginService:
     Servicio para ejecutar login en vendors externos
 
     Soporta:
-    - LATCOM (mitopup.com)
-    - MEGAPUNTO/TISI (api-hub-qa-in.tisi.com.pe)
+    - LATCOM (api_key_header — no requiere login)
+    - MEGAPUNTO/TISI (bearer — requiere login con userName/password)
     - Extensible para otros vendors
     """
 
@@ -35,7 +35,7 @@ class VendorLoginService:
         Returns:
             {
                 'success': bool,
-                'access_token': str,
+                'access_token': str or None,
                 'expires_in': int (segundos),
                 'error': str (si falla)
             }
@@ -58,10 +58,16 @@ class VendorLoginService:
             elif vendor_code == 'MEGAPUNTO':
                 return await self._login_megapunto(vendor, base_url)
             else:
-                logger.warning(f"⚠️ Login no implementado para vendor: {vendor_code}")
+                # Vendors sin login implementado no necesitan token dinámico
+                # (usan auth_type=apikey, basic, o none — no bearer)
+                logger.info(
+                    f"ℹ️ Vendor {vendor_code} no requiere login "
+                    f"(sin implementación bearer — se omite silenciosamente)"
+                )
                 return {
-                    'success': False,
-                    'error': f'Login no implementado para {vendor_code}'
+                    'success': True,
+                    'access_token': None,
+                    'expires_in': 0
                 }
 
         except Exception as e:
@@ -75,99 +81,19 @@ class VendorLoginService:
         """
         Login específico para LATCOM
 
-        Endpoint: POST /lgn
-        Request: username, password, dist_api, user_uid
-        Response: accessToken
+        LATCOM usa auth_type=api_key_header — no requiere token dinámico.
+        El api_key se envía directamente en los headers de cada request.
+        Este método retorna success=True sin hacer llamada HTTP.
         """
-        try:
-            # Validar credenciales
-            if not all([
-                vendor.vendor_username,
-                vendor.vendor_password,
-                vendor.vendor_api_key,
-                vendor.vendor_user_uid
-            ]):
-                return {
-                    'success': False,
-                    'error': 'Credenciales incompletas en BD'
-                }
-
-            # Preparar request
-            url = f"{base_url}/lgn"
-
-            payload = {
-                "username": vendor.vendor_username,
-                "password": vendor.vendor_password,
-                "dist_api": vendor.vendor_api_key,
-                "user_uid": vendor.vendor_user_uid
-            }
-
-            headers = {
-                "Content-Type": "application/json"
-            }
-
-            logger.info(f"🔐 Ejecutando login LATCOM: {url}")
-            logger.debug(f"📤 Username: {vendor.vendor_username}")
-
-            # Ejecutar llamada HTTP
-            timeout = httpx.Timeout(vendor.vendor_timeout or 45.0)
-
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(
-                    url,
-                    json=payload,
-                    headers=headers
-                )
-
-                response.raise_for_status()
-
-                response_data = response.json()
-
-                # LATCOM retorna: {"accessToken": "eyJhbGc..."}
-                access_token = response_data.get('accessToken') or response_data.get('access_token')
-
-                if not access_token:
-                    logger.error(f"❌ Response sin accessToken: {response_data}")
-                    return {
-                        'success': False,
-                        'error': 'Response sin accessToken'
-                    }
-
-                logger.info(f"✅ Login exitoso LATCOM. Token: {access_token[:20]}...")
-
-                return {
-                    'success': True,
-                    'access_token': access_token,
-                    'expires_in': 3000  # 50 minutos (LATCOM da 1 hora)
-                }
-
-        except httpx.HTTPStatusError as e:
-            error_msg = f"HTTP {e.response.status_code}"
-            try:
-                error_detail = e.response.json()
-                error_msg = f"{error_msg}: {error_detail}"
-            except Exception:
-                error_msg = f"{error_msg}: {e.response.text}"
-
-            logger.error(f"❌ Login LATCOM falló: {error_msg}")
-            return {
-                'success': False,
-                'error': error_msg
-            }
-
-        except httpx.TimeoutException:
-            logger.error(f"❌ Timeout en login LATCOM ({vendor.vendor_timeout}s)")
-            return {
-                'success': False,
-                'error': 'Timeout'
-            }
-
-        except Exception as e:
-            logger.error(f"❌ Error en login LATCOM: {e}", exc_info=True)
-            return {
-                'success': False,
-                'error': str(e)
-            }
+        logger.info(
+            f"ℹ️ LATCOM usa api_key_header — no requiere login bearer. "
+            f"api_key configurado: {bool(vendor.vendor_api_key)}"
+        )
+        return {
+            'success': True,
+            'access_token': None,
+            'expires_in': 0
+        }
 
     async def _login_megapunto(self, vendor: Vendor, base_url: str) -> Dict:
         """
