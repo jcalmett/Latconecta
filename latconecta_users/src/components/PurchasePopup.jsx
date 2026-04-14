@@ -47,6 +47,8 @@ const PurchasePopup = React.memo(({
 
   // Ref para evitar doble ejecución del pre-fetch (React StrictMode en desarrollo)
   const prefetchStarted = useRef(false);
+  // Ref para evitar doble envío del request de compra (doble click)
+  const isSubmitting = useRef(false);
   // ─────────────────────────────────────────────────────────────────────────
 
   // Cargar config de pagos del backend al montar o al llegar al paso 4
@@ -146,6 +148,7 @@ const PurchasePopup = React.memo(({
   useEffect(() => {
     if (purchaseStep !== 4) {
       prefetchStarted.current = false;
+      isSubmitting.current = false;
       setIzipayOrderNumber(null);
       setIzipayPrefetchedToken(null);
       setIzipayPrefetchedConfig(null);
@@ -898,11 +901,13 @@ const PurchasePopup = React.memo(({
                     </button>
                     <button
                       onClick={() => {
+                        if (isSubmitting.current) return;
                         if (!purchaseData.paymentMethod) {
                           setError('Selecciona un método de pago');
                           return;
                         }
                         setError(null);
+                        isSubmitting.current = true;
 
                         if (purchaseData.paymentMethod === 'card') {
                           if (cardMode === 'fase2') {
