@@ -313,7 +313,7 @@ class UniversalVendorService:
 
         elif auth_type == 'api_key_header':
             header_name = auth_config.get('header_name', 'X-API-Key')
-            headers[header_name] = vendor_info['api_key']
+            headers[header_name] = vendor_info.get('api_key') or ''
             extra_headers = auth_config.get('extra_headers', {})
             for key, value in extra_headers.items():
                 if value == '{vendor_username}':
