@@ -317,9 +317,9 @@ class UniversalVendorService:
             extra_headers = auth_config.get('extra_headers', {})
             for key, value in extra_headers.items():
                 if value == '{vendor_username}':
-                    value = vendor_info.get('username', '')
+                    value = vendor_info.get('username') or ''
                 elif value == '{vendor_api_key}':
-                    value = vendor_info.get('api_key', '')
+                    value = vendor_info.get('api_key') or ''
                 headers[key] = value
 
         elif auth_type == 'basic':
