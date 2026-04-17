@@ -107,7 +107,7 @@ class UniversalVendorService:
         Para auth_type 'api_key_header': usa vendor_api_key (estático).
         """
         query = """
-            SELECT
+            SELECT /* sync_fix */
                 vendor_url_uat,
                 vendor_url_prod,
                 vendor_api_key,
@@ -132,23 +132,11 @@ class UniversalVendorService:
 
         # Obtener token del cache en memoria (token_manager)
         access_token = await token_manager.get_token(vendor_code)
-
         # Fallback: si el cache está vacío, usar token guardado en BD
         # Esto cubre el caso donde el backend se reinició y el login inicial falló
         if not access_token and row.vendor_access_token:
-            from datetime import datetime
-            token_expiry = row.vendor_token_expiry
-            if token_expiry is None or token_expiry > datetime.now():
-                access_token = row.vendor_access_token
-                logger.info(
-                    f"🔑 {vendor_code}: usando token de BD como fallback "
-                    f"(cache vacío)"
-                )
-            else:
-                logger.warning(
-                    f"⚠️ {vendor_code}: token en BD expirado y cache vacío. "
-                    f"El scheduler renovará el token en el próximo ciclo."
-                )
+            access_token = row.vendor_access_token
+            logger.info(f"🔑 {vendor_code}: usando token de BD como fallback (cache vacío)")
 
         return {
             "base_url": row.vendor_url_prod if row.is_production else row.vendor_url_uat,
@@ -228,7 +216,9 @@ class UniversalVendorService:
                 url = f"{settings.VENDOR_SIMULATOR_URL}{mapping_config['endpoint_url']}"
                 logger.info(f"🎭 Using VENDOR SIMULATOR: {url}")
             else:
-                url = f"{vendor_info['base_url']}{mapping_config['endpoint_url']}"
+                base = vendor_info['base_url'].rstrip('/')
+                endpoint = mapping_config['endpoint_url']
+                url = f"{base}{endpoint}"
                 logger.info(f"🌐 Using REAL VENDOR: {url}")
 
             # 5.5. Agregar mapping_code al header (para logs del simulador)
@@ -368,6 +358,7 @@ class UniversalVendorService:
             }
 
         # 2. Obtener info del vendor (URL + credenciales + token)
+
         vendor_info = await self.get_vendor_info(vendor_code)
         if not vendor_info:
             return {
@@ -378,6 +369,26 @@ class UniversalVendorService:
                 "products_updated": 0,
                 "changes_detail": []
             }
+
+        # Si no hay token en cache, hacer login directo
+        if not vendor_info.get('access_token'):
+            from app.models.vendor import Vendor as VendorModel
+            from sqlalchemy import select as sa_select
+            from app.services.vendor_login_service import VendorLoginService
+            v_result = await self.db.execute(
+                sa_select(VendorModel).where(VendorModel.vendor_code == vendor_code)
+            )
+            vendor_obj = v_result.scalar_one_or_none()
+            if vendor_obj:
+                login_svc = VendorLoginService(self.db)
+                token_result = await login_svc.execute_login(vendor_obj)
+                if token_result.get('success'):
+                    vendor_info['access_token'] = token_result['access_token']
+                    await token_manager.set_token(
+                        vendor_code,
+                        token_result['access_token'],
+                        expires_in_seconds=token_result.get('expires_in', 540)
+                    )
 
         # 3. Construir headers (reutiliza _build_headers sin cambios)
         headers = self._build_headers(
@@ -392,14 +403,18 @@ class UniversalVendorService:
             url = f"{settings.VENDOR_SIMULATOR_URL}{mapping_config['endpoint_url']}"
             logger.info(f"🎭 catalog_sync usando SIMULATOR: {url}")
         else:
-            url = f"{vendor_info['base_url']}{mapping_config['endpoint_url']}"
+            base = vendor_info['base_url'].rstrip('/')
+            endpoint = mapping_config['endpoint_url']
+            url = f"{base}{endpoint}"
+
             logger.info(f"🌐 catalog_sync usando VENDOR REAL: {url}")
 
         # 5. Llamar al endpoint del vendor
         try:
             # El request_mapping del catalog_sync contiene los parámetros
             # del body (puede ser {} si no hay params, como en TISI /Producto/Sel)
-            request_body = mapping_config.get('request_mapping') or {}
+            mapper = VendorAPIMapper(mapping_config)
+            request_body = mapper.build_request({})
 
             async with httpx.AsyncClient(
                 timeout=mapping_config.get('timeout_seconds', 60)
@@ -612,7 +627,7 @@ class UniversalVendorService:
                 text("""
                     UPDATE vendor_products
                     SET vp_amount        = :new_price,
-                        vp_metadata      = :meta::jsonb,
+                        vp_metadata      = CAST(:meta AS jsonb),
                         last_update_date = NOW(),
                         updated_by       = 'catalog_sync'
                     WHERE vp_id = :vp_id

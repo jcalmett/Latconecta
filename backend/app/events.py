@@ -112,6 +112,7 @@ async def initial_vendor_login():
             
             for vendor in vendors:
                 try:
+
                     # Determinar ambiente
                     ambiente = "PROD" if vendor.is_production else "UAT"
                     base_url = vendor.vendor_url_prod if vendor.is_production else vendor.vendor_url_uat
