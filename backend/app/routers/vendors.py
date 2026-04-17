@@ -2,7 +2,9 @@
 Router de Vendors - Gestión de vendors y vendor_products (Versión 3 - Balance Dual)
 Endpoints para CRUD de vendors y gestión de balance USD + Local (solo Admin/Superadmin)
 Actualizado: 2026-01-10 - Agregado endpoint de verificación de consistencia de monedas
+Actualizado: 2026-04-16 - Agregados endpoints sync-catalog y sync-logs
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
@@ -17,6 +19,7 @@ from app.schemas import (
 from app.utils.dependencies import get_current_active_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def require_admin(current_user: User = Depends(get_current_active_user)):
@@ -251,7 +254,6 @@ async def verify_currency_consistency(
         )
     
     # Obtener vendor_products con sus products asociados
-    # Relación: products.product_vendor_code + product_vendpro_code → vendor_products.vendor_code + vp_code
     query = text("""
         SELECT 
             vp.vp_id,
@@ -618,3 +620,196 @@ async def test_vendor_connection(
             "message": "Error conectando con vendor",
             "error": str(e)
         }
+
+
+# =============================================================================
+# ENDPOINTS DE SINCRONIZACIÓN DE CATÁLOGO
+# =============================================================================
+
+@router.post("/{vendor_code}/sync-catalog")
+async def sync_vendor_catalog(
+    vendor_code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Sincronizar catálogo de productos del vendor manualmente.
+
+    Ejecuta el mismo proceso que el scheduler automático pero de forma
+    inmediata y bajo demanda. Útil para forzar actualización de precios
+    sin esperar el próximo ciclo programado.
+
+    Busca automáticamente el mapping con operation_type='catalog_sync'
+    activo para el vendor indicado.
+
+    **Requiere:** Admin o Superadmin
+
+    **Retorna:**
+    - products_reviewed: Cantidad de productos recibidos del vendor
+    - products_updated: Cantidad de precios que cambiaron y se actualizaron
+    - changes_detail: Detalle de cada cambio (vp_code, precio anterior, nuevo)
+    """
+    # Verificar que el vendor existe
+    result = await db.execute(
+        select(Vendor).where(Vendor.vendor_code == vendor_code)
+    )
+    vendor = result.scalar_one_or_none()
+
+    if not vendor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Vendor {vendor_code} no encontrado"
+        )
+
+    if vendor.vendor_status != 'active':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Vendor {vendor_code} no está activo"
+        )
+
+    # Buscar api_group_code con mapping catalog_sync activo para este vendor
+    group_result = await db.execute(
+        text("""
+            SELECT api_group_code, mapping_code
+            FROM vendor_api_mappings
+            WHERE vendor_code    = :vendor_code
+              AND operation_type = 'catalog_sync'
+              AND is_active      = true
+            LIMIT 1
+        """),
+        {"vendor_code": vendor_code}
+    )
+    group_row = group_result.fetchone()
+
+    if not group_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No se encontró mapping con operation_type='catalog_sync' "
+                f"activo para vendor {vendor_code}. "
+                f"Configure el mapping en APIMappings antes de sincronizar."
+            )
+        )
+
+    # Ejecutar sync
+    from app.services.universal_vendor_service import UniversalVendorService
+    from app.services.scheduler_service import scheduler_service
+
+    try:
+        service = UniversalVendorService(db)
+        sync_result = await service.execute_catalog_sync(
+            vendor_code=vendor_code,
+            api_group_code=group_row.api_group_code,
+            triggered_by=f"manual:{current_user.user_email}"
+        )
+
+        # Guardar log en vendor_sync_logs
+        await scheduler_service._save_sync_log(db, vendor_code, sync_result)
+
+        if not sync_result.get('success'):
+            return {
+                "success":       False,
+                "vendor_code":   vendor_code,
+                "mapping_code":  group_row.mapping_code,
+                "error_code":    sync_result.get('error_code'),
+                "error_message": sync_result.get('error_message'),
+            }
+
+        return {
+            "success":           True,
+            "vendor_code":       vendor_code,
+            "mapping_code":      group_row.mapping_code,
+            "triggered_by":      f"manual:{current_user.user_email}",
+            "sync_date":         sync_result.get('sync_date'),
+            "products_reviewed": sync_result.get('products_reviewed', 0),
+            "products_updated":  sync_result.get('products_updated', 0),
+            "changes_detail":    sync_result.get('changes_detail', []),
+            "message": (
+                f"Sync completado: "
+                f"{sync_result.get('products_updated', 0)} de "
+                f"{sync_result.get('products_reviewed', 0)} "
+                f"productos actualizados"
+            )
+        }
+
+    except Exception as e:
+        logger.error(
+            f"❌ Error en sync-catalog manual para {vendor_code}: {e}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error ejecutando sync: {str(e)}"
+        )
+
+
+@router.get("/{vendor_code}/sync-logs")
+async def get_vendor_sync_logs(
+    vendor_code: str,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Obtener historial de sincronizaciones de catálogo para un vendor.
+
+    **Requiere:** Admin o Superadmin
+
+    **Retorna:** Últimas N ejecuciones de sync con detalle de cambios.
+    """
+    result = await db.execute(
+        select(Vendor).where(Vendor.vendor_code == vendor_code)
+    )
+    vendor = result.scalar_one_or_none()
+
+    if not vendor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Vendor {vendor_code} no encontrado"
+        )
+
+    logs_result = await db.execute(
+        text("""
+            SELECT
+                sync_id,
+                vendor_code,
+                api_group_code,
+                sync_date,
+                triggered_by,
+                status,
+                products_reviewed,
+                products_updated,
+                error_message,
+                changes_detail,
+                created_by
+            FROM vendor_sync_logs
+            WHERE vendor_code = :vendor_code
+            ORDER BY sync_date DESC
+            LIMIT :limit
+        """),
+        {"vendor_code": vendor_code, "limit": limit}
+    )
+
+    rows = logs_result.fetchall()
+
+    return {
+        "vendor_code":         vendor_code,
+        "vendor_name":         vendor.vendor_name,
+        "last_sync_date":      vendor.last_sync_date.isoformat() if vendor.last_sync_date else None,
+        "auto_sync_enabled":   vendor.auto_sync_products,
+        "sync_interval_hours": vendor.sync_interval_hours,
+        "total_logs":          len(rows),
+        "logs": [
+            {
+                "sync_id":           row.sync_id,
+                "sync_date":         row.sync_date.isoformat() if row.sync_date else None,
+                "triggered_by":      row.triggered_by,
+                "status":            row.status,
+                "products_reviewed": row.products_reviewed,
+                "products_updated":  row.products_updated,
+                "error_message":     row.error_message,
+                "changes_detail":    row.changes_detail,
+            }
+            for row in rows
+        ]
+    }

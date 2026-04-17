@@ -5,6 +5,7 @@
 # ✅ ACTUALIZADO CON vendor simulator support (Fase 2)
 # ✅ ACTUALIZADO CON extra_headers en api_key_header (LATCOM)
 # ✅ ACTUALIZADO CON token_manager para auth bearer (MEGAPUNTO)
+# ✅ ACTUALIZADO CON execute_catalog_sync (catalog_sync operation_type)
 # ========================================
 
 import httpx
@@ -16,6 +17,8 @@ from .vendor_api_mapper import VendorAPIMapper
 from .token_manager import token_manager  # ← AGREGADO para tokens dinámicos
 import logging
 import json
+from decimal import Decimal
+from datetime import datetime
 from app.config import settings  # ← AGREGADO para vendor simulator
 
 logger = logging.getLogger(__name__)
@@ -43,7 +46,7 @@ class UniversalVendorService:
         Args:
             vendor_code: Código del vendor (DTONE, MEGAPUNTO, etc.)
             api_group_code: Código del grupo de APIs (DT001, MP001, etc.) ⭐ NUEVO
-            operation_type: Tipo de operación (provision, validation, query, reversal, etc.)
+            operation_type: Tipo de operación (provision, validation, query, reversal, catalog_sync, etc.)
         """
         query = """
             SELECT
@@ -277,6 +280,381 @@ class UniversalVendorService:
                 "error_code": "INTEGRATION_ERROR",
                 "error_message": str(e)
             }
+
+    async def execute_catalog_sync(
+        self,
+        vendor_code: str,
+        api_group_code: str,
+        triggered_by: str = 'scheduler'
+    ) -> Dict[str, Any]:
+        """
+        Sincroniza catálogo de productos desde el vendor.
+
+        Usa operation_type='catalog_sync' en vendor_api_mappings.
+        Genérico para cualquier vendor con endpoint de catálogo.
+
+        El response_mapping del mapping define la estructura de la respuesta:
+        {
+            "array_path":          "productos",       <- campo que contiene el array
+            "skuid_field":         "id_producto",     <- campo del ítem -> vp_skuid
+            "nested_prices_array": "precios",         <- array de precios anidado (TISI)
+            "price_pen_field":     "precio",          <- precio en Soles -> vp_amount
+            "price_ref_field":     "precio_referencial", <- precio en Bs (referencia)
+            "exchange_rate_field": "tipo_cambio"      <- TC del día (referencia)
+        }
+
+        Estructura real del response TISI /Producto/Sel:
+        {
+          "codigo": "00",
+          "productos": [
+            {
+              "id_producto": 5580,
+              "nombre_producto": "Movistar Celular 500 Bs",
+              "precios": [
+                {
+                  "precio": "4.58",
+                  "precio_referencial": "500.00",
+                  "tipo_cambio": "109.060000"
+                }
+              ]
+            }
+          ]
+        }
+        """
+        sync_start = datetime.now()
+        logger.info(
+            f"🔄 Iniciando catalog_sync: vendor={vendor_code}, "
+            f"group={api_group_code}, triggered_by={triggered_by}"
+        )
+
+        # 1. Obtener mapping con operation_type='catalog_sync'
+        mapping_config = await self.get_vendor_mapping(
+            vendor_code,
+            api_group_code,
+            'catalog_sync'
+        )
+
+        if not mapping_config:
+            msg = (
+                f"No se encontró mapping catalog_sync para "
+                f"vendor={vendor_code}, group={api_group_code}"
+            )
+            logger.error(f"❌ {msg}")
+            return {
+                "success": False,
+                "error_code": "CONFIG_NOT_FOUND",
+                "error_message": msg,
+                "products_reviewed": 0,
+                "products_updated": 0,
+                "changes_detail": []
+            }
+
+        # 2. Obtener info del vendor (URL + credenciales + token)
+        vendor_info = await self.get_vendor_info(vendor_code)
+        if not vendor_info:
+            return {
+                "success": False,
+                "error_code": "VENDOR_NOT_FOUND",
+                "error_message": f"Vendor {vendor_code} no encontrado o inactivo",
+                "products_reviewed": 0,
+                "products_updated": 0,
+                "changes_detail": []
+            }
+
+        # 3. Construir headers (reutiliza _build_headers sin cambios)
+        headers = self._build_headers(
+            mapping_config.get('auth_type', 'none'),
+            mapping_config.get('auth_config') or {},
+            vendor_info,
+            mapping_config.get('headers') or {}
+        )
+
+        # 4. Construir URL
+        if settings.VENDOR_SIMULATOR_ENABLED:
+            url = f"{settings.VENDOR_SIMULATOR_URL}{mapping_config['endpoint_url']}"
+            logger.info(f"🎭 catalog_sync usando SIMULATOR: {url}")
+        else:
+            url = f"{vendor_info['base_url']}{mapping_config['endpoint_url']}"
+            logger.info(f"🌐 catalog_sync usando VENDOR REAL: {url}")
+
+        # 5. Llamar al endpoint del vendor
+        try:
+            # El request_mapping del catalog_sync contiene los parámetros
+            # del body (puede ser {} si no hay params, como en TISI /Producto/Sel)
+            request_body = mapping_config.get('request_mapping') or {}
+
+            async with httpx.AsyncClient(
+                timeout=mapping_config.get('timeout_seconds', 60)
+            ) as client:
+                http_method = mapping_config.get('http_method', 'POST').upper()
+
+                if http_method == 'POST':
+                    response = await client.post(url, json=request_body, headers=headers)
+                elif http_method == 'GET':
+                    response = await client.get(url, params=request_body, headers=headers)
+                else:
+                    raise ValueError(
+                        f"HTTP method {http_method} no soportado para catalog_sync"
+                    )
+
+            logger.info(
+                f"[{vendor_code}/catalog_sync] Response status: {response.status_code}"
+            )
+
+        except httpx.TimeoutException:
+            return {
+                "success": False,
+                "error_code": "TIMEOUT",
+                "error_message": "Timeout al llamar al endpoint de catálogo",
+                "products_reviewed": 0,
+                "products_updated": 0,
+                "changes_detail": []
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error_code": "HTTP_ERROR",
+                "error_message": str(e),
+                "products_reviewed": 0,
+                "products_updated": 0,
+                "changes_detail": []
+            }
+
+        # 6. Parsear respuesta JSON
+        try:
+            response_data = response.json() if response.text else {}
+        except Exception:
+            return {
+                "success": False,
+                "error_code": "PARSE_ERROR",
+                "error_message": "No se pudo parsear la respuesta del vendor",
+                "products_reviewed": 0,
+                "products_updated": 0,
+                "changes_detail": []
+            }
+
+        # 7. Verificar éxito del response (reutiliza is_success_response del mapper)
+        mapper = VendorAPIMapper(mapping_config)
+        if not mapper.is_success_response(response.status_code, response_data):
+            return {
+                "success": False,
+                "error_code": "VENDOR_ERROR",
+                "error_message": (
+                    f"Vendor retornó error: "
+                    f"{response_data.get('mensaje', str(response_data))}"
+                ),
+                "products_reviewed": 0,
+                "products_updated": 0,
+                "changes_detail": []
+            }
+
+        # 8. Leer configuración del response_mapping
+        response_mapping  = mapping_config.get('response_mapping') or {}
+        array_path        = response_mapping.get('array_path', 'productos')
+        skuid_field       = response_mapping.get('skuid_field', 'id_producto')
+        nested_prices     = response_mapping.get('nested_prices_array', 'precios')
+        price_pen_field   = response_mapping.get('price_pen_field', 'precio')
+        price_ref_field   = response_mapping.get('price_ref_field', 'precio_referencial')
+        exch_rate_field   = response_mapping.get('exchange_rate_field', 'tipo_cambio')
+
+        productos_raw = response_data.get(array_path, [])
+
+        if not productos_raw:
+            logger.warning(
+                f"[{vendor_code}/catalog_sync] "
+                f"Response sin productos en campo '{array_path}'"
+            )
+            return {
+                "success": True,
+                "vendor_code": vendor_code,
+                "api_group_code": api_group_code,
+                "triggered_by": triggered_by,
+                "sync_date": sync_start.isoformat(),
+                "products_reviewed": 0,
+                "products_updated": 0,
+                "changes_detail": [],
+                "warning": f"El vendor no retornó productos en '{array_path}'"
+            }
+
+        # 9. Iterar productos y actualizar BD
+        products_reviewed = 0
+        products_updated  = 0
+        changes_detail    = []
+
+        for item in productos_raw:
+            products_reviewed += 1
+
+            # Extraer skuid del ítem
+            skuid = str(item.get(skuid_field, ''))
+            if not skuid:
+                logger.warning(
+                    f"[{vendor_code}/catalog_sync] "
+                    f"Ítem sin campo '{skuid_field}': {item}"
+                )
+                continue
+
+            # Extraer precio en Soles
+            # TISI tiene estructura anidada: item["precios"][0]["precio"]
+            if nested_prices and nested_prices in item:
+                prices_array = item.get(nested_prices, [])
+                if not prices_array:
+                    logger.warning(
+                        f"[{vendor_code}/catalog_sync] "
+                        f"skuid={skuid} tiene '{nested_prices}' vacío"
+                    )
+                    continue
+                price_node = prices_array[0]
+            else:
+                price_node = item
+
+            raw_price_pen = price_node.get(price_pen_field)
+            raw_price_ref = price_node.get(price_ref_field)
+            raw_exch_rate = price_node.get(exch_rate_field)
+
+            if raw_price_pen is None:
+                logger.warning(
+                    f"[{vendor_code}/catalog_sync] "
+                    f"skuid={skuid} sin campo '{price_pen_field}'"
+                )
+                continue
+
+            try:
+                new_price_pen = Decimal(str(raw_price_pen))
+            except Exception:
+                logger.warning(
+                    f"[{vendor_code}/catalog_sync] "
+                    f"skuid={skuid} precio inválido: {raw_price_pen}"
+                )
+                continue
+
+            # 10. Buscar vendor_product en BD por vp_skuid
+            vp_query = await self.db.execute(
+                text("""
+                    SELECT vp_id, vp_code, vp_amount, vp_metadata
+                    FROM vendor_products
+                    WHERE vendor_code = :vendor_code
+                      AND vp_skuid    = :skuid
+                    LIMIT 1
+                """),
+                {"vendor_code": vendor_code, "skuid": skuid}
+            )
+            vp_row = vp_query.fetchone()
+
+            if not vp_row:
+                logger.debug(
+                    f"[{vendor_code}/catalog_sync] "
+                    f"vp_skuid={skuid} no existe en BD — omitido"
+                )
+                continue
+
+            old_price = vp_row.vp_amount
+            vp_id     = vp_row.vp_id
+            vp_code   = vp_row.vp_code
+
+            # 11. Comparar — solo actualizar si el precio cambió
+            price_changed = (
+                old_price is None or
+                Decimal(str(old_price)) != new_price_pen
+            )
+
+            if not price_changed:
+                logger.debug(
+                    f"[{vendor_code}/catalog_sync] "
+                    f"vp_code={vp_code} sin cambio (precio={old_price})"
+                )
+                continue
+
+            # 12. Construir metadata actualizada preservando campos existentes
+            existing_meta = vp_row.vp_metadata or {}
+            new_meta = {
+                **existing_meta,
+                "precio_referencial": str(raw_price_ref) if raw_price_ref else None,
+                "tipo_cambio":        str(raw_exch_rate) if raw_exch_rate else None,
+                "last_sync_date":     sync_start.isoformat(),
+                "last_sync_by":       triggered_by,
+            }
+
+            # 13. UPDATE vendor_products
+            await self.db.execute(
+                text("""
+                    UPDATE vendor_products
+                    SET vp_amount        = :new_price,
+                        vp_metadata      = :meta::jsonb,
+                        last_update_date = NOW(),
+                        updated_by       = 'catalog_sync'
+                    WHERE vp_id = :vp_id
+                """),
+                {
+                    "new_price": float(new_price_pen),
+                    "meta":      json.dumps(new_meta),
+                    "vp_id":     vp_id
+                }
+            )
+
+            # 14. UPDATE products — todos los products que apunten a este vp_code
+            await self.db.execute(
+                text("""
+                    UPDATE products
+                    SET product_base_price  = :new_price,
+                        product_total_price = :new_price,
+                        last_update_date    = NOW(),
+                        updated_by          = 'catalog_sync'
+                    WHERE product_vendor_code  = :vendor_code
+                      AND product_vendpro_code = :vp_code
+                """),
+                {
+                    "new_price":   float(new_price_pen),
+                    "vendor_code": vendor_code,
+                    "vp_code":     vp_code
+                }
+            )
+
+            products_updated += 1
+            changes_detail.append({
+                "vp_code":               vp_code,
+                "vp_skuid":              skuid,
+                "vp_amount_old":         float(old_price) if old_price else None,
+                "vp_amount_new":         float(new_price_pen),
+                "precio_referencial_bs": str(raw_price_ref) if raw_price_ref else None,
+                "tipo_cambio":           str(raw_exch_rate) if raw_exch_rate else None,
+            })
+
+            logger.info(
+                f"✅ [{vendor_code}/catalog_sync] "
+                f"vp_code={vp_code} | {old_price} → {new_price_pen} PEN"
+            )
+
+        # 15. Commit de todos los cambios
+        await self.db.commit()
+
+        # 16. Actualizar last_sync_date del vendor
+        await self.db.execute(
+            text("""
+                UPDATE vendors
+                SET last_sync_date   = NOW(),
+                    last_update_date = NOW(),
+                    updated_by       = 'catalog_sync'
+                WHERE vendor_code = :vendor_code
+            """),
+            {"vendor_code": vendor_code}
+        )
+        await self.db.commit()
+
+        logger.info(
+            f"✅ [{vendor_code}/catalog_sync] Completado — "
+            f"revisados: {products_reviewed}, actualizados: {products_updated}"
+        )
+
+        return {
+            "success":           True,
+            "vendor_code":       vendor_code,
+            "api_group_code":    api_group_code,
+            "triggered_by":      triggered_by,
+            "sync_date":         sync_start.isoformat(),
+            "products_reviewed": products_reviewed,
+            "products_updated":  products_updated,
+            "changes_detail":    changes_detail
+        }
 
     def _build_headers(
         self,
