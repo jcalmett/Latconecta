@@ -103,6 +103,7 @@ class UniversalVendorService:
         """
         Obtiene información del vendor desde BD.
         Para auth_type 'bearer': incluye access_token del token_manager (dinámico).
+        Fallback: si el cache está vacío, usa vendor_access_token de BD.
         Para auth_type 'api_key_header': usa vendor_api_key (estático).
         """
         query = """
@@ -112,6 +113,8 @@ class UniversalVendorService:
                 vendor_api_key,
                 vendor_username,
                 vendor_password,
+                vendor_access_token,
+                vendor_token_expiry,
                 is_production
             FROM vendors
             WHERE vendor_code = :vendor_code
@@ -127,15 +130,30 @@ class UniversalVendorService:
         if not row:
             return None
 
-        # ✅ NUEVO: Obtener token dinámico del token_manager para auth bearer
-        # Si no hay token en cache (ej: desarrollo sin ENABLE_VENDOR_LOGIN),
-        # retorna None — _build_headers lo manejará con warning
+        # Obtener token del cache en memoria (token_manager)
         access_token = await token_manager.get_token(vendor_code)
+
+        # Fallback: si el cache está vacío, usar token guardado en BD
+        # Esto cubre el caso donde el backend se reinició y el login inicial falló
+        if not access_token and row.vendor_access_token:
+            from datetime import datetime
+            token_expiry = row.vendor_token_expiry
+            if token_expiry is None or token_expiry > datetime.now():
+                access_token = row.vendor_access_token
+                logger.info(
+                    f"🔑 {vendor_code}: usando token de BD como fallback "
+                    f"(cache vacío)"
+                )
+            else:
+                logger.warning(
+                    f"⚠️ {vendor_code}: token en BD expirado y cache vacío. "
+                    f"El scheduler renovará el token en el próximo ciclo."
+                )
 
         return {
             "base_url": row.vendor_url_prod if row.is_production else row.vendor_url_uat,
             "api_key": row.vendor_api_key,
-            "access_token": access_token,  # ← token dinámico para bearer
+            "access_token": access_token,  # cache → fallback BD → None
             "username": row.vendor_username,
             "password": row.vendor_password,
             "is_production": row.is_production
