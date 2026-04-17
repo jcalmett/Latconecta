@@ -433,16 +433,21 @@ class UniversalVendorService:
                 "changes_detail": []
             }
 
-        # 7. Verificar éxito del response (reutiliza is_success_response del mapper)
+        # 7. Verificar éxito del response
+        # Si la respuesta es un array directamente (TISI), el éxito es HTTP 200
+        # Si es un dict, usamos is_success_response del mapper
         mapper = VendorAPIMapper(mapping_config)
-        if not mapper.is_success_response(response.status_code, response_data):
+        if isinstance(response_data, list):
+            is_success = response.status_code == 200
+        else:
+            is_success = mapper.is_success_response(response.status_code, response_data)
+
+        if not is_success:
+            error_msg = response_data.get("mensaje", str(response_data)) if isinstance(response_data, dict) else str(response_data)
             return {
                 "success": False,
                 "error_code": "VENDOR_ERROR",
-                "error_message": (
-                    f"Vendor retornó error: "
-                    f"{response_data.get('mensaje', str(response_data))}"
-                ),
+                "error_message": f"Vendor retorno error: {error_msg}",
                 "products_reviewed": 0,
                 "products_updated": 0,
                 "changes_detail": []
@@ -457,13 +462,14 @@ class UniversalVendorService:
         price_ref_field   = response_mapping.get('price_ref_field', 'precio_referencial')
         exch_rate_field   = response_mapping.get('exchange_rate_field', 'tipo_cambio')
 
-        productos_raw = response_data.get(array_path, [])
+        # array_path=None significa que la respuesta raiz ES el array (TISI /Producto/sel)
+        if array_path:
+            productos_raw = response_data.get(array_path, []) if isinstance(response_data, dict) else []
+        else:
+            productos_raw = response_data if isinstance(response_data, list) else []
 
         if not productos_raw:
-            logger.warning(
-                f"[{vendor_code}/catalog_sync] "
-                f"Response sin productos en campo '{array_path}'"
-            )
+            logger.warning(f"[{vendor_code}/catalog_sync] Response vacio o sin productos")
             return {
                 "success": True,
                 "vendor_code": vendor_code,
@@ -473,7 +479,7 @@ class UniversalVendorService:
                 "products_reviewed": 0,
                 "products_updated": 0,
                 "changes_detail": [],
-                "warning": f"El vendor no retornó productos en '{array_path}'"
+                "warning": "El vendor no retorno productos"
             }
 
         # 9. Iterar productos y actualizar BD
@@ -510,6 +516,15 @@ class UniversalVendorService:
             raw_price_pen = price_node.get(price_pen_field)
             raw_price_ref = price_node.get(price_ref_field)
             raw_exch_rate = price_node.get(exch_rate_field)
+
+            # Ignorar productos sin precio_referencial (Perú - precio variable)
+            # Solo procesar productos con precio fijo en Bs (Venezuela)
+            if raw_price_ref is None:
+                logger.debug(
+                    f"[{vendor_code}/catalog_sync] "
+                    f"skuid={skuid} sin precio_referencial — omitido (precio variable)"
+                )
+                continue
 
             if raw_price_pen is None:
                 logger.warning(
