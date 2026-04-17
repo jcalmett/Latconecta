@@ -336,7 +336,7 @@ class SchedulerService:
                         :products_reviewed,
                         :products_updated,
                         :error_message,
-                        :changes_detail::jsonb,
+                        CAST(:changes_detail AS jsonb),
                         'System'
                     )
                 """),
