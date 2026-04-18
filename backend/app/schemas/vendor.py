@@ -55,6 +55,10 @@ class VendorUpdate(BaseModel):
     vendor_timeout: Optional[int] = None
     is_production: Optional[bool] = None
 
+    # Sync de catálogo
+    auto_sync_products: Optional[bool] = None
+    sync_time: Optional[str] = Field(None, max_length=5, description="Hora diaria de sync HH:MM")
+
     # Balance USD
     vendor_usd_balance: Optional[Decimal] = Field(None, ge=0)
     
