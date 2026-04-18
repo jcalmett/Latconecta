@@ -44,7 +44,7 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
 
     // Sincronización
     auto_sync_products: false,
-    sync_interval_hours: '24',
+    sync_time: '06:00',
     last_sync_date: ''
   });
 
@@ -84,7 +84,7 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
         vendor_timeout: vendor.vendor_timeout || '30',
         is_production: vendor.is_production || false,
         auto_sync_products: vendor.auto_sync_products || false,
-        sync_interval_hours: vendor.sync_interval_hours || '24',
+        sync_time: vendor.sync_time || '06:00',
         last_sync_date: vendor.last_sync_date || ''
       });
     }
@@ -164,9 +164,7 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
     }
 
     // Validar sync interval
-    if (formData.sync_interval_hours && parseInt(formData.sync_interval_hours) < 1) {
-      newErrors.sync_interval_hours = 'Intervalo debe ser mayor a 0';
-    }
+
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -207,7 +205,7 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
         vendor_timeout: formData.vendor_timeout ? parseInt(formData.vendor_timeout) : 30,
         is_production: formData.is_production,
         auto_sync_products: formData.auto_sync_products,
-        sync_interval_hours: formData.sync_interval_hours ? parseInt(formData.sync_interval_hours) : 24,
+        sync_time: formData.sync_time || '06:00',
         last_sync_date: formData.last_sync_date || null
       };
 
@@ -630,20 +628,18 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Intervalo Sync (hrs)</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Hora de Sync</label>
                 <input
-                  type="number"
-                  name="sync_interval_hours"
-                  value={formData.sync_interval_hours}
+                  type="time"
+                  name="sync_time"
+                  value={formData.sync_time}
                   onChange={handleChange}
-                  min="1"
-                  placeholder="24"
                   disabled={!formData.auto_sync_products}
-                  className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                    errors.sync_interval_hours ? 'border-red-500' : 'border-gray-300'
-                  } ${!formData.auto_sync_products ? 'bg-gray-100' : ''}`}
+                  className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 border-gray-300 ${
+                    !formData.auto_sync_products ? 'bg-gray-100' : ''
+                  }`}
                 />
-                {errors.sync_interval_hours && <p className="text-red-500 text-xs mt-0.5">{errors.sync_interval_hours}</p>}
+                <p className="text-gray-400 text-xs mt-0.5">Hora diaria de sincronización automática</p>
               </div>
 
               <div>
