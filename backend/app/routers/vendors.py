@@ -723,13 +723,12 @@ async def sync_vendor_catalog(
             "sync_date":         sync_result.get('sync_date'),
             "products_reviewed": sync_result.get('products_reviewed', 0),
             "products_updated":  sync_result.get('products_updated', 0),
+            "count_nuevo":       sync_result.get('count_nuevo', 0),
+            "count_sin_cambio":  sync_result.get('count_sin_cambio', 0),
+            "count_no_vino":     sync_result.get('count_no_vino', 0),
+            "count_alerta":      sync_result.get('count_alerta', 0),
             "changes_detail":    sync_result.get('changes_detail', []),
-            "message": (
-                f"Sync completado: "
-                f"{sync_result.get('products_updated', 0)} de "
-                f"{sync_result.get('products_reviewed', 0)} "
-                f"productos actualizados"
-            )
+            "message":           sync_result.get('message', '')
         }
 
     except Exception as e:
