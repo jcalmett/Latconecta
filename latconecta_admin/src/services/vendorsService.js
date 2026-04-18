@@ -232,6 +232,22 @@ const vendorsService = {
    * @param {string} vendorCode - Código del vendor a verificar
    * @returns {Array} Lista de vendor_products con su estado de validación
    */
+  /**
+   * Sincronizar catálogo de productos del vendor
+   * POST /vendors/{vendor_code}/sync-catalog
+   */
+  syncCatalog: async (vendorCode) => {
+    try {
+      console.log('[Vendors Service] Syncing catalog for vendor:', vendorCode);
+      const response = await apiClient.post(`/vendors/${vendorCode}/sync-catalog/`);
+      console.log('[Vendors Service] Catalog synced:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('[Vendors Service] Error syncing catalog:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
   verifyCurrencyConsistency: async (vendorCode) => {
     try {
       console.log('[Vendors Service] Verifying currency consistency for vendor:', vendorCode);

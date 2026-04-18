@@ -17,6 +17,8 @@ const VendorsTab = () => {
   const [showForm, setShowForm] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [balanceSummary, setBalanceSummary] = useState(null);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncVendor, setSyncVendor] = useState(null);
 
   useEffect(() => {
     loadVendors();
@@ -103,6 +105,11 @@ const VendorsTab = () => {
   const handleVerifyCurrency = (vendor) => {
     setSelectedVendor(vendor);
     setShowVerificationModal(true);
+  };
+
+  const handleSyncCatalog = (vendor) => {
+    setSyncVendor(vendor);
+    setShowSyncModal(true);
   };
 
   const getStatusBadge = (status) => {
@@ -299,6 +306,13 @@ const VendorsTab = () => {
                         🔌
                       </button>
                       <button
+                        onClick={() => handleSyncCatalog(vendor)}
+                        className="text-teal-600 hover:text-teal-900"
+                        title="Sincronizar Catálogo"
+                      >
+                        🔃
+                      </button>
+                      <button
                         onClick={() => handleDelete(vendor.vendor_code)}
                         className="text-red-600 hover:text-red-900"
                         title="Eliminar"
@@ -348,6 +362,16 @@ const VendorsTab = () => {
           onClose={() => {
             setShowVerificationModal(false);
             setSelectedVendor(null);
+          }}
+        />
+      )}
+
+      {showSyncModal && syncVendor && (
+        <SyncCatalogModal
+          vendor={syncVendor}
+          onClose={() => {
+            setShowSyncModal(false);
+            setSyncVendor(null);
           }}
         />
       )}
@@ -492,6 +516,230 @@ const CurrencyVerificationModal = ({ vendor, onClose }) => {
           )}
         </div>
 
+        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+const STATUS_CONFIG = {
+  ACTUALIZADO: { label: 'Actualizado',  bg: 'bg-blue-100',   text: 'text-blue-800',   icon: '✅' },
+  SIN_CAMBIO:  { label: 'Sin Cambio',   bg: 'bg-gray-100',   text: 'text-gray-600',   icon: '➖' },
+  NUEVO:       { label: 'Nuevo',        bg: 'bg-green-100',  text: 'text-green-800',  icon: '🆕' },
+  NO_VINO:     { label: 'No Recibido',  bg: 'bg-orange-100', text: 'text-orange-800', icon: '⚠️' },
+  ALERTA:      { label: 'Alerta +10%',  bg: 'bg-red-100',    text: 'text-red-800',    icon: '🚨' },
+};
+
+const SyncCatalogModal = ({ vendor, onClose }) => {
+  const [syncState, setSyncState] = useState('idle'); // idle | loading | done | error
+  const [syncResult, setSyncResult] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const executeSyncCatalog = async () => {
+    try {
+      setSyncState('loading');
+      setErrorMsg('');
+      const result = await vendorsService.syncCatalog(vendor.vendor_code);
+      setSyncResult(result);
+      setSyncState('done');
+    } catch (err) {
+      setErrorMsg(err.response?.data?.detail || err.message || 'Error al ejecutar sync');
+      setSyncState('error');
+    }
+  };
+
+  const filteredProducts = syncResult?.changes_detail?.filter(p => {
+    if (filterStatus === 'all') return true;
+    return p.status === filterStatus;
+  }) || [];
+
+  const formatPrice = (v) => v != null ? `S/${parseFloat(v).toFixed(2)}` : '-';
+
+  const pctChange = (oldP, newP) => {
+    if (!oldP || !newP) return null;
+    const pct = ((newP - oldP) / oldP) * 100;
+    return pct > 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#008C96] to-[#006B74] text-white px-6 py-4 rounded-t-lg">
+          <h3 className="text-xl font-bold">🔃 Sincronización de Catálogo</h3>
+          <p className="text-teal-100 text-sm mt-1">{vendor.vendor_name} — Precios Venezuela</p>
+        </div>
+
+        <div className="p-6 flex-1 overflow-auto">
+
+          {/* Estado idle — botón inicial */}
+          {syncState === 'idle' && (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">🔃</div>
+              <h4 className="text-lg font-semibold text-gray-800 mb-2">
+                Sincronizar Catálogo de {vendor.vendor_name}
+              </h4>
+              <p className="text-gray-500 mb-6 max-w-md mx-auto">
+                Se consultará la API del vendor para obtener los precios actuales
+                y se actualizarán los productos en el sistema.
+              </p>
+              {vendor.last_sync_date && (
+                <p className="text-sm text-gray-400 mb-6">
+                  Último sync: {new Date(vendor.last_sync_date).toLocaleString('es-PE')}
+                </p>
+              )}
+              <button
+                onClick={executeSyncCatalog}
+                className="bg-[#008C96] hover:bg-[#006B74] text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+              >
+                Ejecutar Sincronización
+              </button>
+            </div>
+          )}
+
+          {/* Estado loading */}
+          {syncState === 'loading' && (
+            <div className="text-center py-16">
+              <div className="text-5xl mb-4 animate-spin inline-block">🔃</div>
+              <p className="text-gray-600 font-medium">Sincronizando con {vendor.vendor_name}...</p>
+              <p className="text-gray-400 text-sm mt-2">Consultando API y actualizando precios</p>
+            </div>
+          )}
+
+          {/* Estado error */}
+          {syncState === 'error' && (
+            <div className="text-center py-12">
+              <div className="text-5xl mb-4">❌</div>
+              <h4 className="text-lg font-semibold text-red-700 mb-2">Error en la sincronización</h4>
+              <p className="text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 max-w-md mx-auto text-sm">{errorMsg}</p>
+              <button
+                onClick={() => setSyncState('idle')}
+                className="mt-6 px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
+          {/* Estado done — reporte */}
+          {syncState === 'done' && syncResult && (
+            <div className="space-y-4">
+
+              {/* Resumen de contadores */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {[
+                  { label: 'Actualizados', value: syncResult.products_updated,  bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700',   icon: '✅' },
+                  { label: 'Sin Cambio',   value: syncResult.count_sin_cambio,  bg: 'bg-gray-50',   border: 'border-gray-200',   text: 'text-gray-600',   icon: '➖' },
+                  { label: 'Nuevos',       value: syncResult.count_nuevo,       bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700',  icon: '🆕' },
+                  { label: 'No Recibidos', value: syncResult.count_no_vino,     bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', icon: '⚠️' },
+                  { label: 'Alertas +10%', value: syncResult.count_alerta,      bg: 'bg-red-50',    border: 'border-red-200',    text: 'text-red-700',    icon: '🚨' },
+                ].map((c, i) => (
+                  <div key={i} className={`${c.bg} border ${c.border} rounded-lg p-3 text-center`}>
+                    <div className="text-2xl font-bold ${c.text}">{c.value}</div>
+                    <div className="text-xs text-gray-500 mt-1">{c.icon} {c.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="text-xs text-gray-400">
+                Sync: {new Date(syncResult.sync_date).toLocaleString('es-PE')} — {syncResult.triggered_by}
+              </div>
+
+              {/* Filtro */}
+              <div className="flex gap-2 flex-wrap">
+                {['all', 'ACTUALIZADO', 'ALERTA', 'SIN_CAMBIO', 'NUEVO', 'NO_VINO'].map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setFilterStatus(f)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      filterStatus === f
+                        ? 'bg-[#008C96] text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {f === 'all' ? 'Todos' : STATUS_CONFIG[f]?.label || f}
+                    {f !== 'all' && (
+                      <span className="ml-1">
+                        ({syncResult.changes_detail?.filter(p => p.status === f).length || 0})
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tabla de productos */}
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">VP Code</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Precio Anterior</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Precio Nuevo</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Variación</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Bs. Ref.</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">T/C</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {filteredProducts.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                          No hay productos con ese estado
+                        </td>
+                      </tr>
+                    ) : filteredProducts.map((p, i) => {
+                      const cfg = STATUS_CONFIG[p.status] || {};
+                      const variacion = pctChange(p.vp_amount_old, p.vp_amount_new);
+                      return (
+                        <tr key={i} className={p.alerta_precio ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
+                              {cfg.icon} {cfg.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-gray-900">{p.nombre_producto || '-'}</div>
+                            <div className="text-xs text-gray-400">skuid: {p.vp_skuid}</div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{p.vp_code || '-'}</td>
+                          <td className="px-4 py-3 text-right text-gray-600">{formatPrice(p.vp_amount_old)}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatPrice(p.vp_amount_new)}</td>
+                          <td className="px-4 py-3 text-right">
+                            {variacion ? (
+                              <span className={`font-medium ${parseFloat(variacion) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {variacion}
+                              </span>
+                            ) : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-600">
+                            {p.precio_referencial_bs ? `Bs. ${p.precio_referencial_bs}` : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-right text-xs text-gray-400">
+                            {p.tipo_cambio ? parseFloat(p.tipo_cambio).toFixed(2) : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
         <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-end">
           <button
             onClick={onClose}
