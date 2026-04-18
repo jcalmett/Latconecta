@@ -74,20 +74,7 @@ const VendorsTab = () => {
     }
   };
 
-  const handleSyncBalance = async (vendorCode) => {
-    try {
-      const result = await vendorsService.syncBalance(vendorCode);
-      if (result.success) {
-        alert(`Balance sincronizado exitosamente`);
-        loadVendors();
-        loadBalanceSummary();
-      } else {
-        alert(`Error al sincronizar: ${result.message}`);
-      }
-    } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || err.message}`);
-    }
-  };
+
 
   const handleTestConnection = async (vendorCode) => {
     try {
@@ -292,13 +279,6 @@ const VendorsTab = () => {
                         🔍
                       </button>
                       <button
-                        onClick={() => handleSyncBalance(vendor.vendor_code)}
-                        className="text-purple-600 hover:text-purple-900"
-                        title="Sincronizar Balance"
-                      >
-                        🔄
-                      </button>
-                      <button
                         onClick={() => handleTestConnection(vendor.vendor_code)}
                         className="text-yellow-600 hover:text-yellow-900"
                         title="Probar Conexión"
@@ -310,7 +290,7 @@ const VendorsTab = () => {
                         className="text-teal-600 hover:text-teal-900"
                         title="Sincronizar Catálogo"
                       >
-                        🔃
+                        🔄
                       </button>
                       <button
                         onClick={() => handleDelete(vendor.vendor_code)}
@@ -576,7 +556,7 @@ const SyncCatalogModal = ({ vendor, onClose }) => {
 
         {/* Header */}
         <div className="bg-gradient-to-r from-[#008C96] to-[#006B74] text-white px-6 py-4 rounded-t-lg">
-          <h3 className="text-xl font-bold">🔃 Sincronización de Catálogo</h3>
+          <h3 className="text-xl font-bold">🔄 Sincronización de Catálogo</h3>
           <p className="text-teal-100 text-sm mt-1">{vendor.vendor_name} — Precios Venezuela</p>
         </div>
 
@@ -585,7 +565,7 @@ const SyncCatalogModal = ({ vendor, onClose }) => {
           {/* Estado idle — botón inicial */}
           {syncState === 'idle' && (
             <div className="text-center py-12">
-              <div className="text-6xl mb-4">🔃</div>
+              <div className="text-6xl mb-4">🔄</div>
               <h4 className="text-lg font-semibold text-gray-800 mb-2">
                 Sincronizar Catálogo de {vendor.vendor_name}
               </h4>
@@ -610,7 +590,7 @@ const SyncCatalogModal = ({ vendor, onClose }) => {
           {/* Estado loading */}
           {syncState === 'loading' && (
             <div className="text-center py-16">
-              <div className="text-5xl mb-4 animate-spin inline-block">🔃</div>
+              <div className="text-5xl mb-4 animate-spin inline-block">🔄</div>
               <p className="text-gray-600 font-medium">Sincronizando con {vendor.vendor_name}...</p>
               <p className="text-gray-400 text-sm mt-2">Consultando API y actualizando precios</p>
             </div>
