@@ -100,6 +100,30 @@ class AuthService {
   isAuthenticated() {
     return !!localStorage.getItem('token');
   }
+
+  // ===========================================================================
+  // RECUPERACIÓN DE CONTRASEÑA
+  // ===========================================================================
+
+  async forgotPassword(email) {
+    try {
+      return await apiClient.post('/auth/forgot-password', { email });
+    } catch (error) {
+      throw new Error(error.message || 'Error al enviar el código');
+    }
+  }
+
+  async resetPassword(email, code, newPassword) {
+    try {
+      return await apiClient.post('/auth/reset-password', {
+        email,
+        code,
+        new_password: newPassword
+      });
+    } catch (error) {
+      throw new Error(error.message || 'Error al restablecer la contraseña');
+    }
+  }
 }
 
 export default new AuthService();

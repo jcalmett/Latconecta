@@ -87,6 +87,16 @@ class Settings(BaseSettings):
     IZIPAY_CANCEL_ENDPOINT: str = ""
 
     # =========================================================================
+    # CONFIGURACIÓN SMTP — RECUPERACIÓN DE CONTRASEÑA
+    # Usar Gmail con App Password (myaccount.google.com/apppasswords)
+    # =========================================================================
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_NAME: str = "LatConecta"
+
+    # =========================================================================
     # CONFIGURACIÓN DE CONEKTA - PASARELA DE PAGOS (México) - FUTURO
     # Solo aplica cuando PAYMENT_GATEWAY=conekta
     # =========================================================================

@@ -6,7 +6,7 @@ Endpoints para login, registro y obtención de usuario actual
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession  # ✅ CAMBIO 1
 from sqlalchemy import select  # ✅ CAMBIO 2
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.database import get_db
 from app.models import User
 from app.schemas.auth import (
@@ -19,6 +19,7 @@ from app.schemas.auth import (
 )
 from app.utils.auth import verify_password, get_password_hash, create_access_token
 from app.utils.dependencies import get_current_active_user
+from pydantic import BaseModel, EmailStr
 
 router = APIRouter()
 
@@ -207,4 +208,141 @@ async def change_password(
     return {
         "success": True,
         "message": "Contraseña actualizada exitosamente"
+    }
+
+
+# =============================================================================
+# RECUPERACIÓN DE CONTRASEÑA — Flujo por código de 6 dígitos
+# =============================================================================
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
+
+@router.post("/forgot-password", summary="Solicitar código de recuperación de contraseña")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Genera un código de 6 dígitos y lo envía al email del usuario.
+
+    Por seguridad, siempre responde con el mismo mensaje
+    independientemente de si el email existe o no en el sistema.
+    El código es válido por 15 minutos.
+    """
+    # Importar aquí para evitar import circular al inicio del módulo
+    from app.services.email_service import generate_reset_code, send_reset_code
+
+    # Buscar usuario — respuesta genérica siempre (no revelar si email existe)
+    result = await db.execute(
+        select(User).where(User.user_email == request.email)
+    )
+    user = result.scalar_one_or_none()
+
+    if user and user.user_status == "active":
+        # Generar código y hashearlo para almacenamiento seguro
+        code = generate_reset_code()
+        hashed_code = get_password_hash(code)
+        expiry = datetime.utcnow() + timedelta(minutes=15)
+
+        # Guardar en campos legacy user_session_token / user_session_expiry
+        user.user_session_token = hashed_code
+        user.user_session_expiry = expiry
+        user.updated_by = "password-reset-request"
+        user.last_update_date = datetime.utcnow()
+        await db.commit()
+
+        # Enviar email (si falla el envío, no revelar el error al cliente)
+        try:
+            await send_reset_code(
+                to_email=user.user_email,
+                user_name=user.user_name,
+                code=code
+            )
+        except Exception:
+            # Log silencioso — no exponer detalles de infraestructura
+            pass
+
+    # Respuesta siempre idéntica
+    return {
+        "success": True,
+        "message": "Si el email está registrado, recibirás un código en los próximos minutos."
+    }
+
+
+@router.post("/reset-password", summary="Restablecer contraseña con código")
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Verifica el código de 6 dígitos y actualiza la contraseña.
+
+    El código debe ser válido (no expirado) y coincidir con el
+    almacenado para el email indicado.
+    """
+    INVALID_MSG = "El código ingresado no es válido o ha expirado."
+
+    # Buscar usuario
+    result = await db.execute(
+        select(User).where(User.user_email == request.email)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user or user.user_status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=INVALID_MSG
+        )
+
+    # Verificar que existe token de reset
+    if not user.user_session_token or not user.user_session_expiry:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=INVALID_MSG
+        )
+
+    # Verificar que el código no haya expirado
+    if datetime.utcnow() > user.user_session_expiry:
+        # Limpiar token expirado
+        user.user_session_token = None
+        user.user_session_expiry = None
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=INVALID_MSG
+        )
+
+    # Verificar que el código coincide (comparación bcrypt)
+    if not verify_password(request.code, user.user_session_token):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=INVALID_MSG
+        )
+
+    # Validar longitud mínima de nueva contraseña
+    if len(request.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe tener al menos 6 caracteres."
+        )
+
+    # Actualizar contraseña e invalidar token
+    user.user_password = get_password_hash(request.new_password)
+    user.user_session_token = None
+    user.user_session_expiry = None
+    user.updated_by = "password-reset"
+    user.last_update_date = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "Contraseña restablecida exitosamente. Ya puedes iniciar sesión."
     }
