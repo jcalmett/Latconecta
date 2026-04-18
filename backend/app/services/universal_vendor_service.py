@@ -654,8 +654,9 @@ class UniversalVendorService:
                 await self.db.execute(
                     text("""
                         UPDATE products
-                        SET product_base_price  = :new_price,
-                            product_total_price = :new_price,
+                        SET product_base_price      = :new_price,
+                            product_discount_amount = ROUND(:new_price * product_discount_percentage / 100, 2),
+                            product_total_price     = ROUND(:new_price - (:new_price * product_discount_percentage / 100) + product_fee, 2),
                             last_update_date    = NOW(),
                             updated_by          = 'catalog_sync'
                         WHERE product_vendor_code  = :vendor_code
