@@ -557,6 +557,9 @@ const SyncCatalogModal = ({ vendor, onClose }) => {
 
   const exportCSV = () => {
     if (!syncResult?.changes_detail) return;
+    // Usar ; como separador y , como decimal para Excel en español
+    const SEP = ';';
+    const toDecimal = (v) => v != null ? String(v).replace('.', ',') : '';
     const headers = ['Estado','Producto','VP Code','Precio Anterior','Precio Nuevo','Variacion %','Bs Referencial','Tipo Cambio'];
     const rows = syncResult.changes_detail.map(p => {
       const status = p.status === 'NUEVO' ? 'NO_VENDIDO' : p.status;
@@ -565,16 +568,18 @@ const SyncCatalogModal = ({ vendor, onClose }) => {
         : '';
       return [
         status,
-        p.nombre_producto || '',
+        `"${(p.nombre_producto || '').replace(/"/g, '""')}"`,
         p.vp_code || '',
-        p.vp_amount_old != null ? p.vp_amount_old : '',
-        p.vp_amount_new != null ? p.vp_amount_new : '',
-        pct,
-        p.precio_referencial_bs || '',
-        p.tipo_cambio || ''
-      ].join(',');
+        toDecimal(p.vp_amount_old),
+        toDecimal(p.vp_amount_new),
+        toDecimal(pct),
+        toDecimal(p.precio_referencial_bs),
+        toDecimal(p.tipo_cambio)
+      ].join(SEP);
     });
-    const csv = [headers.join(','), ...rows].join('\n');
+    // BOM para que Excel reconozca UTF-8 correctamente
+    const bom = '\uFEFF';
+    const csv = bom + [headers.join(SEP), ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
