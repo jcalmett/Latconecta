@@ -518,13 +518,8 @@ const STATUS_CONFIG = {
   ALERTA:       { label: 'Alerta +10%',   bg: 'bg-red-100',    text: 'text-red-800',    icon: '🚨' },
 };
 
-const NOT_IMPLEMENTED_ERRORS = [
-  'No se encontró mapping con operation_type='catalog_sync'',
-  'catalog_sync',
-];
-
-const isNotImplemented = (msg) =>
-  msg && NOT_IMPLEMENTED_ERRORS.some(k => msg.includes(k));
+const isNotImplemented = (msg, status) =>
+  status === 404 || (msg && (msg.includes('catalog_sync') || msg.includes('No se encontr')));
 
 const SyncCatalogModal = ({ vendor, onClose }) => {
   const [syncState, setSyncState] = useState('idle');
@@ -541,8 +536,9 @@ const SyncCatalogModal = ({ vendor, onClose }) => {
       setSyncState('done');
     } catch (err) {
       const msg = err.response?.data?.detail || err.message || 'Error al ejecutar sync';
+      const status = err.response?.status;
       setErrorMsg(msg);
-      setSyncState(isNotImplemented(msg) ? 'not_implemented' : 'error');
+      setSyncState(isNotImplemented(msg, status) ? 'not_implemented' : 'error');
     }
   };
 
@@ -578,8 +574,7 @@ const SyncCatalogModal = ({ vendor, onClose }) => {
         p.tipo_cambio || ''
       ].join(',');
     });
-    const csv = [headers.join(','), ...rows].join('
-');
+    const csv = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
