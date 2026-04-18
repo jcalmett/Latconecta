@@ -219,16 +219,31 @@ class SchedulerService:
 
                 for vendor in vendors:
                     try:
-                        # Verificar si ya pasó el intervalo configurado
-                        if vendor.last_sync_date is not None:
-                            interval = timedelta(hours=vendor.sync_interval_hours or 24)
-                            next_sync = vendor.last_sync_date + interval
-                            if now < next_sync:
-                                logger.debug(
-                                    f"⏳ {vendor.vendor_code}: próximo sync "
-                                    f"{next_sync.strftime('%Y-%m-%d %H:%M')}"
-                                )
-                                continue
+                        # Verificar si corresponde ejecutar según sync_time (hora fija diaria)
+                        sync_time_str = getattr(vendor, 'sync_time', None) or '06:00'
+                        try:
+                            sync_hour, sync_min = map(int, sync_time_str.split(':'))
+                        except Exception:
+                            sync_hour, sync_min = 6, 0
+
+                        scheduled_today = now.replace(
+                            hour=sync_hour, minute=sync_min, second=0, microsecond=0
+                        )
+
+                        # Ya corrió hoy después de la hora programada
+                        already_ran_today = (
+                            vendor.last_sync_date is not None and
+                            vendor.last_sync_date.date() == now.date() and
+                            vendor.last_sync_date >= scheduled_today
+                        )
+
+                        if now < scheduled_today or already_ran_today:
+                            logger.debug(
+                                f"⏳ {vendor.vendor_code}: sync programado para "
+                                f"hoy a las {sync_time_str} — "
+                                f"{'ya ejecutado' if already_ran_today else 'aún no es la hora'}"
+                            )
+                            continue
 
                         logger.info(
                             f"🔄 Ejecutando catalog_sync para {vendor.vendor_code}..."
