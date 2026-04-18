@@ -511,15 +511,23 @@ const CurrencyVerificationModal = ({ vendor, onClose }) => {
 
 
 const STATUS_CONFIG = {
-  ACTUALIZADO: { label: 'Actualizado',  bg: 'bg-blue-100',   text: 'text-blue-800',   icon: '✅' },
-  SIN_CAMBIO:  { label: 'Sin Cambio',   bg: 'bg-gray-100',   text: 'text-gray-600',   icon: '➖' },
-  NUEVO:       { label: 'Nuevo',        bg: 'bg-green-100',  text: 'text-green-800',  icon: '🆕' },
-  NO_VINO:     { label: 'No Recibido',  bg: 'bg-orange-100', text: 'text-orange-800', icon: '⚠️' },
-  ALERTA:      { label: 'Alerta +10%',  bg: 'bg-red-100',    text: 'text-red-800',    icon: '🚨' },
+  ACTUALIZADO:  { label: 'Actualizado',   bg: 'bg-blue-100',   text: 'text-blue-800',   icon: '✅' },
+  SIN_CAMBIO:   { label: 'Sin Cambio',    bg: 'bg-gray-100',   text: 'text-gray-600',   icon: '➖' },
+  NO_VENDIDO:   { label: 'No Vendido',    bg: 'bg-gray-100',   text: 'text-gray-500',   icon: '○' },
+  NO_VINO:      { label: 'No Recibido',   bg: 'bg-orange-100', text: 'text-orange-800', icon: '⚠️' },
+  ALERTA:       { label: 'Alerta +10%',   bg: 'bg-red-100',    text: 'text-red-800',    icon: '🚨' },
 };
 
+const NOT_IMPLEMENTED_ERRORS = [
+  'No se encontró mapping con operation_type='catalog_sync'',
+  'catalog_sync',
+];
+
+const isNotImplemented = (msg) =>
+  msg && NOT_IMPLEMENTED_ERRORS.some(k => msg.includes(k));
+
 const SyncCatalogModal = ({ vendor, onClose }) => {
-  const [syncState, setSyncState] = useState('idle'); // idle | loading | done | error
+  const [syncState, setSyncState] = useState('idle');
   const [syncResult, setSyncResult] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [errorMsg, setErrorMsg] = useState('');
@@ -532,181 +540,233 @@ const SyncCatalogModal = ({ vendor, onClose }) => {
       setSyncResult(result);
       setSyncState('done');
     } catch (err) {
-      setErrorMsg(err.response?.data?.detail || err.message || 'Error al ejecutar sync');
-      setSyncState('error');
+      const msg = err.response?.data?.detail || err.message || 'Error al ejecutar sync';
+      setErrorMsg(msg);
+      setSyncState(isNotImplemented(msg) ? 'not_implemented' : 'error');
     }
   };
 
   const filteredProducts = syncResult?.changes_detail?.filter(p => {
     if (filterStatus === 'all') return true;
-    return p.status === filterStatus;
+    const status = p.status === 'NUEVO' ? 'NO_VENDIDO' : p.status;
+    return status === filterStatus;
   }) || [];
 
   const formatPrice = (v) => v != null ? `S/${parseFloat(v).toFixed(2)}` : '-';
-
   const pctChange = (oldP, newP) => {
     if (!oldP || !newP) return null;
     const pct = ((newP - oldP) / oldP) * 100;
     return pct > 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] flex flex-col">
+  const exportCSV = () => {
+    if (!syncResult?.changes_detail) return;
+    const headers = ['Estado','Producto','VP Code','Precio Anterior','Precio Nuevo','Variacion %','Bs Referencial','Tipo Cambio'];
+    const rows = syncResult.changes_detail.map(p => {
+      const status = p.status === 'NUEVO' ? 'NO_VENDIDO' : p.status;
+      const pct = p.vp_amount_old && p.vp_amount_new
+        ? (((p.vp_amount_new - p.vp_amount_old) / p.vp_amount_old) * 100).toFixed(1)
+        : '';
+      return [
+        status,
+        p.nombre_producto || '',
+        p.vp_code || '',
+        p.vp_amount_old != null ? p.vp_amount_old : '',
+        p.vp_amount_new != null ? p.vp_amount_new : '',
+        pct,
+        p.precio_referencial_bs || '',
+        p.tipo_cambio || ''
+      ].join(',');
+    });
+    const csv = [headers.join(','), ...rows].join('
+');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sync_${vendor.vendor_code}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-        {/* Header */}
-        <div className="bg-gradient-to-r from-[#008C96] to-[#006B74] text-white px-6 py-4 rounded-t-lg">
-          <h3 className="text-xl font-bold">🔄 Sincronización de Catálogo</h3>
-          <p className="text-teal-100 text-sm mt-1">{vendor.vendor_name} — Precios Venezuela</p>
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-lg max-w-3xl w-full max-h-[85vh] flex flex-col">
+
+        {/* Header — compacto */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <div>
+            <h3 className="text-base font-semibold text-gray-800">🔄 Sincronización de Catálogo</h3>
+            <p className="text-xs text-gray-500">{vendor.vendor_name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
 
-        <div className="p-6 flex-1 overflow-auto">
+        <div className="p-4 flex-1 overflow-auto">
 
-          {/* Estado idle — botón inicial */}
+          {/* idle */}
           {syncState === 'idle' && (
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">🔄</div>
-              <h4 className="text-lg font-semibold text-gray-800 mb-2">
-                Sincronizar Catálogo de {vendor.vendor_name}
-              </h4>
-              <p className="text-gray-500 mb-6 max-w-md mx-auto">
-                Se consultará la API del vendor para obtener los precios actuales
-                y se actualizarán los productos en el sistema.
+            <div className="text-center py-8">
+              <p className="text-gray-500 text-sm mb-4">
+                Obtiene los precios actuales desde la API del vendor y actualiza el catálogo.
               </p>
               {vendor.last_sync_date && (
-                <p className="text-sm text-gray-400 mb-6">
+                <p className="text-xs text-gray-400 mb-4">
                   Último sync: {new Date(vendor.last_sync_date).toLocaleString('es-PE')}
                 </p>
               )}
               <button
                 onClick={executeSyncCatalog}
-                className="bg-[#008C96] hover:bg-[#006B74] text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+                className="bg-[#008C96] hover:bg-[#006B74] text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors"
               >
                 Ejecutar Sincronización
               </button>
             </div>
           )}
 
-          {/* Estado loading */}
+          {/* loading */}
           {syncState === 'loading' && (
-            <div className="text-center py-16">
-              <div className="text-5xl mb-4 animate-spin inline-block">🔄</div>
-              <p className="text-gray-600 font-medium">Sincronizando con {vendor.vendor_name}...</p>
-              <p className="text-gray-400 text-sm mt-2">Consultando API y actualizando precios</p>
+            <div className="text-center py-10">
+              <div className="text-3xl mb-3 animate-spin inline-block">🔄</div>
+              <p className="text-gray-500 text-sm">Sincronizando...</p>
             </div>
           )}
 
-          {/* Estado error */}
-          {syncState === 'error' && (
-            <div className="text-center py-12">
-              <div className="text-5xl mb-4">❌</div>
-              <h4 className="text-lg font-semibold text-red-700 mb-2">Error en la sincronización</h4>
-              <p className="text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 max-w-md mx-auto text-sm">{errorMsg}</p>
+          {/* not_implemented — mensaje neutro */}
+          {syncState === 'not_implemented' && (
+            <div className="text-center py-8">
+              <div className="text-3xl mb-3">ℹ️</div>
+              <p className="text-gray-600 text-sm font-medium mb-1">Sincronización no implementada</p>
+              <p className="text-gray-400 text-xs">Este vendor no tiene configurada la sincronización de catálogo.</p>
               <button
                 onClick={() => setSyncState('idle')}
-                className="mt-6 px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+                className="mt-4 px-4 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          )}
+
+          {/* error real — en rojo */}
+          {syncState === 'error' && (
+            <div className="text-center py-8">
+              <div className="text-3xl mb-3">❌</div>
+              <p className="text-red-700 text-sm font-medium mb-2">Error en la sincronización</p>
+              <p className="text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 text-xs max-w-sm mx-auto">{errorMsg}</p>
+              <button
+                onClick={() => setSyncState('idle')}
+                className="mt-4 px-4 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors"
               >
                 Reintentar
               </button>
             </div>
           )}
 
-          {/* Estado done — reporte */}
+          {/* done — reporte */}
           {syncState === 'done' && syncResult && (
-            <div className="space-y-4">
+            <div className="space-y-3">
 
-              {/* Resumen de contadores */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {/* Contadores */}
+              <div className="grid grid-cols-5 gap-2">
                 {[
-                  { label: 'Actualizados', value: syncResult.products_updated,  bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700',   icon: '✅' },
-                  { label: 'Sin Cambio',   value: syncResult.count_sin_cambio,  bg: 'bg-gray-50',   border: 'border-gray-200',   text: 'text-gray-600',   icon: '➖' },
-                  { label: 'Nuevos',       value: syncResult.count_nuevo,       bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700',  icon: '🆕' },
-                  { label: 'No Recibidos', value: syncResult.count_no_vino,     bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', icon: '⚠️' },
-                  { label: 'Alertas +10%', value: syncResult.count_alerta,      bg: 'bg-red-50',    border: 'border-red-200',    text: 'text-red-700',    icon: '🚨' },
+                  { label: 'Actualizados', value: syncResult.products_updated, bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700' },
+                  { label: 'Sin Cambio',   value: syncResult.count_sin_cambio, bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-600' },
+                  { label: 'No Vendidos',  value: syncResult.count_nuevo,      bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-500' },
+                  { label: 'No Recibidos', value: syncResult.count_no_vino,    bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700' },
+                  { label: 'Alertas +10%', value: syncResult.count_alerta,     bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700' },
                 ].map((c, i) => (
-                  <div key={i} className={`${c.bg} border ${c.border} rounded-lg p-3 text-center`}>
-                    <div className="text-2xl font-bold ${c.text}">{c.value}</div>
-                    <div className="text-xs text-gray-500 mt-1">{c.icon} {c.label}</div>
+                  <div key={i} className={`${c.bg} border ${c.border} rounded p-2 text-center`}>
+                    <div className={`text-xl font-bold ${c.text}`}>{c.value}</div>
+                    <div className="text-xs text-gray-400 mt-0.5 leading-tight">{c.label}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="text-xs text-gray-400">
-                Sync: {new Date(syncResult.sync_date).toLocaleString('es-PE')} — {syncResult.triggered_by}
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-400">
+                  {new Date(syncResult.sync_date).toLocaleString('es-PE')} — {syncResult.triggered_by}
+                </p>
+                <button
+                  onClick={exportCSV}
+                  className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors"
+                >
+                  ⬇ Descargar CSV
+                </button>
               </div>
 
-              {/* Filtro */}
-              <div className="flex gap-2 flex-wrap">
-                {['all', 'ACTUALIZADO', 'ALERTA', 'SIN_CAMBIO', 'NUEVO', 'NO_VINO'].map(f => (
+              {/* Filtros */}
+              <div className="flex gap-1.5 flex-wrap">
+                {['all', 'ACTUALIZADO', 'ALERTA', 'SIN_CAMBIO', 'NO_VENDIDO', 'NO_VINO'].map(f => (
                   <button
                     key={f}
                     onClick={() => setFilterStatus(f)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                      filterStatus === f
-                        ? 'bg-[#008C96] text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                      filterStatus === f ? 'bg-[#008C96] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
                     {f === 'all' ? 'Todos' : STATUS_CONFIG[f]?.label || f}
                     {f !== 'all' && (
                       <span className="ml-1">
-                        ({syncResult.changes_detail?.filter(p => p.status === f).length || 0})
+                        ({syncResult.changes_detail?.filter(p =>
+                          (p.status === 'NUEVO' ? 'NO_VENDIDO' : p.status) === f
+                        ).length || 0})
                       </span>
                     )}
                   </button>
                 ))}
               </div>
 
-              {/* Tabla de productos */}
-              <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
+              {/* Tabla */}
+              <div className="overflow-x-auto border border-gray-200 rounded">
+                <table className="min-w-full divide-y divide-gray-200 text-xs">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">VP Code</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Precio Anterior</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Precio Nuevo</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Variación</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Bs. Ref.</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">T/C</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase">Estado</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase">Producto</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase">VP Code</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500 uppercase">Anterior</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500 uppercase">Nuevo</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500 uppercase">Var%</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500 uppercase">Bs.</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500 uppercase">T/C</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
                     {filteredProducts.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                        <td colSpan={8} className="px-3 py-6 text-center text-gray-400 text-xs">
                           No hay productos con ese estado
                         </td>
                       </tr>
                     ) : filteredProducts.map((p, i) => {
-                      const cfg = STATUS_CONFIG[p.status] || {};
+                      const statusKey = p.status === 'NUEVO' ? 'NO_VENDIDO' : p.status;
+                      const cfg = STATUS_CONFIG[statusKey] || {};
                       const variacion = pctChange(p.vp_amount_old, p.vp_amount_new);
                       return (
                         <tr key={i} className={p.alerta_precio ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
                               {cfg.icon} {cfg.label}
                             </span>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-2">
                             <div className="font-medium text-gray-900">{p.nombre_producto || '-'}</div>
-                            <div className="text-xs text-gray-400">skuid: {p.vp_skuid}</div>
+                            <div className="text-gray-400">skuid: {p.vp_skuid}</div>
                           </td>
-                          <td className="px-4 py-3 text-gray-600">{p.vp_code || '-'}</td>
-                          <td className="px-4 py-3 text-right text-gray-600">{formatPrice(p.vp_amount_old)}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatPrice(p.vp_amount_new)}</td>
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-3 py-2 text-gray-600">{p.vp_code || '-'}</td>
+                          <td className="px-3 py-2 text-right text-gray-500">{formatPrice(p.vp_amount_old)}</td>
+                          <td className="px-3 py-2 text-right font-medium text-gray-900">{formatPrice(p.vp_amount_new)}</td>
+                          <td className="px-3 py-2 text-right">
                             {variacion ? (
                               <span className={`font-medium ${parseFloat(variacion) > 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 {variacion}
                               </span>
                             ) : '-'}
                           </td>
-                          <td className="px-4 py-3 text-right text-gray-600">
-                            {p.precio_referencial_bs ? `Bs. ${p.precio_referencial_bs}` : '-'}
+                          <td className="px-3 py-2 text-right text-gray-500">
+                            {p.precio_referencial_bs ? `${p.precio_referencial_bs}` : '-'}
                           </td>
-                          <td className="px-4 py-3 text-right text-xs text-gray-400">
+                          <td className="px-3 py-2 text-right text-gray-400">
                             {p.tipo_cambio ? parseFloat(p.tipo_cambio).toFixed(2) : '-'}
                           </td>
                         </tr>
@@ -720,10 +780,10 @@ const SyncCatalogModal = ({ vendor, onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-end">
+        <div className="border-t border-gray-200 px-4 py-3 bg-gray-50 flex justify-end">
           <button
             onClick={onClose}
-            className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+            className="px-4 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
           >
             Cerrar
           </button>
