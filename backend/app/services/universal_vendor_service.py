@@ -515,32 +515,40 @@ class UniversalVendorService:
                 "warning": "El vendor no retorno productos"
             }
 
-        # 9. Iterar productos y actualizar BD
+        # 9. Obtener todos los vendor_products de Venezuela en BD (para detectar NO_VINO)
+        bd_vp_query = await self.db.execute(
+            text("""
+                SELECT vp_id, vp_code, vp_skuid, vp_amount, vp_name, vp_metadata
+                FROM vendor_products
+                WHERE vendor_code = :vendor_code
+                  AND vp_status   = 'active'
+            """),
+            {"vendor_code": vendor_code}
+        )
+        bd_vp_rows = bd_vp_query.fetchall()
+
+        # Índice BD por skuid para búsqueda rápida
+        bd_by_skuid = {str(r.vp_skuid): r for r in bd_vp_rows}
+
+        # 10. Iterar productos recibidos de TISI y construir reporte
         products_reviewed = 0
         products_updated  = 0
-        changes_detail    = []
+        reporte           = []           # reporte completo — un ítem por producto
+        skuids_recibidos  = set()        # skuids que vinieron de TISI (Venezuela)
 
         for item in productos_raw:
-            products_reviewed += 1
 
             # Extraer skuid del ítem
             skuid = str(item.get(skuid_field, ''))
             if not skuid:
-                logger.warning(
-                    f"[{vendor_code}/catalog_sync] "
-                    f"Ítem sin campo '{skuid_field}': {item}"
-                )
                 continue
 
-            # Extraer precio en Soles
-            # TISI tiene estructura anidada: item["precios"][0]["precio"]
+            nombre_producto = item.get('nombre_producto', '')
+
+            # Extraer precios
             if nested_prices and nested_prices in item:
                 prices_array = item.get(nested_prices, [])
                 if not prices_array:
-                    logger.warning(
-                        f"[{vendor_code}/catalog_sync] "
-                        f"skuid={skuid} tiene '{nested_prices}' vacío"
-                    )
                     continue
                 price_node = prices_array[0]
             else:
@@ -551,68 +559,69 @@ class UniversalVendorService:
             raw_exch_rate = price_node.get(exch_rate_field)
 
             # Ignorar productos sin precio_referencial (Perú - precio variable)
-            # Solo procesar productos con precio fijo en Bs (Venezuela)
             if raw_price_ref is None:
-                logger.debug(
-                    f"[{vendor_code}/catalog_sync] "
-                    f"skuid={skuid} sin precio_referencial — omitido (precio variable)"
-                )
                 continue
 
             if raw_price_pen is None:
-                logger.warning(
-                    f"[{vendor_code}/catalog_sync] "
-                    f"skuid={skuid} sin campo '{price_pen_field}'"
-                )
                 continue
 
             try:
                 new_price_pen = Decimal(str(raw_price_pen))
             except Exception:
-                logger.warning(
-                    f"[{vendor_code}/catalog_sync] "
-                    f"skuid={skuid} precio inválido: {raw_price_pen}"
-                )
                 continue
 
-            # 10. Buscar vendor_product en BD por vp_skuid
-            vp_query = await self.db.execute(
-                text("""
-                    SELECT vp_id, vp_code, vp_amount, vp_metadata
-                    FROM vendor_products
-                    WHERE vendor_code = :vendor_code
-                      AND vp_skuid    = :skuid
-                    LIMIT 1
-                """),
-                {"vendor_code": vendor_code, "skuid": skuid}
-            )
-            vp_row = vp_query.fetchone()
+            # Registrar que este skuid vino de TISI
+            skuids_recibidos.add(skuid)
+            products_reviewed += 1
+
+            # Buscar en BD
+            vp_row = bd_by_skuid.get(skuid)
 
             if not vp_row:
-                logger.debug(
-                    f"[{vendor_code}/catalog_sync] "
-                    f"vp_skuid={skuid} no existe en BD — omitido"
-                )
+                # NUEVO — TISI retorna un producto que no existe en nuestra BD
+                reporte.append({
+                    "vp_code":               None,
+                    "vp_skuid":              skuid,
+                    "nombre_producto":       nombre_producto,
+                    "status":                "NUEVO",
+                    "vp_amount_old":         None,
+                    "vp_amount_new":         float(new_price_pen),
+                    "precio_referencial_bs": str(raw_price_ref),
+                    "tipo_cambio":           str(raw_exch_rate) if raw_exch_rate else None,
+                    "alerta_precio":         False,
+                })
+                logger.info(f"🆕 [{vendor_code}/catalog_sync] NUEVO skuid={skuid} ({nombre_producto})")
                 continue
 
             old_price = vp_row.vp_amount
             vp_id     = vp_row.vp_id
             vp_code   = vp_row.vp_code
 
-            # 11. Comparar — solo actualizar si el precio cambió
-            price_changed = (
-                old_price is None or
-                Decimal(str(old_price)) != new_price_pen
-            )
+            # Calcular cambio de precio
+            price_changed = (old_price is None or Decimal(str(old_price)) != new_price_pen)
+
+            # Calcular alerta >10% en cualquier dirección
+            alerta_precio = False
+            if old_price is not None and old_price > 0:
+                cambio_pct = abs(new_price_pen - Decimal(str(old_price))) / Decimal(str(old_price))
+                alerta_precio = cambio_pct > Decimal('0.10')
 
             if not price_changed:
-                logger.debug(
-                    f"[{vendor_code}/catalog_sync] "
-                    f"vp_code={vp_code} sin cambio (precio={old_price})"
-                )
+                # SIN_CAMBIO
+                reporte.append({
+                    "vp_code":               vp_code,
+                    "vp_skuid":              skuid,
+                    "nombre_producto":       nombre_producto,
+                    "status":                "SIN_CAMBIO",
+                    "vp_amount_old":         float(old_price) if old_price else None,
+                    "vp_amount_new":         float(new_price_pen),
+                    "precio_referencial_bs": str(raw_price_ref),
+                    "tipo_cambio":           str(raw_exch_rate) if raw_exch_rate else None,
+                    "alerta_precio":         False,
+                })
                 continue
 
-            # 12. Construir metadata actualizada preservando campos existentes
+            # ACTUALIZADO o ALERTA — actualizar BD
             existing_meta = vp_row.vp_metadata or {}
             new_meta = {
                 **existing_meta,
@@ -622,7 +631,6 @@ class UniversalVendorService:
                 "last_sync_by":       triggered_by,
             }
 
-            # 13. UPDATE vendor_products
             await self.db.execute(
                 text("""
                     UPDATE vendor_products
@@ -639,7 +647,6 @@ class UniversalVendorService:
                 }
             )
 
-            # 14. UPDATE products — todos los products que apunten a este vp_code
             await self.db.execute(
                 text("""
                     UPDATE products
@@ -658,24 +665,52 @@ class UniversalVendorService:
             )
 
             products_updated += 1
-            changes_detail.append({
+            status = "ALERTA" if alerta_precio else "ACTUALIZADO"
+
+            reporte.append({
                 "vp_code":               vp_code,
                 "vp_skuid":              skuid,
+                "nombre_producto":       nombre_producto,
+                "status":                status,
                 "vp_amount_old":         float(old_price) if old_price else None,
                 "vp_amount_new":         float(new_price_pen),
-                "precio_referencial_bs": str(raw_price_ref) if raw_price_ref else None,
+                "precio_referencial_bs": str(raw_price_ref),
                 "tipo_cambio":           str(raw_exch_rate) if raw_exch_rate else None,
+                "alerta_precio":         alerta_precio,
             })
 
             logger.info(
-                f"✅ [{vendor_code}/catalog_sync] "
-                f"vp_code={vp_code} | {old_price} → {new_price_pen} PEN"
+                f"{'🚨' if alerta_precio else '✅'} [{vendor_code}/catalog_sync] "
+                f"{status} vp_code={vp_code} | {old_price} → {new_price_pen} PEN"
             )
 
-        # 15. Commit de todos los cambios
+        # 11. Detectar NO_VINO — productos en BD que TISI no retornó
+        for bd_row in bd_vp_rows:
+            skuid_bd = str(bd_row.vp_skuid)
+            # Solo Venezuela tiene precio_referencial — verificar vp_metadata
+            meta = bd_row.vp_metadata or {}
+            if "precio_referencial" not in meta:
+                continue  # Es un producto de Perú — ignorar
+            if skuid_bd not in skuids_recibidos:
+                reporte.append({
+                    "vp_code":               bd_row.vp_code,
+                    "vp_skuid":              skuid_bd,
+                    "nombre_producto":       bd_row.vp_name or "",
+                    "status":                "NO_VINO",
+                    "vp_amount_old":         float(bd_row.vp_amount) if bd_row.vp_amount else None,
+                    "vp_amount_new":         None,
+                    "precio_referencial_bs": None,
+                    "tipo_cambio":           None,
+                    "alerta_precio":         False,
+                })
+                logger.warning(
+                    f"⚠️ [{vendor_code}/catalog_sync] NO_VINO vp_code={bd_row.vp_code}"
+                )
+
+        # 12. Commit de todos los cambios
         await self.db.commit()
 
-        # 16. Actualizar last_sync_date del vendor
+        # 13. Actualizar last_sync_date del vendor
         await self.db.execute(
             text("""
                 UPDATE vendors
@@ -688,20 +723,37 @@ class UniversalVendorService:
         )
         await self.db.commit()
 
+        # Contadores resumen
+        count_nuevo      = sum(1 for r in reporte if r["status"] == "NUEVO")
+        count_actualizado = sum(1 for r in reporte if r["status"] in ("ACTUALIZADO", "ALERTA"))
+        count_sin_cambio = sum(1 for r in reporte if r["status"] == "SIN_CAMBIO")
+        count_no_vino    = sum(1 for r in reporte if r["status"] == "NO_VINO")
+        count_alerta     = sum(1 for r in reporte if r["alerta_precio"])
+
         logger.info(
             f"✅ [{vendor_code}/catalog_sync] Completado — "
-            f"revisados: {products_reviewed}, actualizados: {products_updated}"
+            f"revisados: {products_reviewed}, actualizados: {products_updated}, "
+            f"nuevos: {count_nuevo}, no_vino: {count_no_vino}, alertas: {count_alerta}"
         )
 
         return {
-            "success":           True,
-            "vendor_code":       vendor_code,
-            "api_group_code":    api_group_code,
-            "triggered_by":      triggered_by,
-            "sync_date":         sync_start.isoformat(),
-            "products_reviewed": products_reviewed,
-            "products_updated":  products_updated,
-            "changes_detail":    changes_detail
+            "success":            True,
+            "vendor_code":        vendor_code,
+            "api_group_code":     api_group_code,
+            "triggered_by":       triggered_by,
+            "sync_date":          sync_start.isoformat(),
+            "products_reviewed":  products_reviewed,
+            "products_updated":   products_updated,
+            "count_nuevo":        count_nuevo,
+            "count_sin_cambio":   count_sin_cambio,
+            "count_no_vino":      count_no_vino,
+            "count_alerta":       count_alerta,
+            "changes_detail":     reporte,
+            "message":            (
+                f"Sync completado: {products_updated} actualizados, "
+                f"{count_nuevo} nuevos, {count_no_vino} no vinieron, "
+                f"{count_alerta} alertas de precio"
+            )
         }
 
     def _build_headers(
