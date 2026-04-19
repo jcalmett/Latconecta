@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Auth Service - Latconecta Admin
  * Versión: CORREGIDA CON TRAILING SLASHES
  * Fecha: 2025-12-19
@@ -259,6 +259,50 @@ const authService = {
       return response.data;
     } catch (error) {
       console.error('❌ Error al cambiar contraseña:', error);
+      throw error.response?.data || error;
+    }
+  },
+
+  // ===========================================================================
+  // RECUPERACIÓN DE CONTRASEÑA
+  // ===========================================================================
+
+  /**
+   * Solicitar código de recuperación de contraseña
+   * @param {string} email - Email del usuario
+   * @returns {Promise} Respuesta del backend
+   */
+  forgotPassword: async (email) => {
+    try {
+      console.log('🔵 Solicitando código de recuperación para:', email);
+      const response = await apiClient.post('/auth/forgot-password', { email });
+      console.log('✅ Código enviado');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al solicitar código:', error);
+      throw error.response?.data || error;
+    }
+  },
+
+  /**
+   * Restablecer contraseña con código de verificación
+   * @param {string} email - Email del usuario
+   * @param {string} code - Código de 6 dígitos recibido por email
+   * @param {string} newPassword - Nueva contraseña
+   * @returns {Promise} Respuesta del backend
+   */
+  resetPassword: async (email, code, newPassword) => {
+    try {
+      console.log('🔵 Restableciendo contraseña para:', email);
+      const response = await apiClient.post('/auth/reset-password', {
+        email,
+        code,
+        new_password: newPassword
+      });
+      console.log('✅ Contraseña restablecida exitosamente');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al restablecer contraseña:', error);
       throw error.response?.data || error;
     }
   },

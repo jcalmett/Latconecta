@@ -198,6 +198,18 @@ async def change_password(
             detail="La nueva contraseña debe ser diferente a la actual"
         )
 
+    # Validar nueva contraseña: mínimo 8 caracteres y primera letra mayúscula
+    if len(password_data.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe tener al menos 8 caracteres."
+        )
+    if not password_data.new_password[0].isupper():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe comenzar con una letra mayúscula."
+        )
+
     # Actualizar contraseña
     current_user.user_password = get_password_hash(password_data.new_password)
     current_user.updated_by = current_user.user_email
@@ -327,11 +339,16 @@ async def reset_password(
             detail=INVALID_MSG
         )
 
-    # Validar longitud mínima de nueva contraseña
-    if len(request.new_password) < 6:
+    # Validar nueva contraseña: mínimo 8 caracteres y primera letra mayúscula
+    if len(request.new_password) < 8:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La nueva contraseña debe tener al menos 6 caracteres."
+            detail="La nueva contraseña debe tener al menos 8 caracteres."
+        )
+    if not request.new_password[0].isupper():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe comenzar con una letra mayúscula."
         )
 
     # Actualizar contraseña e invalidar token
