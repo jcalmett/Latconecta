@@ -51,19 +51,24 @@ const PurchasePopup = React.memo(({
   const isSubmitting = useRef(false);
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Cargar config de pagos del backend al montar o al llegar al paso 4
+  // Cargar config de pagos del backend al montar o al llegar al paso 4.
+  // GET /payments/config retorna card_available y barcode_available según
+  // DEPLOYMENT_COUNTRY — controles por país independientes del sistema de
+  // operaciones (fase1/fase2), que es exclusivo de desarrollo y UAT.
   useEffect(() => {
     if (purchaseStep === 4 || showPurchasePopup) {
-      opsConfigService.getPaymentConfig().then(cfg => {
+      paymentService.getConfig().then(cfg => {
         console.log('📋 Payment config:', cfg);
         setPaymentConfig(cfg);
       });
     }
   }, [purchaseStep, showPurchasePopup]);
 
-  const cardEnabled = paymentConfig?.card?.enabled !== false;
-  const barcodeEnabled = paymentConfig?.barcode?.enabled !== false;
-  const cardMode = paymentConfig?.card?.mode || 'fase1';
+  // card_available / barcode_available vienen del backend según país de instalación
+  const cardEnabled    = paymentConfig?.card_available !== false;
+  const barcodeEnabled = paymentConfig?.barcode_available !== false;
+  // cardMode / barcodeMode siguen viniendo de ops_config (solo para dev/UAT)
+  const cardMode   = paymentConfig?.card?.mode || 'fase1';
   const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
 
   // ─── OPCIÓN A: Pre-fetch de token Izipay al entrar al Step 4 ─────────────
@@ -844,8 +849,8 @@ const PurchasePopup = React.memo(({
                         <div className="flex items-center space-x-3">
                           <CreditCard size={24} className="text-bitel-blue" />
                           <div className="flex-1 text-left">
-                            <div className="font-bold">Tarjeta / Yape / Plin</div>
-                            <div className="text-sm text-gray-600">Pago inmediato</div>
+                            <div className="font-bold">Pago con tarjeta</div>
+                            <div className="text-sm text-gray-600">Pago inmediato y seguro</div>
                           </div>
                           {purchaseData.paymentMethod === 'card' && (
                             <Check size={24} className="text-bitel-blue" />

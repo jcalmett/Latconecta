@@ -4,9 +4,9 @@ Payments Router - Multi-Gateway Integration
 Endpoints:
   POST /payments/token    -> Genera token de sesión (backend -> Izipay API)
   POST /payments/validate -> Valida firma HMAC del resultado (frontend -> backend)
-  POST /payments/cancel   -> ✅ NUEVO: Anula transacción (multi-gateway)
+  POST /payments/cancel   -> Anula transacción (multi-gateway)
   GET  /payments/config   -> Configuración pública para el SDK frontend
-  GET  /payments/gateways -> ✅ NUEVO: Lista gateways disponibles
+  GET  /payments/gateways -> Lista gateways disponibles
 """
 
 from fastapi import APIRouter, HTTPException, status
@@ -40,8 +40,6 @@ async def create_token(payload: schemas.PaymentCreateRequest):
     """
     Genera un token de sesión llamando a Izipay API.
     El frontend usa este token como 'authorization' en checkout.LoadForm().
-
-    También retorna merchantCode y la RSA public key para el SDK.
     """
     logger.info(f"💳 Token request: order={payload.order_number}, amount={payload.amount}")
 
@@ -72,27 +70,18 @@ async def create_token(payload: schemas.PaymentCreateRequest):
 
 # ================================================================
 # POST /payments/validate - Validar firma HMAC del pago
-# ✅ ACTUALIZADO: Retorna datos necesarios para anulación
 # ================================================================
 
 @router.post("/validate", response_model=schemas.PaymentValidateResponse)
 async def validate_payment(payload: schemas.PaymentValidateRequest):
     """
     Valida la firma HMAC-SHA256 del resultado de pago.
-
-    El SDK Izipay devuelve en callbackResponse:
-    - payloadHttp: JSON string con los datos del pago
-    - signature: hash HMAC-SHA256 en base64
-
-    Este endpoint verifica que la firma sea válida usando la Clave HASH.
-
-    ✅ ACTUALIZADO: También extrae y retorna uniqueId, authorizationCode
-    y transactionDatetime necesarios para una eventual anulación.
+    También extrae y retorna uniqueId, authorizationCode y
+    transactionDatetime necesarios para una eventual anulación.
     """
     logger.info(f"🔍 Validate request: order={payload.order_number}, txn={payload.transaction_id}")
 
     try:
-        # Calcular HMAC-SHA256 del payloadHttp con la clave HASH
         calculated_hash = hmac.new(
             IZIPAY_HMAC_SHA256.encode("utf-8"),
             payload.payload_http.encode("utf-8"),
@@ -100,13 +89,11 @@ async def validate_payment(payload: schemas.PaymentValidateRequest):
         ).digest()
 
         calculated_signature = base64.b64encode(calculated_hash).decode("utf-8")
-
         is_valid = hmac.compare_digest(calculated_signature, payload.signature)
 
         if is_valid:
             logger.info(f"✅ Valid signature for order {payload.order_number}")
 
-            # Parsear el payload para extraer estado
             payment_code = ""
             state_message = ""
             payment_message = ""
@@ -115,15 +102,11 @@ async def validate_payment(payload: schemas.PaymentValidateRequest):
                 payment_data = json.loads(payload.payload_http)
                 payment_code = payment_data.get("code", "")
                 payment_message = payment_data.get("message", "")
-
-                # Extraer estado de la orden
                 orders = payment_data.get("response", {}).get("order", [])
                 state_message = orders[0].get("stateMessage", "") if orders else ""
-
             except (json.JSONDecodeError, IndexError, KeyError):
                 pass
 
-            # ✅ NUEVO: Extraer datos necesarios para anulación
             cancel_data = service.extract_cancel_data_from_payload(payload.payload_http)
 
             return schemas.PaymentValidateResponse(
@@ -132,7 +115,6 @@ async def validate_payment(payload: schemas.PaymentValidateRequest):
                 order_number=payload.order_number,
                 payment_status=state_message or ("Autorizado" if payment_code == "00" else "Denegado"),
                 message=payment_message,
-                # ✅ NUEVO: Datos para anulación
                 unique_id=cancel_data.get("unique_id"),
                 authorization_code=cancel_data.get("authorization_code"),
                 transaction_datetime=cancel_data.get("transaction_datetime"),
@@ -159,35 +141,26 @@ async def validate_payment(payload: schemas.PaymentValidateRequest):
 
 
 # ================================================================
-# POST /payments/cancel - Anular transacción ✅ NUEVO
+# POST /payments/cancel - Anular transacción
 # ================================================================
 
 @router.post("/cancel", response_model=schemas.PaymentCancelResponse)
 async def cancel_payment(payload: schemas.PaymentCancelRequest):
     """
     Anula/cancela una transacción de pago procesada por un gateway.
-
-    Soporta múltiples gateways:
-    - izipay: IZIPAY Perú (tarjeta, Yape, Plin)
-    - conekta: Conekta México (futuro)
-    - stripe: Stripe USA (futuro)
-
-    Para IZIPAY requiere: unique_id, authorization_code, transaction_datetime
-    del pago original (retornados por POST /payments/validate).
+    Soporta múltiples gateways: izipay, conekta (futuro), stripe (futuro).
     """
     logger.info(
         f"🔄 Cancel request: gateway={payload.gateway}, "
         f"order={payload.order_number}, amount={payload.amount} {payload.currency}"
     )
 
-    # Preparar datos para el gateway
     cancel_data = {
         "gateway": payload.gateway,
         "transaction_id": payload.transaction_id,
         "order_number": payload.order_number,
         "amount": payload.amount,
         "currency": payload.currency,
-        # Datos específicos IZIPAY
         "unique_id": payload.unique_id,
         "authorization_code": payload.authorization_code,
         "transaction_datetime": payload.transaction_datetime,
@@ -217,28 +190,48 @@ async def get_payment_config():
     """
     Retorna la configuración pública necesaria para el SDK del frontend.
     NO expone claves secretas.
+
+    Incluye:
+    - Datos del gateway de tarjeta (merchantCode, keyRSA, sdkUrl)
+    - gateway: nombre del gateway activo según DEPLOYMENT_COUNTRY
+    - card_available: si el pago con tarjeta está disponible en esta instalación
+    - barcode_available: si el pago con barcode está disponible en esta instalación
+      (el control granular por operadora se mantiene en company_barcode_available)
     """
+    # Determinar sdkUrl y environment según el endpoint configurado
+    is_sandbox = "sandbox" in settings.IZIPAY_API_URL
+    sdk_url = (
+        "https://sandbox-checkout.izipay.pe/payments/v1/js/index.js"
+        if is_sandbox
+        else "https://checkout.izipay.pe/payments/v1/js/index.js"
+    )
+    environment = "sandbox" if is_sandbox else "production"
+
     return {
+        # Gateway de tarjeta
+        "gateway": settings.PAYMENT_GATEWAY,
         "merchantCode": IZIPAY_MERCHANT_CODE,
         "keyRSA": IZIPAY_RSA_PUBLIC_KEY,
-        "environment": "sandbox",  # cambiar a "production" en prod
-        "sdkUrl": "https://sandbox-checkout.izipay.pe/payments/v1/js/index.js",
+        "environment": environment,
+        "sdkUrl": sdk_url,
+        # Disponibilidad de métodos de pago por instalación/país
+        "card_available": settings.CARD_AVAILABLE,
+        "barcode_available": settings.BARCODE_AVAILABLE,
     }
 
 
 # ================================================================
-# GET /payments/gateways - Lista gateways disponibles ✅ NUEVO
+# GET /payments/gateways - Lista gateways disponibles
 # ================================================================
 
 @router.get("/gateways")
 async def list_gateways():
     """
     Lista los gateways de pago disponibles en el sistema.
-    Útil para que el frontend sepa qué opciones de pago ofrecer.
     """
     from app.payments.gateway import payment_gateway_service
 
     return {
         "gateways": payment_gateway_service.list_gateways(),
-        "default": "izipay",
+        "default": settings.PAYMENT_GATEWAY,
     }
