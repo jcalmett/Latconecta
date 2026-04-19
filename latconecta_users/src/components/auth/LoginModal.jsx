@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X, Mail, Lock, Eye, EyeOff, KeyRound, ArrowLeft, CheckCircle } from 'lucide-react';
-import authService from '../services/authService';
+import authService from '../../services/authService';
 
 const LoginModal = ({ isOpen, onClose, onLogin, onSwitchToSignUp }) => {
   // ── Login state ────────────────────────────────────────────────────────────
