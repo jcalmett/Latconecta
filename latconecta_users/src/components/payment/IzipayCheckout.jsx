@@ -128,9 +128,7 @@ export default function IzipayCheckout({
         appearance: {
           customize: {
             elements: [
-              { paymentMethod: "YAPE_CODE", order: 1 },
-              { paymentMethod: "PAGO_PUSH", order: 2 },
-              { paymentMethod: "CARD", order: 3 },
+              { paymentMethod: "CARD", order: 1 },
             ],
           },
         },

@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     "http://77.42.92.151:5173",  # Admin en servidor
     "http://77.42.92.151:5174",  # Users en servidor
     "http://77.42.92.151",        # Sin puerto
-
     ]
 
     # =========================================================================
@@ -68,10 +67,33 @@ class Settings(BaseSettings):
     DEPLOYMENT_COUNTRY: str = "PE"
 
     # Gateway de pagos activo para esta instalación
-    # PE → izipay  (tarjeta, Yape, Plin)
+    # PE → izipay  (tarjeta)
     # MX → conekta (tarjeta, OXXO, SPEI) - futuro
     # US → stripe  (tarjeta, Apple Pay)  - futuro
     PAYMENT_GATEWAY: str = "izipay"
+
+    # =========================================================================
+    # MÉTODOS DE PAGO DISPONIBLES POR INSTALACIÓN
+    # =========================================================================
+    # Controlan qué métodos de pago se ofrecen en esta instalación.
+    # Son independientes del sistema de control de operaciones (fase1/fase2),
+    # que es exclusivo de desarrollo y UAT.
+    #
+    # CARD_AVAILABLE:
+    #   True  → la instalación tiene gateway de tarjeta activo (PAYMENT_GATEWAY)
+    #   False → no se ofrece pago con tarjeta en este país/instalación
+    #
+    # BARCODE_AVAILABLE:
+    #   True  → el país/instalación opera con pago por código de barras
+    #   False → no se ofrece barcode en este país/instalación
+    #
+    #   NOTA: BARCODE_AVAILABLE=True es condición necesaria pero no suficiente.
+    #   El control granular por operadora se mantiene en company_barcode_available
+    #   (tabla companies en BD). Ambas condiciones deben ser True para que el
+    #   usuario vea la opción barcode:
+    #     BARCODE_AVAILABLE=True AND company.company_barcode_available='Si'
+    CARD_AVAILABLE: bool = True
+    BARCODE_AVAILABLE: bool = True
 
     # =========================================================================
     # CONFIGURACIÓN DE IZIPAY - PASARELA DE PAGOS (Peru)
@@ -120,32 +142,21 @@ class Settings(BaseSettings):
     # =========================================================================
     # CONFIGURACIÓN DE MOCK (Solo para DEVELOPMENT)
     # =========================================================================
-    # Tasa de éxito de transacciones mock (0.0 a 1.0)
     MOCK_SUCCESS_RATE: float = 0.95
-
-    # Delay mínimo y máximo para simular latencia de red (segundos)
     MOCK_DELAY_MIN: float = 0.5
     MOCK_DELAY_MAX: float = 2.0
-
-    # Forzar un tipo de error específico (None para aleatorio)
-    # Valores: insufficient_balance, invalid_phone, service_unavailable, timeout, invalid_product
     MOCK_FORCED_ERROR: Optional[str] = None
 
     # =========================================================================
     # CONFIGURACIÓN DE VENDOR SIMULATOR (Fase 2)
     # =========================================================================
-    VENDOR_SIMULATOR_ENABLED: bool = True  # True para usar simulador
-    VENDOR_SIMULATOR_URL: str = "http://localhost:5001"  # URL del simulador
+    VENDOR_SIMULATOR_ENABLED: bool = True
+    VENDOR_SIMULATOR_URL: str = "http://localhost:5001"
 
     # =========================================================================
     # CONFIGURACIÓN DE VENDORS (LEGACY - Mantener por compatibilidad)
     # =========================================================================
-    # NOTA: Estos valores se mantienen para código legacy
-    # Los vendors nuevos se gestionan desde la BD (tabla vendors)
-
-    VENDOR_MODE: str = "mock"  # mock/real (legacy)
-
-    # Latcom (legacy - mantener por compatibilidad)
+    VENDOR_MODE: str = "mock"
     LATCOM_URL: Optional[str] = "https://uatlat.mitopup.com"
     LATCOM_USERNAME: Optional[str] = None
     LATCOM_PASSWORD: Optional[str] = None
@@ -153,17 +164,14 @@ class Settings(BaseSettings):
     LATCOM_USER_UID: Optional[str] = None
     LATCOM_TIMEOUT: int = 45
 
-
     # Additional settings
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://77.42.92.151:5173,http://77.42.92.151:5174,http://77.42.92.151"
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE: int = 5242880
     RATE_LIMIT_PER_MINUTE: int = 60
     LOG_LEVEL: str = "INFO"
-
-    # Mock legacy
-    MOCK_MODE: str = "success"  # success, timeout, product_not_found, etc.
-    MOCK_DELAY: float = 1.0  # Segundos de delay simulado
+    MOCK_MODE: str = "success"
+    MOCK_DELAY: float = 1.0
 
     class Config:
         env_file = ".env"
@@ -180,43 +188,18 @@ settings = Settings()
 # ============================================================================
 
 def is_development() -> bool:
-    """
-    Verifica si estamos en ambiente de desarrollo
-    En development, se usa el mock universal en vez de vendors reales
-
-    Returns:
-        True si ENVIRONMENT == "development"
-    """
     return settings.ENVIRONMENT == "development"
 
 
 def is_uat() -> bool:
-    """
-    Verifica si estamos en ambiente UAT
-
-    Returns:
-        True si ENVIRONMENT == "uat"
-    """
     return settings.ENVIRONMENT == "uat"
 
 
 def is_production() -> bool:
-    """
-    Verifica si estamos en ambiente de producción
-
-    Returns:
-        True si ENVIRONMENT == "production"
-    """
     return settings.ENVIRONMENT == "production"
 
 
 def get_mock_config() -> dict:
-    """
-    Obtiene la configuración del mock para development
-
-    Returns:
-        Dict con configuración del mock
-    """
     return {
         "success_rate": settings.MOCK_SUCCESS_RATE,
         "delay_min": settings.MOCK_DELAY_MIN,
@@ -226,12 +209,6 @@ def get_mock_config() -> dict:
 
 
 def get_environment_info() -> dict:
-    """
-    Obtiene información del ambiente actual
-
-    Returns:
-        Dict con información del ambiente
-    """
     return {
         "environment": settings.ENVIRONMENT,
         "app_name": settings.APP_NAME,
@@ -246,10 +223,6 @@ def get_environment_info() -> dict:
 
 
 def validate_environment():
-    """
-    Valida que el ambiente esté correctamente configurado
-    Imprime información al inicio del servidor
-    """
     valid_environments = ["development", "uat", "production"]
 
     if settings.ENVIRONMENT not in valid_environments:
@@ -258,44 +231,34 @@ def validate_environment():
             f"Valor actual: {settings.ENVIRONMENT}"
         )
 
-    # Imprimir información
     print("\n" + "="*60)
     print("🚀 LATCONECTA - CONFIGURACIÓN")
     print("="*60)
     print(f"🌍 Ambiente: {settings.ENVIRONMENT.upper()}")
+    print(f"🌍 País: {settings.DEPLOYMENT_COUNTRY} | Gateway: {settings.PAYMENT_GATEWAY}")
+    print(f"💳 Tarjeta: {'✅' if settings.CARD_AVAILABLE else '❌'} | Barcode: {'✅' if settings.BARCODE_AVAILABLE else '❌'}")
 
     if is_development():
         print("🧪 Modo: DEVELOPMENT")
         print("   → Usando MOCK UNIVERSAL (no vendors reales)")
-        print("   → Datos de BD son completos (vendors, products, mappings)")
-        print("   → Solo las llamadas HTTP van al mock")
     elif is_uat():
         print("🔬 Modo: UAT")
         print("   → Usando APIs REALES de vendors (ambiente UAT)")
-        print("   → Datos de vendors leídos desde BD")
         print("   → ⚠️  Acceso restringido")
     else:
         print("🏭 Modo: PRODUCTION")
         print("   → Usando APIs REALES de vendors (ambiente PRODUCCIÓN)")
-        print("   → Datos de vendors leídos desde BD")
         print("   → ⚠️  Acceso MUY restringido")
 
-    # Mostrar info del vendor login
     if settings.ENABLE_VENDOR_LOGIN:
         print("\n🔐 VENDOR LOGIN: HABILITADO ✅")
-        print("   → Login automático al iniciar backend")
-        print("   → Renovación automática de tokens cada 5 min")
     else:
         print("\n🔐 VENDOR LOGIN: DESHABILITADO ⚠️")
-        print("   → Usando simulador/mock local")
-        print("   → No hay conexión con vendors reales")
 
-    # Mostrar info del vendor simulator
     if settings.VENDOR_SIMULATOR_ENABLED:
         print("\n🎭 VENDOR SIMULATOR ACTIVADO")
         print(f"   → URL: {settings.VENDOR_SIMULATOR_URL}")
-        print("   → Las llamadas a vendors irán al simulador")
-    
+
     print("="*60 + "\n")
 
 
@@ -304,17 +267,10 @@ validate_environment()
 
 
 # ============================================================================
-# BACKWARD COMPATIBILITY (mantiene código legacy funcionando)
+# BACKWARD COMPATIBILITY
 # ============================================================================
 
 def get_latcom_config() -> dict:
-    """
-    Obtiene configuración de LATCOM (backward compatibility)
-    Para código existente que usa LATCOM
-
-    Returns:
-        Dict con configuración LATCOM
-    """
     return {
         "url": settings.LATCOM_URL,
         "username": settings.LATCOM_USERNAME,
@@ -328,37 +284,7 @@ def get_latcom_config() -> dict:
     }
 
 
-# ============================================================================
-# EJEMPLO DE USO
-# ============================================================================
-
 if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("CONFIGURACIÓN - LATCONECTA")
-    print("="*60 + "\n")
-
     info = get_environment_info()
     for key, value in info.items():
         print(f"{key}: {value}")
-
-    print("\n" + "="*60)
-    print("CONFIGURACIÓN MOCK")
-    print("="*60 + "\n")
-
-    if is_development():
-        mock_cfg = get_mock_config()
-        for key, value in mock_cfg.items():
-            print(f"{key}: {value}")
-    else:
-        print("Mock no disponible en este ambiente")
-
-    print("\n" + "="*60)
-    print("CONFIGURACIÓN LATCOM (Legacy)")
-    print("="*60 + "\n")
-
-    latcom = get_latcom_config()
-    for key, value in latcom.items():
-        if 'password' not in key.lower() and 'key' not in key.lower():
-            print(f"{key}: {value}")
-        else:
-            print(f"{key}: {'*' * 8 if value else 'None'}")
