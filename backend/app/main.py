@@ -2,6 +2,7 @@
 FastAPI Main Application - Latconecta Backend
 API REST para la plataforma Latconecta
 """
+from contextlib import asynccontextmanager
 from app.routers import exchange_rate
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,8 +20,19 @@ _docs_url    = None if settings.ENVIRONMENT == "production" else "/docs"
 _redoc_url   = None if settings.ENVIRONMENT == "production" else "/redoc"
 _openapi_url = None if settings.ENVIRONMENT == "production" else "/openapi.json"
 
+
+# Lifespan — reemplaza @app.on_event("startup") / ("shutdown") deprecados
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Gestiona el ciclo de vida de la aplicación (startup / shutdown)"""
+    await startup_event()
+    yield
+    await shutdown_event()
+
+
 # Crear instancia de FastAPI con metadata
 app = FastAPI(
+    lifespan=lifespan,
     title="Latconecta API",
     version="2.0.0",
     description="""
@@ -217,14 +229,4 @@ async def internal_error_handler(request: Request, exc):
     )
 
 
-# Startup event
-@app.on_event("startup")
-async def on_startup():
-    """Evento al iniciar la aplicación"""
-    await startup_event()
 
-# Shutdown event
-@app.on_event("shutdown")
-async def on_shutdown():
-    """Evento al cerrar la aplicación"""
-    await shutdown_event()
