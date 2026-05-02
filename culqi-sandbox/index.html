@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Culqi Sandbox — Latconecta</title>
+
+  <!-- Culqi Checkout V4 SDK -->
+  <script src="https://js.culqi.com/checkout-js"></script>
+
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --success: #16a34a;
+      --error: #dc2626;
+      --warning: #d97706;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --mono: 'Courier New', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    .header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .header p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .badge {
+      display: inline-block;
+      background: #1f3a5f;
+      color: #58a6ff;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 12px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 24px;
+      max-width: 1100px;
+    }
+
+    @media (max-width: 800px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .card h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+    .field input, .field select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .field input:focus, .field select:focus {
+      border-color: var(--accent);
+    }
+    .field .hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .btn {
+      width: 100%;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; margin-top: 4px; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-secondary:hover:not(:disabled) { background: #3a424d; }
+    .btn-danger { background: var(--error); color: #fff; }
+    .btn-danger:hover:not(:disabled) { background: #b91c1c; }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:hover:not(:disabled) { background: #15803d; }
+
+    .btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+
+    /* Status line */
+    .status-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    .status-line.idle     { background: #1a1f29; border: 1px solid var(--border); color: var(--text-muted); }
+    .status-line.loading  { background: #1a2535; border: 1px solid #2563eb55; color: #58a6ff; }
+    .status-line.success  { background: #0d2414; border: 1px solid #16a34a55; color: #4ade80; }
+    .status-line.error    { background: #2a0d0d; border: 1px solid #dc262655; color: #f87171; }
+    .status-line.warning  { background: #2a1a00; border: 1px solid #d9770655; color: #fbbf24; }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot.idle    { background: var(--text-muted); }
+    .dot.loading { background: #58a6ff; animation: pulse 1s infinite; }
+    .dot.success { background: #4ade80; }
+    .dot.error   { background: #f87171; }
+    .dot.warning { background: #fbbf24; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* Log */
+    .log-area {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      height: 420px;
+      overflow-y: auto;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .log-entry { margin-bottom: 4px; }
+    .log-entry .ts { color: var(--text-muted); margin-right: 6px; }
+    .log-entry.info    .msg { color: #58a6ff; }
+    .log-entry.success .msg { color: #4ade80; }
+    .log-entry.error   .msg { color: #f87171; }
+    .log-entry.warning .msg { color: #fbbf24; }
+    .log-entry.data    .msg { color: #a78bfa; }
+    .log-entry.section .msg { color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 6px; margin-top: 6px; }
+
+    /* Results */
+    .result-block {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .result-block .label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    .result-block pre {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .pill.ok      { background: #0d2414; color: #4ade80; border: 1px solid #16a34a44; }
+    .pill.fail    { background: #2a0d0d; color: #f87171; border: 1px solid #dc262644; }
+    .pill.pending { background: #1a2535; color: #58a6ff; border: 1px solid #2563eb44; }
+
+    .separator { height: 1px; background: var(--border); margin: 16px 0; }
+
+    .test-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .test-card-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+      font-size: 12px;
+      transition: border-color 0.15s;
+    }
+    .test-card-btn:hover { border-color: var(--accent); }
+    .test-card-btn .card-num { font-family: var(--mono); font-weight: 600; display: block; }
+    .test-card-btn .card-desc { color: var(--text-muted); font-size: 11px; }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Culqi Checkout V4 — Módulo de Prueba <span class="badge">SANDBOX</span></h1>
+  <p>Prueba de integración standalone · Latconecta v2.0.0 · Fase 0.3</p>
+</div>
+
+<div class="grid">
+
+  <!-- ── PANEL IZQUIERDO: Configuración ────────────────────────── -->
+  <div>
+
+    <!-- Llaves -->
+    <div class="card" style="margin-bottom:16px">
+      <h2>Configuración SDK</h2>
+
+      <div class="field">
+        <label>Llave Pública (pk_test_...)</label>
+        <input type="text" id="publicKey" value="pk_test_e94078b9b248675d" />
+        <div class="hint">Solo se usa en el frontend — seguro exponerla</div>
+      </div>
+
+      <div class="field">
+        <label>RSA ID (opcional — para encriptación)</label>
+        <input type="text" id="rsaId" placeholder="Vacío = sin encriptación RSA" />
+      </div>
+
+      <div class="field">
+        <label>Llave Pública RSA (opcional)</label>
+        <input type="text" id="rsaPublicKey" placeholder="-----BEGIN PUBLIC KEY-----..." />
+      </div>
+    </div>
+
+    <!-- Cargo -->
+    <div class="card" style="margin-bottom:16px">
+      <h2>Datos del Cargo</h2>
+
+      <div class="field">
+        <label>Email del cliente</label>
+        <input type="email" id="email" value="test@latconecta.com" />
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Monto (en soles)</label>
+          <input type="number" id="amount" value="15" step="0.01" min="1" />
+          <div class="hint">Se convierte a céntimos</div>
+        </div>
+        <div class="field">
+          <label>Moneda</label>
+          <select id="currency">
+            <option value="PEN" selected>PEN — Soles</option>
+            <option value="USD">USD — Dólares</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Descripción</label>
+        <input type="text" id="description" value="Recarga Bitel S/15 — Prueba Culqi" />
+      </div>
+
+      <div class="field">
+        <label>URL Backend (para crear cargo)</label>
+        <input type="text" id="backendUrl" value="https://77.42.92.151:8100/api/v1/payments/charge" />
+        <div class="hint">Endpoint POST /payments/charge del backend Latconecta</div>
+      </div>
+
+      <div class="separator"></div>
+
+      <div class="section-title">Tarjetas de prueba Culqi</div>
+      <div class="test-cards">
+        <button class="test-card-btn" onclick="setEmail('test@latconecta.com'); log('info','Tarjeta aprobada seleccionada — usar 4111 1111 1111 1111')">
+          <span class="card-num">4111 1111 1111 1111</span>
+          <span class="card-desc">✅ Visa — Aprobada</span>
+        </button>
+        <button class="test-card-btn" onclick="setEmail('test@latconecta.com'); log('info','Tarjeta denegada seleccionada — usar 4000 0200 0000 0000')">
+          <span class="card-num">4000 0200 0000 0000</span>
+          <span class="card-desc">❌ Fondos insuficientes</span>
+        </button>
+        <button class="test-card-btn" onclick="setEmail('test@latconecta.com'); log('info','Tarjeta robada — usar 4000 0300 0000 0004')">
+          <span class="card-num">4000 0300 0000 0004</span>
+          <span class="card-desc">❌ Tarjeta robada</span>
+        </button>
+        <button class="test-card-btn" onclick="setEmail('test@latconecta.com'); log('info','Mastercard aprobada — usar 5111 1111 1111 1118')">
+          <span class="card-num">5111 1111 1111 1118</span>
+          <span class="card-desc">✅ Mastercard — Aprobada</span>
+        </button>
+      </div>
+      <div class="hint" style="margin-top:8px">CVV: 123 · Vencimiento: cualquier fecha futura</div>
+
+    </div>
+
+    <!-- Acciones -->
+    <div class="card">
+      <h2>Acciones de Prueba</h2>
+
+      <div id="statusLine" class="status-line idle">
+        <div class="dot idle" id="statusDot"></div>
+        <span id="statusText">Listo para iniciar prueba</span>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btnOpenCheckout" onclick="openCulqiCheckout().catch(e=>log('error',e.message))">
+          🚀 Abrir Culqi Checkout
+        </button>
+        <button class="btn btn-success" id="btnTestBackend" onclick="testBackendConnection()">
+          🔗 Probar conexión backend
+        </button>
+        <button class="btn btn-danger" id="btnTestRefund" onclick="testRefund()" disabled>
+          ↩ Probar Refund (último cargo)
+        </button>
+        <button class="btn btn-secondary" onclick="clearLog()">
+          🗑 Limpiar log
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── PANEL DERECHO: Log + Resultados ───────────────────────── -->
+  <div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h2>Log de Eventos</h2>
+      <div class="log-area" id="logArea">
+        <div class="log-entry info">
+          <span class="ts">[00:00:00]</span>
+          <span class="msg">Módulo de prueba Culqi iniciado — Latconecta Fase 0.3</span>
+        </div>
+        <div class="log-entry info">
+          <span class="ts">[00:00:00]</span>
+          <span class="msg">SDK: https://js.culqi.com/checkout-js</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Resultados</h2>
+
+      <!-- Token -->
+      <div class="section-title">① Token generado por Culqi SDK</div>
+      <div class="result-block">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="label">token.id</div>
+          <span id="tokenPill" class="pill pending">Pendiente</span>
+        </div>
+        <pre id="tokenResult">—</pre>
+      </div>
+
+      <!-- Cargo -->
+      <div class="section-title" style="margin-top:14px">② Cargo creado en backend</div>
+      <div class="result-block">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="label">charge.id</div>
+          <span id="chargePill" class="pill pending">Pendiente</span>
+        </div>
+        <pre id="chargeResult">—</pre>
+      </div>
+
+      <!-- Refund -->
+      <div class="section-title" style="margin-top:14px">③ Refund (devolución)</div>
+      <div class="result-block">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="label">refund.id</div>
+          <span id="refundPill" class="pill pending">Pendiente</span>
+        </div>
+        <pre id="refundResult">—</pre>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// ESTADO GLOBAL
+// ═══════════════════════════════════════════════════════════
+let lastChargeId = null;
+let culqiInstance = null;
+let currentOrderNumber = null;
+
+// ═══════════════════════════════════════════════════════════
+// UTILIDADES LOG
+// ═══════════════════════════════════════════════════════════
+function ts() {
+  return new Date().toTimeString().slice(0,8);
+}
+
+function log(type, msg) {
+  const area = document.getElementById('logArea');
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${type}`;
+  entry.innerHTML = `<span class="ts">[${ts()}]</span><span class="msg">${msg}</span>`;
+  area.appendChild(entry);
+  area.scrollTop = area.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('logArea').innerHTML = '';
+  log('info', 'Log limpiado');
+}
+
+function setStatus(type, msg) {
+  const line = document.getElementById('statusLine');
+  const dot  = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  line.className = `status-line ${type}`;
+  dot.className  = `dot ${type}`;
+  text.textContent = msg;
+}
+
+function setPill(id, type, text) {
+  const el = document.getElementById(id);
+  el.className = `pill ${type === 'ok' ? 'ok' : type === 'fail' ? 'fail' : 'pending'}`;
+  el.textContent = text;
+}
+
+function setResult(id, data) {
+  document.getElementById(id).textContent =
+    typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+}
+
+function setEmail(email) {
+  document.getElementById('email').value = email;
+}
+
+// ═══════════════════════════════════════════════════════════
+// PASO 1: ABRIR CULQI CHECKOUT
+// Flujo: backend crea Order → frontend abre Checkout con order_id
+// ═══════════════════════════════════════════════════════════
+async function openCulqiCheckout() {
+  log('section', '─── PASO 1: Crear Order en backend ───');
+
+  const publicKey = document.getElementById('publicKey').value.trim();
+  const email     = document.getElementById('email').value.trim();
+  const amount    = parseFloat(document.getElementById('amount').value);
+  const currency  = document.getElementById('currency').value;
+  const rsaId     = document.getElementById('rsaId').value.trim();
+  const rsaPk     = document.getElementById('rsaPublicKey').value.trim();
+  const backendUrl = document.getElementById('backendUrl').value.trim();
+
+  if (!publicKey) { log('error', 'Falta la llave pública'); return; }
+  if (!email)     { log('error', 'Falta el email'); return; }
+  if (!amount || amount <= 0) { log('error', 'Monto inválido'); return; }
+
+  if (typeof CulqiCheckout === 'undefined') {
+    log('error', 'SDK Culqi no cargado');
+    setStatus('error', 'SDK no disponible');
+    return;
+  }
+
+  const amountCents  = Math.round(amount * 100);
+  const orderNumber  = `LC-TEST-${Date.now()}`;
+  const orderUrl     = backendUrl.replace('/payments/charge', '/payments/order');
+
+  log('info', `Monto: ${currency} ${amount.toFixed(2)} → ${amountCents} céntimos`);
+  log('info', `Order number: ${orderNumber}`);
+  log('info', `POST ${orderUrl}`);
+  setStatus('loading', 'Creando Order en Culqi...');
+
+  // ── PASO 1: Crear Order en backend ──────────────────────
+  let orderId = null;
+  try {
+    const orderResp = await fetch(orderUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount:        amountCents,
+        currency_code: currency,
+        order_number:  orderNumber,
+        description:   document.getElementById('description').value.trim(),
+        email:         email,
+        first_name:    'Test',
+        last_name:     'Latconecta',
+        phone_number:  '999999999',
+      }),
+    });
+
+    const orderData = await orderResp.json();
+
+    if (orderResp.ok && orderData.success) {
+      orderId = orderData.order_id;
+      log('success', `Order creada: ${orderId}`);
+      log('data', `state: ${orderData.raw_response?.state}`);
+      log('data', `qr: ${orderData.raw_response?.qr || '—'}`);
+      currentOrderNumber = orderNumber;
+    } else {
+      log('error', `Error creando Order: ${orderData.message || JSON.stringify(orderData)}`);
+      setStatus('error', 'Error creando Order');
+      return;
+    }
+  } catch (err) {
+    log('error', `No se pudo conectar al backend: ${err.message}`);
+    setStatus('error', 'Backend no disponible');
+    return;
+  }
+
+  // ── PASO 2: Abrir Checkout con order_id ────────────────
+  log('section', '─── PASO 2: Abrir Culqi Checkout ───');
+  log('success', 'SDK Culqi disponible ✓');
+
+  if (rsaId) {
+    log('info', `RSA encriptación: activada (id=${rsaId.slice(0,8)}...)`);
+  } else {
+    log('warning', 'RSA encriptación: desactivada (sin rsa_id)');
+  }
+
+  const culqiSettings = {
+    title:    'Latconecta — Prueba',
+    currency: currency,
+    amount:   amountCents,
+    order:    orderId,   // ord_live_XXX — habilita Yape y billeteras
+  };
+
+  if (rsaId) {
+    culqiSettings.xculqirsaid  = rsaId;
+    culqiSettings.rsapublickey = rsaPk;
+  }
+
+  const paymentMethods = {
+    tarjeta:    true,
+    yape:       true,
+    billetera:  true,
+    bancaMovil: false,
+    agente:     false,
+    cuotealo:   false,
+  };
+
+  const options = {
+    lang:               'auto',
+    installments:       false,
+    modal:              true,
+    paymentMethods:     paymentMethods,
+    paymentMethodsSort: Object.keys(paymentMethods),
+  };
+
+  const clientConfig = { email: email };
+
+  const appearance = {
+    theme:               'default',
+    hiddenCulqiLogo:     false,
+    hiddenBanner:        false,
+    hiddenToolBarAmount: false,
+    menuType:            'sidebar',
+    buttonCardPayText:   'Pagar',
+    defaultStyle: {
+      bannerColor:      '#1e3a5f',
+      buttonBackground: '#2563eb',
+      menuColor:        '#2563eb',
+      linksColor:       '#2563eb',
+      buttonTextColor:  '#ffffff',
+      priceColor:       '#1e3a5f',
+    },
+  };
+
+  const config = { settings: culqiSettings, client: clientConfig, options, appearance };
+
+  log('info', `Inicializando CulqiCheckout — tarjeta + Yape + billeteras`);
+
+  try {
+    culqiInstance = new CulqiCheckout(publicKey, config);
+    culqiInstance.culqi = handleCulqiAction;
+
+    log('info', 'Abriendo formulario Culqi...');
+    setStatus('loading', 'Esperando respuesta del usuario en Culqi...');
+    culqiInstance.open();
+
+  } catch (err) {
+    log('error', `Error inicializando Culqi: ${err.message}`);
+    setStatus('error', `Error SDK: ${err.message}`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PASO 2: HANDLER DE RESPUESTA DE CULQI (handleCulqiAction)
+// ═══════════════════════════════════════════════════════════
+async function handleCulqiAction() {
+  if (!culqiInstance) return;
+
+  if (culqiInstance.token) {
+    // ── Token de tarjeta generado ──────────────────────────
+    const token = culqiInstance.token;
+    culqiInstance.close();
+
+    log('section', '─── PASO 2: Token recibido de Culqi ───');
+    log('success', `Token ID: ${token.id}`);
+    log('data', `Email: ${token.email}`);
+    log('data', `Card: ${token.card_number} (${token.brand})`);
+
+    setPill('tokenPill', 'ok', token.id.slice(0, 20) + '...');
+    setResult('tokenResult', {
+      id:          token.id,
+      email:       token.email,
+      card_number: token.card_number,
+      brand:       token.brand,
+      object:      token.object,
+    });
+
+    setStatus('loading', 'Token OK — creando cargo en backend...');
+
+    // Ir al paso 3: crear cargo en backend
+    await createChargeInBackend(token.id);
+
+  } else if (culqiInstance.order) {
+    // ── Orden creada (Yape/billeteras) ─────────────────────
+    const order = culqiInstance.order;
+    culqiInstance.close();
+    log('section', '─── Orden recibida ───');
+    log('success', `Order ID: ${order.id}`);
+    setResult('tokenResult', order);
+
+  } else {
+    // ── Error / cancelación ────────────────────────────────
+    const err = culqiInstance.error;
+    culqiInstance.close();
+    log('section', '─── Error / Cancelación ───');
+    if (err) {
+      log('error', `Culqi error: ${JSON.stringify(err)}`);
+      setPill('tokenPill', 'fail', 'Error');
+      setResult('tokenResult', err);
+    } else {
+      log('warning', 'Usuario cerró el checkout sin pagar');
+    }
+    setStatus('idle', 'Listo para iniciar prueba');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PASO 3: CREAR CARGO EN BACKEND
+// ═══════════════════════════════════════════════════════════
+async function createChargeInBackend(tokenId) {
+  log('section', '─── PASO 3: Crear cargo en backend ───');
+
+  const backendUrl  = document.getElementById('backendUrl').value.trim();
+  const amount      = parseFloat(document.getElementById('amount').value);
+  const currency    = document.getElementById('currency').value;
+  const email       = document.getElementById('email').value.trim();
+  const description = document.getElementById('description').value.trim();
+  const amountCents = Math.round(amount * 100);
+
+  log('info', `POST ${backendUrl}`);
+  log('data', `token_id=${tokenId}, amount=${amountCents}, currency=${currency}`);
+
+  const body = {
+    token_id:     tokenId,
+    amount:       amountCents,
+    currency_code: currency,
+    email:        email,
+    description:  description,
+    order_number: `TEST-${Date.now()}`,
+  };
+
+  try {
+    const response = await fetch(backendUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+
+    const data = await response.json();
+    log('data', `HTTP ${response.status}`);
+
+    if (response.ok && data.success) {
+      const chargeId = data.charge_id || data.id || '(ver respuesta)';
+      lastChargeId   = data.charge_id || data.id;
+
+      log('success', `✅ Cargo creado: ${chargeId}`);
+      log('data', `outcome.type: ${data.outcome_type || '—'}`);
+      log('data', `amount: ${data.amount} ${data.currency_code}`);
+
+      setPill('chargePill', 'ok', chargeId ? chargeId.slice(0, 20) + '...' : 'OK');
+      setResult('chargeResult', data);
+      setStatus('success', `Cargo exitoso — ${chargeId}`);
+
+      // Habilitar botón de refund
+      document.getElementById('btnTestRefund').disabled = false;
+      log('info', 'Botón de Refund habilitado — puedes probar la devolución');
+
+    } else {
+      log('error', `❌ Backend rechazó el cargo: ${JSON.stringify(data)}`);
+      setPill('chargePill', 'fail', `HTTP ${response.status}`);
+      setResult('chargeResult', data);
+      setStatus('error', `Cargo fallido — HTTP ${response.status}`);
+    }
+
+  } catch (err) {
+    // Si el backend no existe aún, mostramos el token igual (prueba de SDK)
+    if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      log('warning', `⚠️ Backend no disponible: ${err.message}`);
+      log('warning', 'RESULTADO PARCIAL: SDK Culqi funciona ✓ — backend pendiente de implementar');
+      setPill('chargePill', 'fail', 'Backend no disponible');
+      setResult('chargeResult', `Error de conexión: ${err.message}\n\nEsto es esperado si el endpoint /payments/charge aún no existe en el backend.`);
+      setStatus('warning', 'SDK OK — backend endpoint pendiente');
+    } else {
+      log('error', `Error inesperado: ${err.message}`);
+      setStatus('error', err.message);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PASO 4: PROBAR REFUND
+// ═══════════════════════════════════════════════════════════
+async function testRefund() {
+  if (!lastChargeId) {
+    log('error', 'No hay charge_id disponible — realiza un cargo primero');
+    return;
+  }
+
+  log('section', '─── PASO 4: Probar Refund ───');
+  log('info', `charge_id a devolver: ${lastChargeId}`);
+
+  const backendBase = document.getElementById('backendUrl').value.trim().replace('/charge', '');
+  const refundUrl   = backendBase + '/refund';
+  const amount      = parseFloat(document.getElementById('amount').value);
+  const amountCents = Math.round(amount * 100);
+
+  log('info', `POST ${refundUrl}`);
+
+  const body = {
+    charge_id: lastChargeId,
+    amount:    amountCents,
+    reason:    'solicitud_comprador',
+  };
+
+  try {
+    const response = await fetch(refundUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      log('success', `✅ Refund exitoso: ${data.refund_id || data.id}`);
+      setPill('refundPill', 'ok', 'Refund OK');
+      setResult('refundResult', data);
+      setStatus('success', 'Refund exitoso');
+    } else {
+      log('error', `❌ Refund fallido: ${JSON.stringify(data)}`);
+      setPill('refundPill', 'fail', `HTTP ${response.status}`);
+      setResult('refundResult', data);
+      setStatus('error', 'Refund fallido');
+    }
+
+  } catch (err) {
+    log('warning', `Backend no disponible para refund: ${err.message}`);
+    setPill('refundPill', 'fail', 'Backend pendiente');
+    setResult('refundResult', `Backend endpoint /payments/refund pendiente de implementar.\nError: ${err.message}`);
+    setStatus('warning', 'Refund — backend pendiente');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROBAR CONEXIÓN AL BACKEND
+// ═══════════════════════════════════════════════════════════
+async function testBackendConnection() {
+  log('section', '─── Probar conexión backend ───');
+
+  const backendUrl = document.getElementById('backendUrl').value.trim();
+  const configUrl  = backendUrl.replace('/payments/charge', '/payments/config');
+
+  log('info', `GET ${configUrl}`);
+  setStatus('loading', 'Probando conexión al backend...');
+
+  try {
+    const response = await fetch(configUrl);
+    const data     = await response.json();
+
+    if (response.ok) {
+      log('success', `✅ Backend disponible — HTTP ${response.status}`);
+      log('data', `gateway: ${data.gateway}`);
+      log('data', `card_available: ${data.card_available}`);
+      log('data', `Response: ${JSON.stringify(data)}`);
+      setStatus('success', `Backend OK — gateway: ${data.gateway}`);
+    } else {
+      log('error', `❌ Backend error HTTP ${response.status}: ${JSON.stringify(data)}`);
+      setStatus('error', `Backend HTTP ${response.status}`);
+    }
+
+  } catch (err) {
+    log('error', `❌ No se puede conectar al backend: ${err.message}`);
+    log('warning', 'Verificar que el backend esté corriendo y la URL sea correcta');
+    setStatus('error', 'Backend no disponible');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  if (typeof CulqiCheckout !== 'undefined') {
+    log('success', 'SDK Culqi cargado correctamente ✓');
+  } else {
+    log('error', 'SDK Culqi NO disponible — verificar conectividad a js.culqi.com');
+    setStatus('error', 'SDK no disponible');
+  }
+});
+</script>
+</body>
+</html>

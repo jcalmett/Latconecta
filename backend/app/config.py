@@ -36,81 +36,48 @@ class Settings(BaseSettings):
     # CONFIGURACIÓN CORS
     # =========================================================================
     CORS_ORIGINS: list = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5174",
-    "http://77.42.92.151:5173",  # Admin en servidor
-    "http://77.42.92.151:5174",  # Users en servidor
-    "http://77.42.92.151",        # Sin puerto
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://77.42.92.151:5173",
+        "http://77.42.92.151:5174",
+        "http://77.42.92.151",
     ]
 
     # =========================================================================
     # CONFIGURACIÓN DE AMBIENTE
     # =========================================================================
-    # Ambiente actual: development, uat, production
-    # - development: Usa mock universal interno
-    # - uat: Usa APIs reales de vendors (datos UAT en BD)
-    # - production: Usa APIs reales de vendors (datos PROD en BD)
     ENVIRONMENT: str = "development"
 
     # =========================================================================
     # CONFIGURACIÓN DE DEPLOYMENT (País de instalación)
     # =========================================================================
-    # País donde está instalado el sistema (determina gateway de pagos,
-    # barcode API, y regulaciones locales).
-    # IMPORTANTE: Esto NO es el catálogo de países (tabla countries en BD).
-    # Los countries en BD agrupan servicios/productos disponibles para venta.
-    # DEPLOYMENT_COUNTRY indica DESDE DÓNDE se vende y CÓMO se cobra.
-    #
-    # Valores: PE (Perú), MX (México), US (USA)
     DEPLOYMENT_COUNTRY: str = "PE"
 
     # Gateway de pagos activo para esta instalación
-    # PE → izipay  (tarjeta)
+    # PE → culqi   (tarjeta, Yape, billeteras, PagoEfectivo)
     # MX → conekta (tarjeta, OXXO, SPEI) - futuro
     # US → stripe  (tarjeta, Apple Pay)  - futuro
-    PAYMENT_GATEWAY: str = "izipay"
+    PAYMENT_GATEWAY: str = "culqi"
 
     # =========================================================================
     # MÉTODOS DE PAGO DISPONIBLES POR INSTALACIÓN
     # =========================================================================
-    # Controlan qué métodos de pago se ofrecen en esta instalación.
-    # Son independientes del sistema de control de operaciones (fase1/fase2),
-    # que es exclusivo de desarrollo y UAT.
-    #
-    # CARD_AVAILABLE:
-    #   True  → la instalación tiene gateway de tarjeta activo (PAYMENT_GATEWAY)
-    #   False → no se ofrece pago con tarjeta en este país/instalación
-    #
-    # BARCODE_AVAILABLE:
-    #   True  → el país/instalación opera con pago por código de barras
-    #   False → no se ofrece barcode en este país/instalación
-    #
-    #   NOTA: BARCODE_AVAILABLE=True es condición necesaria pero no suficiente.
-    #   El control granular por operadora se mantiene en company_barcode_available
-    #   (tabla companies en BD). Ambas condiciones deben ser True para que el
-    #   usuario vea la opción barcode:
-    #     BARCODE_AVAILABLE=True AND company.company_barcode_available='Si'
     CARD_AVAILABLE: bool = True
     BARCODE_AVAILABLE: bool = True
 
     # =========================================================================
-    # CONFIGURACIÓN DE IZIPAY - PASARELA DE PAGOS (Peru)
-    # Solo aplica cuando PAYMENT_GATEWAY=izipay
+    # CONFIGURACIÓN DE CULQI - PASARELA DE PAGOS (Peru)
+    # Solo aplica cuando PAYMENT_GATEWAY=culqi
     # =========================================================================
-    IZIPAY_API_URL: str = "https://sandbox-api-pw.izipay.pe"
-    IZIPAY_MERCHANT_CODE: str = ""
-    IZIPAY_API_KEY: str = ""
-    IZIPAY_HMAC_SHA256: str = ""
-    IZIPAY_TOKEN_ENDPOINT: str = "/security/v1/Token/Generate"
-    IZIPAY_CANCEL_PATH: str = "/cancel/api/Transaction/Cancel"
-    IZIPAY_RSA_PUBLIC_KEY: str = ""
-    IZIPAY_CANCEL_ENDPOINT: str = ""
+    CULQI_PUBLIC_KEY: str = ""
+    CULQI_SECRET_KEY: str = ""
+    CULQI_RSA_ID: str = ""
+    CULQI_RSA_PUBLIC_KEY: str = ""
 
     # =========================================================================
     # CONFIGURACIÓN SMTP — RECUPERACIÓN DE CONTRASEÑA
-    # Usar Gmail con App Password (myaccount.google.com/apppasswords)
     # =========================================================================
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
@@ -135,8 +102,6 @@ class Settings(BaseSettings):
     # STRIPE_WEBHOOK_SECRET: str = ""
 
     # Control de login con vendors
-    # False en development (usa mock/simulador)
-    # True en uat/production (login real con vendors)
     ENABLE_VENDOR_LOGIN: bool = False
 
     # =========================================================================
@@ -154,7 +119,7 @@ class Settings(BaseSettings):
     VENDOR_SIMULATOR_URL: str = "http://localhost:5001"
 
     # =========================================================================
-    # CONFIGURACIÓN DE VENDORS (LEGACY - Mantener por compatibilidad)
+    # CONFIGURACIÓN DE VENDORS
     # =========================================================================
     VENDOR_MODE: str = "mock"
     LATCOM_URL: Optional[str] = "https://uatlat.mitopup.com"
@@ -244,11 +209,9 @@ def validate_environment():
     elif is_uat():
         print("🔬 Modo: UAT")
         print("   → Usando APIs REALES de vendors (ambiente UAT)")
-        print("   → ⚠️  Acceso restringido")
     else:
         print("🏭 Modo: PRODUCTION")
         print("   → Usando APIs REALES de vendors (ambiente PRODUCCIÓN)")
-        print("   → ⚠️  Acceso MUY restringido")
 
     if settings.ENABLE_VENDOR_LOGIN:
         print("\n🔐 VENDOR LOGIN: HABILITADO ✅")

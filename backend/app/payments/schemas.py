@@ -1,111 +1,114 @@
 # backend/app/payments/schemas.py
 """
-Schemas para Payment Integration
-✅ ACTUALIZADO: Soporte multi-gateway (IZIPAY, Conekta, Stripe futuro)
-✅ ACTUALIZADO: Schemas de anulación/cancelación
-✅ ACTUALIZADO: Validate response retorna datos para anulación
+Schemas para Culqi Payment Integration
 """
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
 
 # ================================================================
-# TOKEN - Generación de token de sesión
+# CHARGE - Crear cargo con token del Checkout V4
 # ================================================================
 
-class PaymentCreateRequest(BaseModel):
-    """Request para generar token de sesión"""
-    amount: str          # "15.00" - string con 2 decimales
-    currency: str = "PEN"
-    order_number: str    # Número de pedido único (5-15 chars)
+class PaymentChargeRequest(BaseModel):
+    """Request para crear un cargo usando token del Checkout V4"""
+    token_id: str                       # tkn_live_XXX — del Checkout V4
+    amount: int                         # en céntimos: S/15.00 = 1500
+    currency_code: str = "PEN"
+    email: str
+    description: str = "Latconecta"
+    order_number: str = ""
+    installments: int = 0               # 0 = sin cuotas
+    capture: bool = True                # True = cobro inmediato
+    # Datos antifraud (opcionales)
+    first_name: str = "Cliente"
+    last_name: str = "Latconecta"
+    phone_number: str = "999999999"
+    address: str = "N/A"
+    address_city: str = "Lima"
+    country_code: str = "PE"
 
 
-class PaymentCreateResponse(BaseModel):
-    """Response con token de sesión para el frontend"""
+class PaymentChargeResponse(BaseModel):
+    """Response del cargo creado"""
     success: bool
-    order_number: str
-    amount: str
-    currency: str
-    token: Optional[str] = None           # JWT para authorization en LoadForm
-    transaction_id: Optional[str] = None
-    merchant_code: Optional[str] = None
-    error: Optional[str] = None
-
-
-# ================================================================
-# VALIDATE - Validación de firma después del pago
-# ================================================================
-
-class PaymentValidateRequest(BaseModel):
-    """
-    Request para validar firma después del pago.
-    El SDK devuelve payloadHttp y signature en el callbackResponse.
-    """
-    order_number: str
-    payload_http: str    # JSON string del resultado
-    signature: str       # Firma HMAC-SHA256 en base64
-    transaction_id: str
-
-
-class PaymentValidateResponse(BaseModel):
-    """
-    Response de la validación de firma
-    ✅ ACTUALIZADO: Incluye datos necesarios para anulación futura
-    """
-    success: bool
-    valid_signature: bool
-    order_number: Optional[str] = None
-    payment_status: Optional[str] = None  # "Autorizado" / "Denegado"
+    charge_id: Optional[str] = None     # chr_live_XXX
+    outcome_type: Optional[str] = None  # 'venta' = aprobado
+    amount: Optional[int] = None
+    currency_code: Optional[str] = None
     message: Optional[str] = None
-
-    # ✅ NUEVO: Datos extraídos del pago para posible anulación
-    # Estos datos deben ser guardados por el frontend y enviados
-    # en PurchaseCreateRequest para que el backend pueda anular si la provisión falla
-    unique_id: Optional[str] = None               # IZIPAY uniqueId
-    authorization_code: Optional[str] = None       # Código de autorización del emisor
-    transaction_datetime: Optional[str] = None     # Fecha/hora de la transacción
-    pay_method: Optional[str] = None               # CARD, YAPE_CODE, PAGO_PUSH
-    channel: Optional[str] = None                  # ecommerce, web, etc.
-    amount: Optional[str] = None                   # Monto cobrado
-    currency: Optional[str] = None                 # Moneda del cobro
+    raw_response: Optional[Dict[str, Any]] = None
 
 
 # ================================================================
-# CANCEL - Anulación de transacción
+# ORDER - Crear orden para Yape / billeteras / PagoEfectivo
+# ================================================================
+
+class PaymentOrderRequest(BaseModel):
+    """Request para crear una orden de pago Culqi"""
+    amount: int                         # en céntimos
+    currency_code: str = "PEN"
+    order_number: str                   # referencia única
+    description: str = "Latconecta"
+    expiration_date: Optional[int] = None  # Unix timestamp (default: +1 hora)
+    # Datos del cliente
+    first_name: str = "Cliente"
+    last_name: str = "Latconecta"
+    email: str = "cliente@latconecta.com"
+    phone_number: str = "999999999"
+
+
+class PaymentOrderResponse(BaseModel):
+    """Response con el Order ID para el Checkout V4"""
+    success: bool
+    order_id: Optional[str] = None      # ord_live_XXX — va a settings.order del frontend
+    order_number: Optional[str] = None
+    message: Optional[str] = None
+    raw_response: Optional[Dict[str, Any]] = None
+
+
+# ================================================================
+# REFUND - Devolución de un cargo
+# ================================================================
+
+class PaymentRefundRequest(BaseModel):
+    """Request para devolver un cargo"""
+    charge_id: str                      # chr_live_XXX
+    amount: int                         # en céntimos (puede ser parcial)
+    reason: str = "solicitud_comprador" # solicitud_comprador | duplicado | fraude
+
+
+class PaymentRefundResponse(BaseModel):
+    """Response de la devolución"""
+    success: bool
+    refund_id: Optional[str] = None
+    amount: Optional[int] = None
+    message: Optional[str] = None
+    raw_response: Optional[Dict[str, Any]] = None
+
+
+# ================================================================
+# CANCEL - Wrapper para compatibilidad con purchases.py
 # ================================================================
 
 class PaymentCancelRequest(BaseModel):
-    """
-    Request para anular una transacción de pago.
-    Soporta múltiples gateways (IZIPAY, Conekta, Stripe).
-    """
-    # Gateway que procesó el pago original
-    gateway: str = "izipay"              # 'izipay', 'conekta', 'stripe'
-
-    # Datos de la transacción original (comunes a todos los gateways)
-    transaction_id: str                  # ID de la transacción
-    order_number: str                    # Número de orden
-    amount: str                          # Monto (ej: "15.00")
-    currency: str = "PEN"               # Moneda
-
-    # Datos específicos de IZIPAY (requeridos para gateway='izipay')
-    unique_id: Optional[str] = None              # uniqueId del response original
-    authorization_code: Optional[str] = None     # Código de autorización
-    transaction_datetime: Optional[str] = None   # Fecha/hora de la transacción
-    pay_method: Optional[str] = "CARD"           # CARD, YAPE_CODE, PAGO_PUSH
-    channel: Optional[str] = "ecommerce"         # Canal
-
-    # Datos específicos de otros gateways (futuro)
-    # conekta_charge_id: Optional[str] = None
-    # stripe_payment_intent_id: Optional[str] = None
+    """Request para cancelar/revertir un cargo (wrapper de refund)"""
+    gateway: str = "culqi"
+    charge_id: str                      # chr_live_XXX
+    amount: int                         # en céntimos
+    currency: str = "PEN"
+    reason: str = "solicitud_comprador"
+    # Campos legacy opcionales (ignorados en Culqi, reservados para compatibilidad)
+    transaction_id: Optional[str] = None
+    order_number: Optional[str] = None
 
 
 class PaymentCancelResponse(BaseModel):
-    """Response de anulación de transacción"""
+    """Response de cancelación"""
     success: bool
-    gateway: str                                          # Gateway utilizado
-    order_number: str
-    cancel_id: Optional[str] = None                       # ID de la anulación
-    authorization_code_cancel: Optional[str] = None       # Código auth de anulación
+    gateway: str
+    order_number: Optional[str] = None
+    cancel_id: Optional[str] = None
+    authorization_code_cancel: Optional[str] = None
     message: Optional[str] = None
-    raw_response: Optional[Dict[str, Any]] = None         # Response crudo del gateway
+    raw_response: Optional[Dict[str, Any]] = None
