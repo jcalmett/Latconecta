@@ -14,6 +14,11 @@ from app.config import settings
 from app.events import startup_event, shutdown_event
 from app.payments.router import router as payments_router
 
+# Deshabilitar docs en producción
+_docs_url    = None if settings.ENVIRONMENT == "production" else "/docs"
+_redoc_url   = None if settings.ENVIRONMENT == "production" else "/redoc"
+_openapi_url = None if settings.ENVIRONMENT == "production" else "/openapi.json"
+
 # Crear instancia de FastAPI con metadata
 app = FastAPI(
     title="Latconecta API",
@@ -29,10 +34,6 @@ app = FastAPI(
 
     ### Autenticación
     La API utiliza JWT (JSON Web Tokens) para autenticación.
-
-    **Credenciales de prueba:**
-    - Admin: admin@bitel.com.pe / admin123
-    - User: juan@email.com / admin123
 
     ### Roles de Usuario
     * **user**: Usuario regular (puede hacer compras)
@@ -50,9 +51,9 @@ app = FastAPI(
     * **Mock Vendors** - Sistema de mock para testing
     * **Operations Config** - Control centralizado de operaciones
     """,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url
 )
 
 # Configurar CORS
@@ -111,7 +112,7 @@ async def add_process_time_header(request: Request, call_next):
 async def root():
     """
     Endpoint raíz de la API
-    
+
     Retorna información básica sobre la API
     """
     return {
@@ -128,7 +129,7 @@ async def root():
 async def health_check():
     """
     Health check endpoint
-    
+
     Verifica que la API esté funcionando correctamente
     """
     environment = os.getenv("ENVIRONMENT", "development")
@@ -142,17 +143,17 @@ async def health_check():
 
 # Importar y registrar routers
 from app.routers import (
-    auth, 
-    users, 
-    products, 
-    services, 
-    companies, 
+    auth,
+    users,
+    products,
+    services,
+    companies,
     purchases,
     exchange_rate,
-    upload, 
-    countries, 
-    vendors, 
-    vendor_products, 
+    upload,
+    countries,
+    vendors,
+    vendor_products,
     latconecta,
     vendor_api_mappings,
     mock_vendors,
