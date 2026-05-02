@@ -3,7 +3,7 @@ import { X, Loader2, AlertCircle, Download, FileText, Check, CreditCard, Smartph
 import { getImageUrl, FALLBACK_IMAGES } from '../utils/imageHelper';
 import opsConfigService from '../services/operationsConfigService';
 import paymentService from '../services/paymentService';
-import IzipayCheckout from './payment/IzipayCheckout';
+import CulqiCheckout from './payment/CulqiCheckout';
 
 const PurchasePopup = React.memo(({
   showPurchasePopup,
@@ -35,21 +35,6 @@ const PurchasePopup = React.memo(({
   const [gatewayResult, setGatewayResult] = useState(null);
   const [paymentConfig, setPaymentConfig] = useState(null);
 
-  // ─── OPCIÓN A: Estado del pre-fetch de token Izipay ──────────────────────
-  // orderNumber fijo: se genera UNA sola vez al entrar al Step 4 y no cambia.
-  // Esto evita el bug anterior donde Date.now() en el render generaba un
-  // orderNumber diferente en cada re-render del componente.
-  const [izipayOrderNumber, setIzipayOrderNumber] = useState(null);
-  const [izipayPrefetchedToken, setIzipayPrefetchedToken] = useState(null);
-  const [izipayPrefetchedConfig, setIzipayPrefetchedConfig] = useState(null);
-  const [izipayPrefetchedTransactionId, setIzipayPrefetchedTransactionId] = useState(null);
-  const [izipayTokenLoading, setIzipayTokenLoading] = useState(false);
-
-  // Ref para evitar doble ejecución del pre-fetch (React StrictMode en desarrollo)
-  const prefetchStarted = useRef(false);
-  // Ref para evitar doble envío del request de compra (doble click)
-  const isSubmitting = useRef(false);
-  // ─────────────────────────────────────────────────────────────────────────
 
   // Cargar config de pagos del backend al montar o al llegar al paso 4.
   // GET /payments/config retorna card_available y barcode_available según
@@ -71,97 +56,6 @@ const PurchasePopup = React.memo(({
   const cardMode   = paymentConfig?.card?.mode || 'fase1';
   const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
 
-  // ─── OPCIÓN A: Pre-fetch de token Izipay al entrar al Step 4 ─────────────
-  /**
-   * Cuando el usuario llega al Step 4 y el modo de tarjeta es fase2,
-   * solicitamos el token al backend en background mientras el usuario
-   * decide su método de pago. Cuando haga click en "Procesar Compra",
-   * el token ya estará disponible y LoadForm() se ejecutará sin delay.
-   *
-   * El orderNumber se genera aquí (una sola vez) para garantizar consistencia
-   * entre el token generado y el que se envía a Izipay en el SDK.
-   */
-  useEffect(() => {
-    // Solo ejecutar cuando lleguemos al step 4 con cardMode fase2
-    if (purchaseStep !== 4) return;
-    if (!paymentConfig) return;          // Esperar a que llegue la config de ops
-    if (cardMode !== 'fase2') return;    // Solo en fase2 se usa Izipay real
-    if (!cardEnabled) return;            // Si tarjeta no está habilitada, no pre-fetchar
-    if (prefetchStarted.current) return; // Evitar doble ejecución
-
-    prefetchStarted.current = true;
-
-    // Generar orderNumber fijo para toda esta transacción
-    const newOrderNumber = `LC${Date.now().toString().slice(-12)}`;
-    setIzipayOrderNumber(newOrderNumber);
-
-    // Calcular el monto según el tipo de producto
-    const getAmount = () => {
-      if (selectedProduct.product_amount_type === 'F') {
-        return parseFloat(selectedProduct.product_total_price);
-      } else if (selectedProduct.product_amount_type === 'R') {
-        return parseFloat(purchaseData.variableTotalToPay || 0);
-      } else if (selectedProduct.product_amount_type === 'V') {
-        const baseAmount = parseFloat(purchaseData.billPaymentAmount || 0);
-        const discountPercentage = parseFloat(selectedProduct.product_discount_percentage || 0);
-        const discount = baseAmount * (discountPercentage / 100);
-        const fee = parseFloat(selectedProduct.product_fee || 0);
-        return baseAmount - discount + fee;
-      }
-      return 0;
-    };
-
-    const amount = getAmount();
-    const currency = selectedProduct.product_currency || 'PEN';
-
-    console.log(`🔄 Pre-fetch token Izipay en background: order=${newOrderNumber}, amount=${amount} ${currency}`);
-    setIzipayTokenLoading(true);
-
-    // Ejecutar ambas llamadas en paralelo para mayor velocidad
-    Promise.all([
-      paymentService.getConfig(),
-      paymentService.getToken({
-        amount: parseFloat(amount).toFixed(2),
-        currency: currency,
-        order_number: newOrderNumber,
-      }),
-    ])
-      .then(([config, tokenData]) => {
-        if (tokenData.success && tokenData.token) {
-          console.log('✅ Token Izipay pre-fetchado correctamente');
-          setIzipayPrefetchedConfig(config);
-          setIzipayPrefetchedToken(tokenData.token);
-          setIzipayPrefetchedTransactionId(tokenData.transaction_id || `${Date.now()}`);
-        } else {
-          // Si el pre-fetch falla, no bloqueamos al usuario.
-          // IzipayCheckout hará su propio fetch al momento del click.
-          console.warn('⚠️ Pre-fetch token falló, IzipayCheckout hará fetch propio:', tokenData.error);
-        }
-      })
-      .catch((err) => {
-        // Error silencioso — no mostramos nada al usuario.
-        // IzipayCheckout manejará el fetch por su cuenta.
-        console.warn('⚠️ Pre-fetch token error (silencioso):', err.message);
-      })
-      .finally(() => {
-        setIzipayTokenLoading(false);
-      });
-
-  }, [purchaseStep, paymentConfig, cardMode, cardEnabled, selectedProduct, purchaseData]);
-
-  // Resetear el pre-fetch si el usuario vuelve atrás desde el Step 4
-  useEffect(() => {
-    if (purchaseStep !== 4) {
-      prefetchStarted.current = false;
-      isSubmitting.current = false;
-      setIzipayOrderNumber(null);
-      setIzipayPrefetchedToken(null);
-      setIzipayPrefetchedConfig(null);
-      setIzipayPrefetchedTransactionId(null);
-      setIzipayTokenLoading(false);
-    }
-  }, [purchaseStep]);
-  // ─────────────────────────────────────────────────────────────────────────
 
   const calculateTotalToPay = (amount) => {
     const baseAmount = parseFloat(amount) || 0;
@@ -781,7 +675,7 @@ const PurchasePopup = React.memo(({
             <div>
               {/* --- MODO CHECKOUT: Muestra el formulario del proveedor --- */}
               {showGatewayCheckout && (
-                <IzipayCheckout
+                <CulqiCheckout
                   amount={(() => {
                     if (selectedProduct.product_amount_type === 'F') {
                       return parseFloat(selectedProduct.product_total_price);
@@ -793,25 +687,21 @@ const PurchasePopup = React.memo(({
                     return 0;
                   })()}
                   currency={selectedProduct.product_currency || 'PEN'}
-                  orderNumber={izipayOrderNumber}
+                  orderNumber={`LC${Date.now().toString().slice(-12)}`}
                   user={user}
                   onResult={(result) => {
-                    console.log('📨 Gateway result:', result);
+                    console.log('📨 Culqi result:', result);
                     setShowGatewayCheckout(false);
-
                     if (result.success) {
                       setGatewayResult(result);
                       handlePaymentAndProvision({
-                        payment_gateway: 'izipay',
-                        payment_transaction_uuid: result.cancelData?.unique_id,
-                        payment_transaction_id: result.transactionId,
-                        payment_reference_number: result.cancelData?.unique_id,
-                        payment_order_number: result.orderNumber,
-                        payment_method_detail: result.cancelData?.pay_method || 'CARD',
-                        payment_code_auth: result.cancelData?.authorization_code,
-                        payment_amount: result.cancelData?.amount,
-                        payment_currency: result.cancelData?.currency,
-                        payment_transaction_datetime: result.cancelData?.transaction_datetime,
+                        payment_gateway:          'culqi',
+                        payment_transaction_id:   result.charge_id,
+                        payment_reference_number: result.charge_id,
+                        payment_order_number:     result.orderNumber,
+                        payment_method_detail:    result.outcome_type || 'CARD',
+                        payment_amount:           result.amount,
+                        payment_currency:         result.currency,
                       });
                     } else {
                       setError(result.message || 'El pago no fue procesado');
@@ -820,13 +710,9 @@ const PurchasePopup = React.memo(({
                   onCancel={() => {
                     console.log('🚫 Checkout cancelado por usuario');
                     setShowGatewayCheckout(false);
+                    isSubmitting.current = false;
                   }}
-                  // ─── Props Opción A: autoStart + datos pre-fetchados ──────
                   autoStart={true}
-                  prefetchedToken={izipayPrefetchedToken}
-                  prefetchedConfig={izipayPrefetchedConfig}
-                  prefetchedTransactionId={izipayPrefetchedTransactionId}
-                  // ─────────────────────────────────────────────────────────
                 />
               )}
 
@@ -916,12 +802,6 @@ const PurchasePopup = React.memo(({
 
                         if (purchaseData.paymentMethod === 'card') {
                           if (cardMode === 'fase2') {
-                            // ─── OPCIÓN A: Abrir Izipay directamente ────────
-                            // El token ya fue pre-fetchado en background.
-                            // Si aún no llegó (caso raro), IzipayCheckout
-                            // hará su propio fetch (fallback transparente).
-                            setShowGatewayCheckout(true);
-                            // ────────────────────────────────────────────────
                           } else {
                             // FASE 1: Pago simulado, va directo al backend
                             handlePaymentAndProvision();
@@ -932,21 +812,9 @@ const PurchasePopup = React.memo(({
                         }
                       }}
                       disabled={!purchaseData.paymentMethod}
-                      className={`flex-1 text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 ${
-                        // Indicador visual sutil si el token aún se está pre-fetchando
-                        purchaseData.paymentMethod === 'card' && cardMode === 'fase2' && izipayTokenLoading
-                          ? 'bg-blue-400'
-                          : 'bg-bitel-blue'
-                      }`}
+                      className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      {purchaseData.paymentMethod === 'card' && cardMode === 'fase2' && izipayTokenLoading ? (
-                        <>
-                          <Loader2 size={18} className="animate-spin" />
-                          <span>Preparando pago...</span>
-                        </>
-                      ) : (
-                        'Procesar Compra'
-                      )}
+                      Procesar Compra
                     </button>
                   </div>
                 </>
