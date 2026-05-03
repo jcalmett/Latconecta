@@ -95,7 +95,7 @@ class CulqiAdapter:
                 "order_number": charge_data.get('order_number', ''),
             },
             "antifraud_details": {
-                "address":      charge_data.get('address', 'N/A'),
+                "address":      charge_data.get('address', 'Av. Principal 123'),
                 "address_city": charge_data.get('address_city', 'Lima'),
                 "country_code": charge_data.get('country_code', 'PE'),
                 "first_name":   charge_data.get('first_name', 'Cliente'),
