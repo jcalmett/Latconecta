@@ -46,21 +46,20 @@ async def _attempt_payment_reversal(request, calculation, payment_ref: str) -> D
         return {'success': sim.get('success', False), 'reversal_ref': sim.get('reversal_ref'), 'cancel_id': None, 'message': sim.get('error_message', '')}
     else:
         has_gw = (request.payment_method == 'card' and request.payment_gateway
-                  and request.payment_transaction_id
-                  and getattr(request, 'payment_transaction_uuid', None)
-                  and getattr(request, 'payment_code_auth', None))
+                  and request.payment_transaction_id)
         if not has_gw:
             return {'success': False, 'reversal_ref': None, 'cancel_id': None, 'message': 'No hay datos de gateway para anulación real'}
         logger.info(f"🚀 FASE 2: Anulación real via {request.payment_gateway}")
         try:
             from app.payments.gateway import payment_gateway_service
             cancel_data = {
-                'gateway': request.payment_gateway, 'transaction_id': request.payment_transaction_id,
-                'order_number': request.payment_order_number, 'amount': f"{float(calculation.purchase_total_amount):.2f}",
-                'currency': request.payment_currency or calculation.purchase_currency,
-                'unique_id': request.payment_transaction_uuid, 'authorization_code': request.payment_code_auth,
-                'transaction_datetime': getattr(request, 'payment_transaction_datetime', None),
-                'pay_method': request.payment_method_detail or 'CARD', 'channel': 'ecommerce',
+                'gateway':    request.payment_gateway,
+                'charge_id':  request.payment_transaction_id,
+                'transaction_id': request.payment_transaction_id,
+                'order_number': request.payment_order_number,
+                'amount':     int(float(calculation.purchase_total_amount) * 100),
+                'currency':   request.payment_currency or calculation.purchase_currency,
+                'reason':     'solicitud_comprador',
             }
             result = await payment_gateway_service.cancel_transaction(cancel_data=cancel_data)
             return {'success': result.get('success', False), 'reversal_ref': result.get('cancel_id'),
