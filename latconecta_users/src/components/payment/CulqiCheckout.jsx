@@ -50,27 +50,9 @@ export default function CulqiCheckout({
       const publicKey = config.public_key;
       if (!publicKey) throw new Error("No se obtuvo la llave pública de Culqi");
 
-      // ── PASO 2: Crear Order en backend (habilita Yape y billeteras) ─
+      // ── PASO 2: Calcular monto y verificar SDK ────────────────────
       setStatus("processing");
       const amountCents = Math.round(parseFloat(amount) * 100);
-
-      const orderResp = await paymentService.createOrder({
-        amount:        amountCents,
-        currency_code: currency,
-        order_number:  orderNumber,
-        description:   `Latconecta — ${orderNumber}`,
-        email:         user?.user_email || "cliente@latconecta.com",
-        first_name:    user?.user_first_name || user?.user_name || "Cliente",
-        last_name:     user?.user_last_name || "Latconecta",
-        phone_number:  user?.user_phone || "999999999",
-      });
-
-      if (!orderResp.success || !orderResp.order_id) {
-        throw new Error(orderResp.message || "No se pudo crear la orden de pago");
-      }
-
-      const orderId = orderResp.order_id;
-      console.log("✅ Order creada:", orderId);
 
       // ── PASO 3: Verificar SDK ───────────────────────────────────────
       if (typeof window.CulqiCheckout === "undefined") {
@@ -80,11 +62,11 @@ export default function CulqiCheckout({
       }
 
       // ── PASO 4: Configurar y abrir el Checkout V4 ──────────────────
+      // Sin order — solo Yape + Tarjeta (sincrónicos)
       const culqiSettings = {
         title:    "Latconecta",
         currency: currency,
         amount:   amountCents,
-        order:    orderId,  // habilita Yape + billeteras + PagoEfectivo
       };
 
       // RSA opcional
@@ -93,10 +75,11 @@ export default function CulqiCheckout({
         culqiSettings.rsapublickey = config.rsa_public_key;
       }
 
+      // Yape primero, luego tarjeta — sin billetera ni PagoEfectivo
       const paymentMethods = {
-        tarjeta:    true,
         yape:       true,
-        billetera:  true,
+        tarjeta:    true,
+        billetera:  false,
         bancaMovil: false,
         agente:     false,
         cuotealo:   false,
