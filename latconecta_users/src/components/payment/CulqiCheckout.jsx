@@ -141,9 +141,7 @@ export default function CulqiCheckout({
               email:        user?.user_email || token.email || "cliente@latconecta.com",
               description:  `Latconecta — ${orderNumber}`,
               order_number: orderNumber,
-              first_name:   user?.user_first_name || user?.user_name || "Cliente",
-              last_name:    user?.user_last_name || "Latconecta",
-              phone_number: user?.user_phone || "999999999",
+
             });
 
             console.log("💳 Charge response:", chargeResp);

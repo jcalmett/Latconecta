@@ -55,12 +55,7 @@ async def create_charge(payload: schemas.PaymentChargeRequest):
         "order_number": payload.order_number,
         "installments": payload.installments,
         "capture":      payload.capture,
-        "first_name":   payload.first_name,
-        "last_name":    payload.last_name,
-        "phone_number": payload.phone_number,
-        "address":      payload.address,
-        "address_city": payload.address_city,
-        "country_code": payload.country_code,
+
     }
 
     result = await service.create_charge(charge_data)

@@ -20,13 +20,6 @@ class PaymentChargeRequest(BaseModel):
     order_number: str = ""
     installments: int = 0               # 0 = sin cuotas
     capture: bool = True                # True = cobro inmediato
-    # Datos antifraud (opcionales)
-    first_name: str = "Cliente"
-    last_name: str = "Latconecta"
-    phone_number: str = "999999999"
-    address: str = "N/A"
-    address_city: str = "Lima"
-    country_code: str = "PE"
 
 
 class PaymentChargeResponse(BaseModel):
