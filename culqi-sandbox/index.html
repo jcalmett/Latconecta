@@ -7,6 +7,7 @@
 
   <!-- Culqi Checkout V4 SDK -->
   <script src="https://js.culqi.com/checkout-js"></script>
+  <script src="https://3ds.culqi.com/culqi3ds.js"></script>
 
   <style>
     :root {
@@ -276,8 +277,8 @@
       <h2>Configuración SDK</h2>
 
       <div class="field">
-        <label>Llave Pública (pk_test_...)</label>
-        <input type="text" id="publicKey" value="pk_test_e94078b9b248675d" />
+        <label>Llave Pública (pk_live_...)</label>
+        <input type="text" id="publicKey" value="pk_live_8a9727c2bbc52c97" />
         <div class="hint">Solo se usa en el frontend — seguro exponerla</div>
       </div>
 
@@ -298,7 +299,7 @@
 
       <div class="field">
         <label>Email del cliente</label>
-        <input type="email" id="email" value="test@latconecta.com" />
+        <input type="email" id="email" value="prueba@latconecta.com" />
       </div>
 
       <div class="row">
@@ -492,7 +493,7 @@ function setEmail(email) {
 // Flujo: backend crea Order → frontend abre Checkout con order_id
 // ═══════════════════════════════════════════════════════════
 async function openCulqiCheckout() {
-  log('section', '─── PASO 1: Crear Order en backend ───');
+  log('section', '─── Abrir Culqi Checkout ───');
 
   const publicKey = document.getElementById('publicKey').value.trim();
   const email     = document.getElementById('email').value.trim();
@@ -500,7 +501,6 @@ async function openCulqiCheckout() {
   const currency  = document.getElementById('currency').value;
   const rsaId     = document.getElementById('rsaId').value.trim();
   const rsaPk     = document.getElementById('rsaPublicKey').value.trim();
-  const backendUrl = document.getElementById('backendUrl').value.trim();
 
   if (!publicKey) { log('error', 'Falta la llave pública'); return; }
   if (!email)     { log('error', 'Falta el email'); return; }
@@ -512,78 +512,31 @@ async function openCulqiCheckout() {
     return;
   }
 
-  const amountCents  = Math.round(amount * 100);
-  const orderNumber  = `LC-TEST-${Date.now()}`;
-  const orderUrl     = backendUrl.replace('/payments/charge', '/payments/order');
-
+  const amountCents = Math.round(amount * 100);
   log('info', `Monto: ${currency} ${amount.toFixed(2)} → ${amountCents} céntimos`);
-  log('info', `Order number: ${orderNumber}`);
-  log('info', `POST ${orderUrl}`);
-  setStatus('loading', 'Creando Order en Culqi...');
+  log('info', `Métodos: Yape (primero) + Tarjeta`);
+  setStatus('loading', 'Abriendo Culqi Checkout...');
 
-  // ── PASO 1: Crear Order en backend ──────────────────────
-  let orderId = null;
-  try {
-    const orderResp = await fetch(orderUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount:        amountCents,
-        currency_code: currency,
-        order_number:  orderNumber,
-        description:   document.getElementById('description').value.trim(),
-        email:         email,
-        first_name:    'Test',
-        last_name:     'Latconecta',
-        phone_number:  '999999999',
-      }),
-    });
-
-    const orderData = await orderResp.json();
-
-    if (orderResp.ok && orderData.success) {
-      orderId = orderData.order_id;
-      log('success', `Order creada: ${orderId}`);
-      log('data', `state: ${orderData.raw_response?.state}`);
-      log('data', `qr: ${orderData.raw_response?.qr || '—'}`);
-      currentOrderNumber = orderNumber;
-    } else {
-      log('error', `Error creando Order: ${orderData.message || JSON.stringify(orderData)}`);
-      setStatus('error', 'Error creando Order');
-      return;
-    }
-  } catch (err) {
-    log('error', `No se pudo conectar al backend: ${err.message}`);
-    setStatus('error', 'Backend no disponible');
-    return;
-  }
-
-  // ── PASO 2: Abrir Checkout con order_id ────────────────
-  log('section', '─── PASO 2: Abrir Culqi Checkout ───');
-  log('success', 'SDK Culqi disponible ✓');
-
-  if (rsaId) {
-    log('info', `RSA encriptación: activada (id=${rsaId.slice(0,8)}...)`);
-  } else {
-    log('warning', 'RSA encriptación: desactivada (sin rsa_id)');
-  }
-
+  // Sin Order — solo Yape + Tarjeta (sincrónicos, sin PagoEfectivo ni billeteras)
   const culqiSettings = {
     title:    'Latconecta — Prueba',
     currency: currency,
     amount:   amountCents,
-    order:    orderId,   // ord_live_XXX — habilita Yape y billeteras
   };
 
   if (rsaId) {
     culqiSettings.xculqirsaid  = rsaId;
     culqiSettings.rsapublickey = rsaPk;
+    log('info', `RSA encriptación: activada (id=${rsaId.slice(0,8)}...)`);
+  } else {
+    log('warning', 'RSA encriptación: desactivada (sin rsa_id)');
   }
 
+  // Yape primero, luego tarjeta — sin billetera ni PagoEfectivo
   const paymentMethods = {
-    tarjeta:    true,
     yape:       true,
-    billetera:  true,
+    tarjeta:    true,
+    billetera:  false,
     bancaMovil: false,
     agente:     false,
     cuotealo:   false,
@@ -618,16 +571,14 @@ async function openCulqiCheckout() {
 
   const config = { settings: culqiSettings, client: clientConfig, options, appearance };
 
-  log('info', `Inicializando CulqiCheckout — tarjeta + Yape + billeteras`);
+  log('info', 'Inicializando CulqiCheckout — Yape + Tarjeta');
 
   try {
     culqiInstance = new CulqiCheckout(publicKey, config);
     culqiInstance.culqi = handleCulqiAction;
-
     log('info', 'Abriendo formulario Culqi...');
     setStatus('loading', 'Esperando respuesta del usuario en Culqi...');
     culqiInstance.open();
-
   } catch (err) {
     log('error', `Error inicializando Culqi: ${err.message}`);
     setStatus('error', `Error SDK: ${err.message}`);
@@ -661,8 +612,8 @@ async function handleCulqiAction() {
 
     setStatus('loading', 'Token OK — creando cargo en backend...');
 
-    // Ir al paso 3: crear cargo en backend
-    await createChargeInBackend(token.id);
+    // Ir al paso 3: crear cargo en backend usando el email del token
+    await createChargeInBackend(token.id, token.email);
 
   } else if (culqiInstance.order) {
     // ── Orden creada (Yape/billeteras) ─────────────────────
@@ -691,18 +642,20 @@ async function handleCulqiAction() {
 // ═══════════════════════════════════════════════════════════
 // PASO 3: CREAR CARGO EN BACKEND
 // ═══════════════════════════════════════════════════════════
-async function createChargeInBackend(tokenId) {
+async function createChargeInBackend(tokenId, tokenEmail) {
   log('section', '─── PASO 3: Crear cargo en backend ───');
 
   const backendUrl  = document.getElementById('backendUrl').value.trim();
   const amount      = parseFloat(document.getElementById('amount').value);
   const currency    = document.getElementById('currency').value;
-  const email       = document.getElementById('email').value.trim();
   const description = document.getElementById('description').value.trim();
   const amountCents = Math.round(amount * 100);
 
+  // Usar el email del token (el que el usuario ingresó en el checkout de Culqi)
+  const email = tokenEmail || document.getElementById('email').value.trim();
+
   log('info', `POST ${backendUrl}`);
-  log('data', `token_id=${tokenId}, amount=${amountCents}, currency=${currency}`);
+  log('data', `token_id=${tokenId}, amount=${amountCents}, currency=${currency}, email=${email}`);
 
   const body = {
     token_id:     tokenId,
