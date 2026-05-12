@@ -2,10 +2,11 @@
 Router de Autenticación
 Endpoints para login, registro y obtención de usuario actual
 ✅ CONVERTIDO A ASYNC (AsyncSession)
+✅ AGREGADO: Rate limiting en login (5 intentos por minuto)
 """
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession  # ✅ CAMBIO 1
-from sqlalchemy import select  # ✅ CAMBIO 2
+from fastapi import APIRouter, Depends, HTTPException, status, Request  # ✅ Agregado Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from datetime import datetime, timedelta
 from app.database import get_db
 from app.models import User
@@ -21,13 +22,18 @@ from app.utils.auth import verify_password, get_password_hash, create_access_tok
 from app.utils.dependencies import get_current_active_user
 from pydantic import BaseModel, EmailStr
 
+# ✅ NUEVO: Rate limiting
+from app.rate_limit import limiter, RATE_LIMITS
+
 router = APIRouter()
 
 
 @router.post("/login", response_model=Token, summary="Login de usuario")
+@limiter.limit(RATE_LIMITS["login"])  # ✅ NUEVO: 5 intentos por minuto
 async def login(
+    request: Request,  # ✅ NUEVO: Parámetro request para rate limiting
     credentials: LoginRequest,
-    db: AsyncSession = Depends(get_db)  # ✅ CAMBIO 3: AsyncSession
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Inicia sesión con email y contraseña
@@ -37,8 +43,10 @@ async def login(
     **Credenciales de prueba:**
     - Admin: admin@bitel.com.pe / admin123
     - User: juan@email.com / admin123
+    
+    **Rate limiting:** 5 intentos por minuto (protección contra fuerza bruta)
     """
-    # ✅ CAMBIO 4: Buscar usuario por email con select() + await
+    # Buscar usuario por email
     result = await db.execute(
         select(User).where(User.user_email == credentials.email)
     )
@@ -68,7 +76,7 @@ async def login(
 
     # Actualizar último login
     user.user_last_login_date = datetime.utcnow()
-    await db.commit()  # ✅ CAMBIO 5: await
+    await db.commit()
 
     # Crear token JWT
     access_token = create_access_token(
@@ -95,7 +103,7 @@ async def login(
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED, summary="Registrar nuevo usuario")
 async def register(
     user_data: UserRegister,
-    db: AsyncSession = Depends(get_db)  # ✅ CAMBIO 6: AsyncSession
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Registra un nuevo usuario en el sistema
@@ -103,7 +111,7 @@ async def register(
     El usuario se crea con rol 'user' y estado 'active' por defecto
     Retorna un token JWT para login automático después del registro
     """
-    # ✅ CAMBIO 7: Verificar si el email ya existe con select() + await
+    # Verificar si el email ya existe
     result = await db.execute(
         select(User).where(User.user_email == user_data.user_email)
     )
@@ -128,9 +136,9 @@ async def register(
         created_by="self-registration"
     )
 
-    db.add(db_user)  # ✅ NO necesita await
-    await db.commit()  # ✅ CAMBIO 8: await
-    await db.refresh(db_user)  # ✅ CAMBIO 9: await
+    db.add(db_user)
+    await db.commit()
+    await db.refresh(db_user)
 
     # Crear token JWT para login automático
     access_token = create_access_token(
@@ -170,7 +178,7 @@ async def get_me(
 async def change_password(
     password_data: PasswordChange,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)  # ✅ CAMBIO 10: AsyncSession
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Cambia la contraseña del usuario autenticado
@@ -215,7 +223,7 @@ async def change_password(
     current_user.updated_by = current_user.user_email
     current_user.last_update_date = datetime.utcnow()
 
-    await db.commit()  # ✅ CAMBIO 11: await
+    await db.commit()
 
     return {
         "success": True,
@@ -238,8 +246,10 @@ class ResetPasswordRequest(BaseModel):
 
 
 @router.post("/forgot-password", summary="Solicitar código de recuperación de contraseña")
+@limiter.limit(RATE_LIMITS["forgot_password"])  # ✅ NUEVO: 3 intentos por minuto
 async def forgot_password(
-    request: ForgotPasswordRequest,
+    request: Request,  # ✅ NUEVO: Parámetro request para rate limiting
+    forgot_request: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -248,13 +258,15 @@ async def forgot_password(
     Por seguridad, siempre responde con el mismo mensaje
     independientemente de si el email existe o no en el sistema.
     El código es válido por 15 minutos.
+    
+    **Rate limiting:** 3 intentos por minuto
     """
     # Importar aquí para evitar import circular al inicio del módulo
     from app.services.email_service import generate_reset_code, send_reset_code
 
     # Buscar usuario — respuesta genérica siempre (no revelar si email existe)
     result = await db.execute(
-        select(User).where(User.user_email == request.email)
+        select(User).where(User.user_email == forgot_request.email)
     )
     user = result.scalar_one_or_none()
 
@@ -290,8 +302,10 @@ async def forgot_password(
 
 
 @router.post("/reset-password", summary="Restablecer contraseña con código")
+@limiter.limit(RATE_LIMITS["reset_password"])  # ✅ NUEVO: 5 intentos por minuto
 async def reset_password(
-    request: ResetPasswordRequest,
+    request: Request,  # ✅ NUEVO: Parámetro request para rate limiting
+    reset_request: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -299,12 +313,14 @@ async def reset_password(
 
     El código debe ser válido (no expirado) y coincidir con el
     almacenado para el email indicado.
+    
+    **Rate limiting:** 5 intentos por minuto
     """
     INVALID_MSG = "El código ingresado no es válido o ha expirado."
 
     # Buscar usuario
     result = await db.execute(
-        select(User).where(User.user_email == request.email)
+        select(User).where(User.user_email == reset_request.email)
     )
     user = result.scalar_one_or_none()
 
@@ -333,26 +349,26 @@ async def reset_password(
         )
 
     # Verificar que el código coincide (comparación bcrypt)
-    if not verify_password(request.code, user.user_session_token):
+    if not verify_password(reset_request.code, user.user_session_token):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=INVALID_MSG
         )
 
     # Validar nueva contraseña: mínimo 8 caracteres y primera letra mayúscula
-    if len(request.new_password) < 8:
+    if len(reset_request.new_password) < 8:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La nueva contraseña debe tener al menos 8 caracteres."
         )
-    if not request.new_password[0].isupper():
+    if not reset_request.new_password[0].isupper():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La nueva contraseña debe comenzar con una letra mayúscula."
         )
 
     # Actualizar contraseña e invalidar token
-    user.user_password = get_password_hash(request.new_password)
+    user.user_password = get_password_hash(reset_request.new_password)
     user.user_session_token = None
     user.user_session_expiry = None
     user.updated_by = "password-reset"

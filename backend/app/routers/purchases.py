@@ -7,6 +7,11 @@ Ya no hay lógica dispersa de mock_api_service.
 
 FLUJO: ops_config.is_fase1('operacion') → Simular
        ops_config.is_fase2('operacion') → Real (gateway, api_mapping, función)
+
+MEJORAS DE SEGURIDAD (Mayo 2026):
+- GET /{purchase_id}: verifica que el usuario sea el dueño de la compra
+- GET /: restringe filtro user_id según rol del usuario
+- POST /create: valida que user_id del request coincida con el token
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,11 +31,13 @@ from app.models.product import Product
 from app.models.vendor_product import VendorProduct
 from app.models.vendor import Vendor
 from app.models.company import Company
+from app.models.user import User
 from app.services.purchase_calculator_service import purchase_calculator_service
 from app.services.exchange_rate_service import exchange_rate_service
 from app.services.operations_config_service import ops_config
 from app.services.universal_vendor_service import UniversalVendorService
 from app.barcode import barcode_service
+from app.dependencies import get_current_user_optional, verify_ownership
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -240,9 +247,29 @@ class PurchaseResponse(BaseModel):
 
 
 @router.post("/create", response_model=PurchaseResponse, status_code=status.HTTP_201_CREATED)
-async def create_purchase(request: PurchaseCreateRequest, db: AsyncSession = Depends(get_db)):
+async def create_purchase(
+    request: PurchaseCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)  # ✅ AGREGADO
+):
     try:
         logger.info(f"Creating purchase for product_id={request.product_id}")
+
+        # ✅ VALIDACIÓN DE SEGURIDAD: Verificar que user_id coincida con el token
+        if request.user_id:
+            # Si el request tiene user_id, debe haber un usuario autenticado
+            if not current_user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Debe iniciar sesión para crear una compra asociada a su cuenta"
+                )
+            # Y ese user_id debe ser el mismo que el del token
+            if request.user_id != current_user.user_id:
+                logger.warning(f"Intento de suplantación: request.user_id={request.user_id}, token.user_id={current_user.user_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No puede crear compras en nombre de otro usuario"
+                )
 
         # PASO 1: CARGAR DATOS
         product_query = await db.execute(
@@ -674,19 +701,79 @@ async def check_balance(product_id: int, product_type: Optional[str] = None,
         raise HTTPException(status_code=500, detail=f"Error verificando disponibilidad: {str(e)}")
 
 
+# ✅ ENDPOINT MEJORADO: GET /{purchase_id} con verificación de ownership
 @router.get("/{purchase_id}", response_model=PurchaseResponse)
-async def get_purchase(purchase_id: int, db: AsyncSession = Depends(get_db)):
+async def get_purchase(
+    purchase_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Obtiene una compra por su ID.
+    
+    - Usuario autenticado: solo puede ver sus propias compras
+    - Admin/Superadmin: puede ver cualquier compra
+    - Usuario anónimo: NO puede ver compras
+    """
     result = await db.execute(select(Purchase).where(Purchase.purchase_id == purchase_id))
     purchase = result.scalar_one_or_none()
-    if not purchase: raise HTTPException(status_code=404, detail=f"Purchase {purchase_id} not found")
+    
+    if not purchase:
+        raise HTTPException(status_code=404, detail=f"Purchase {purchase_id} not found")
+    
+    # ✅ Verificar ownership
+    if current_user:
+        await verify_ownership(purchase.purchase_user_id, current_user, "compra")
+    else:
+        # Usuario no autenticado: no puede ver compras
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Debe iniciar sesión para ver el detalle de una compra"
+        )
+    
     return _map_purchase_to_response(purchase)
 
 
+# ✅ ENDPOINT MEJORADO: GET / con restricción de filtro user_id
 @router.get("/", response_model=list[PurchaseResponse])
-async def list_purchases(skip: int = 0, limit: int = 100, user_id: Optional[int] = None, purchase_status: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+async def list_purchases(
+    skip: int = 0,
+    limit: int = 100,
+    user_id: Optional[int] = None,
+    purchase_status: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Lista compras con filtros.
+    
+    - Admin/Superadmin: puede listar todas las compras y filtrar por cualquier user_id
+    - Usuario autenticado NO admin: solo puede listar sus propias compras (ignora user_id si lo envía)
+    - Usuario anónimo: no puede listar compras
+    """
+    # ✅ Usuario no autenticado no puede listar compras
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Debe iniciar sesión para ver el historial de compras"
+        )
+    
     query = select(Purchase)
-    if user_id: query = query.where(Purchase.purchase_user_id == user_id)
-    if purchase_status: query = query.where(Purchase.purchase_status == purchase_status)
+    
+    # ✅ Admin puede ver todo y filtrar por cualquier user_id
+    if current_user.user_role in ["admin", "superadmin"]:
+        if user_id:
+            query = query.where(Purchase.purchase_user_id == user_id)
+    else:
+        # ✅ Usuario normal solo puede ver sus propias compras
+        query = query.where(Purchase.purchase_user_id == current_user.user_id)
+        # Si intentó filtrar por otro user_id, lo logueamos como intento sospechoso
+        if user_id and user_id != current_user.user_id:
+            logger.warning(f"Intento de acceso no autorizado: Usuario {current_user.user_id} intentó filtrar compras de usuario {user_id}")
+    
+    if purchase_status:
+        query = query.where(Purchase.purchase_status == purchase_status)
+    
     query = query.offset(skip).limit(limit).order_by(Purchase.purchase_date.desc())
     result = await db.execute(query)
     return [_map_purchase_to_response(p) for p in result.scalars().all()]

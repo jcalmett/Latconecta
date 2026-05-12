@@ -2,15 +2,23 @@
 Router de Users
 Endpoints para gestionar usuarios del sistema
 ✅ CONVERTIDO A ASYNC (AsyncSession)
+✅ AGREGADO: verify_ownership para prevenir IDOR
+✅ CORREGIDO: Uso de dependencies estándar
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession  # ✅ CAMBIO 1
-from sqlalchemy import select  # ✅ CAMBIO 2
-from typing import List
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from typing import List, Optional
+
 from app.database import get_db
 from app.models import User
 from app.schemas import UserPublic, UserCreate, UserUpdate
-from app.utils.dependencies import get_current_admin, get_current_active_user
+from app.dependencies import (
+    get_current_admin_user,
+    get_current_user_required,
+    verify_ownership
+)
 from app.utils.auth import get_password_hash
 
 router = APIRouter()
@@ -20,35 +28,26 @@ router = APIRouter()
 async def list_users(
     skip: int = 0,
     limit: int = 100,
-    role_filter: str = None,
-    status_filter: str = None,
-    db: AsyncSession = Depends(get_db),  # ✅ CAMBIO 3: AsyncSession
-    current_user: User = Depends(get_current_admin)
+    role_filter: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)  # ✅ Solo admin/superadmin
 ):
     """
     Lista todos los usuarios del sistema
 
     **Requiere autenticación:** Admin o Superadmin
-
-    Parámetros:
-    - skip: Número de registros a saltar (paginación)
-    - limit: Número máximo de registros a retornar
-    - role_filter: Filtrar por rol ('user', 'admin', 'superadmin')
-    - status_filter: Filtrar por estado ('active', 'blocked', 'pending')
     """
-    # ✅ CAMBIO 4: Usar select() en lugar de query()
     query = select(User)
 
-    # Aplicar filtros
     if role_filter:
         query = query.where(User.user_role == role_filter)
-
     if status_filter:
         query = query.where(User.user_status == status_filter)
 
     query = query.offset(skip).limit(limit)
     
-    result = await db.execute(query)  # ✅ CAMBIO 5: await
+    result = await db.execute(query)
     users = result.scalars().all()
     
     return users
@@ -57,8 +56,8 @@ async def list_users(
 @router.get("/{user_id}", response_model=UserPublic, summary="Obtener un usuario por ID")
 async def get_user(
     user_id: int,
-    db: AsyncSession = Depends(get_db),  # ✅ CAMBIO 6: AsyncSession
-    current_user: User = Depends(get_current_active_user)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_required)  # ✅ Requiere autenticación
 ):
     """
     Obtiene los detalles de un usuario específico
@@ -67,10 +66,8 @@ async def get_user(
     - Admin/Superadmin: Puede ver cualquier usuario
     - User regular: Solo puede ver su propio perfil
     """
-    # ✅ CAMBIO 7: Usar select() + await
-    result = await db.execute(
-        select(User).where(User.user_id == user_id)
-    )
+    # ✅ Verificar que el usuario existe
+    result = await db.execute(select(User).where(User.user_id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -79,13 +76,8 @@ async def get_user(
             detail=f"Usuario con ID {user_id} no encontrado"
         )
 
-    # Verificar permisos: admin puede ver cualquiera, user solo su perfil
-    if current_user.user_role not in ["admin", "superadmin"]:
-        if current_user.user_id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para ver este usuario"
-            )
+    # ✅ Usar verify_ownership (más limpio que la lógica manual)
+    await verify_ownership(user_id, current_user, "perfil de usuario")
 
     return user
 
@@ -93,17 +85,15 @@ async def get_user(
 @router.post("/", response_model=UserPublic, status_code=status.HTTP_201_CREATED, summary="Crear nuevo usuario")
 async def create_user(
     user_data: UserCreate,
-    db: AsyncSession = Depends(get_db),  # ✅ CAMBIO 8: AsyncSession
-    current_user: User = Depends(get_current_admin)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)  # ✅ Solo admin/superadmin
 ):
     """
     Crea un nuevo usuario en el sistema
 
     **Requiere autenticación:** Admin o Superadmin
-
-    Los usuarios regulares deben usar el endpoint /api/v1/auth/register
     """
-    # ✅ CAMBIO 9: Verificar si el email ya existe con select() + await
+    # Verificar si el email ya existe
     result = await db.execute(
         select(User).where(User.user_email == user_data.user_email)
     )
@@ -128,9 +118,9 @@ async def create_user(
         created_by=current_user.user_email
     )
 
-    db.add(db_user)  # ✅ NO necesita await
-    await db.commit()  # ✅ CAMBIO 10: await
-    await db.refresh(db_user)  # ✅ CAMBIO 11: await
+    db.add(db_user)
+    await db.commit()
+    await db.refresh(db_user)
 
     return db_user
 
@@ -139,8 +129,8 @@ async def create_user(
 async def update_user(
     user_id: int,
     user_data: UserUpdate,
-    db: AsyncSession = Depends(get_db),  # ✅ CAMBIO 12: AsyncSession
-    current_user: User = Depends(get_current_active_user)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)  # ✅ Requiere autenticación
 ):
     """
     Actualiza un usuario existente
@@ -148,15 +138,9 @@ async def update_user(
     **Requiere autenticación:**
     - Admin/Superadmin: Puede actualizar cualquier usuario
     - User regular: Solo puede actualizar su propio perfil (excepto rol y status)
-
-    Permite actualizar:
-    - Información personal (nombre, foto, teléfono)
-    - Rol y estado (solo admin)
     """
-    # ✅ CAMBIO 13: Usar select() + await
-    result = await db.execute(
-        select(User).where(User.user_id == user_id)
-    )
+    # ✅ Verificar que el usuario existe
+    result = await db.execute(select(User).where(User.user_id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -165,7 +149,7 @@ async def update_user(
             detail=f"Usuario con ID {user_id} no encontrado"
         )
 
-    # Verificar permisos
+    # ✅ Verificar ownership
     is_admin = current_user.user_role in ["admin", "superadmin"]
     is_self = current_user.user_id == user_id
 
@@ -190,6 +174,12 @@ async def update_user(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para cambiar el estado"
             )
+        # Tampoco puede cambiar el email (por seguridad)
+        if "user_email" in update_data and update_data["user_email"] != current_user.user_email:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No puedes cambiar tu email de usuario"
+            )
 
     # Si viene user_password, hashearlo
     if "user_password" in update_data:
@@ -202,8 +192,8 @@ async def update_user(
     for field, value in update_data.items():
         setattr(user, field, value)
 
-    await db.commit()  # ✅ CAMBIO 14: await
-    await db.refresh(user)  # ✅ CAMBIO 15: await
+    await db.commit()
+    await db.refresh(user)
 
     return user
 
@@ -211,21 +201,16 @@ async def update_user(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar usuario")
 async def delete_user(
     user_id: int,
-    db: AsyncSession = Depends(get_db),  # ✅ CAMBIO 16: AsyncSession
-    current_user: User = Depends(get_current_admin)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)  # ✅ Solo admin/superadmin
 ):
     """
     Elimina un usuario
 
     **Requiere autenticación:** Admin o Superadmin
-
-    ⚠️ **CUIDADO:** Esto eliminará el usuario permanentemente.
-    Las compras asociadas a este usuario mantendrán su información histórica.
     """
-    # ✅ CAMBIO 17: Usar select() + await
-    result = await db.execute(
-        select(User).where(User.user_id == user_id)
-    )
+    # ✅ Verificar que el usuario existe
+    result = await db.execute(select(User).where(User.user_id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -241,7 +226,7 @@ async def delete_user(
             detail="No puedes eliminar tu propio usuario"
         )
 
-    await db.delete(user)  # ✅ CAMBIO 18: await
-    await db.commit()  # ✅ CAMBIO 19: await
+    await db.delete(user)
+    await db.commit()
 
     return None

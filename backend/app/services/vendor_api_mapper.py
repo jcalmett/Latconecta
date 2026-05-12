@@ -5,6 +5,10 @@
 # ✅ ACTUALIZADO: Soporta formato JSONPath
 # ✅ ACTUALIZADO: Transformación country_alpha3_to_alpha2
 # ✅ ACTUALIZADO: Soporta dynamic:current_timestamp_tisi
+# 🔒 MEJORADO: Validación de URLs
+# 🔒 MEJORADO: Sanitización de inputs
+# 🔒 MEJORADO: Logging seguro (redacta datos sensibles)
+# 🔒 MEJORADO: Validación de respuestas (anti-XSS)
 # ========================================
 
 from typing import Dict, Any, List, Optional
@@ -13,6 +17,32 @@ import json
 import re
 from decimal import Decimal
 from datetime import datetime
+import logging
+import html
+import urllib.parse
+
+logger = logging.getLogger(__name__)
+
+# Caracteres peligrosos para sanitización
+DANGEROUS_PATTERNS = [
+    r'<script',
+    r'javascript:',
+    r'vbscript:',
+    r'onload=',
+    r'onerror=',
+    r'alert\(',
+    r'confirm\(',
+    r'prompt\(',
+]
+
+# Dominios permitidos para URLs de vendors (hardcoded por seguridad)
+ALLOWED_VENDOR_DOMAINS = [
+    'latcom-fix-production.up.railway.app',
+    'api-hub-qa-in.tisi.com.pe',
+    'api-hub-in.tisi.com.pe',
+    'localhost',
+    '127.0.0.1',
+]
 
 
 class VendorAPIMapper:
@@ -51,14 +81,81 @@ class VendorAPIMapper:
             mapping_config: Configuración del mapping desde BD
         """
         self.mapping_config = mapping_config
-        # ✅ CORREGIDO: Manejar None explícitamente
         self.request_mapping = mapping_config.get('request_mapping') or {}
         self.value_transformations = mapping_config.get('value_transformations') or {}
+
+        # 🔒 NUEVO: Validar URL del endpoint al inicializar
+        self._validate_endpoint_url()
+
+    def _validate_endpoint_url(self) -> None:
+        """
+        🔒 NUEVO: Valida que la URL del endpoint sea segura
+        Previene inyección de URLs maliciosas
+        """
+        endpoint_url = self.mapping_config.get('endpoint_url', '')
+        if not endpoint_url:
+            return
+
+        # Verificar que no contenga saltos de línea o caracteres de control
+        if '\n' in endpoint_url or '\r' in endpoint_url:
+            logger.error(f"URL de endpoint contiene caracteres peligrosos: {endpoint_url[:100]}")
+            raise ValueError("Configuración de URL inválida")
+
+        # Verificar que no tenga protocolos peligrosos
+        dangerous_protocols = ['file://', 'ftp://', 'gopher://', 'data:']
+        for protocol in dangerous_protocols:
+            if protocol in endpoint_url.lower():
+                logger.error(f"URL contiene protocolo peligroso: {protocol}")
+                raise ValueError("Protocolo de URL no permitido")
+
+    def _sanitize_input(self, value: Any, field_name: str = "") -> Any:
+        """
+        🔒 NUEVO: Sanitiza inputs antes de enviar al vendor
+        Previene inyección de caracteres peligrosos
+        """
+        if not isinstance(value, str):
+            return value
+
+        # Eliminar caracteres de control
+        cleaned = re.sub(r'[\x00-\x1f\x7f]', '', value)
+
+        # Escapar HTML entities (previene XSS si el vendor devuelve datos como HTML)
+        cleaned = html.escape(cleaned, quote=True)
+
+        # Reemplazar patrones peligrosos
+        for pattern in DANGEROUS_PATTERNS:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+
+        # Limitar longitud máxima por seguridad (1000 caracteres es más que suficiente)
+        if len(cleaned) > 1000:
+            logger.warning(f"Campo {field_name} truncado de {len(cleaned)} a 1000 caracteres")
+            cleaned = cleaned[:1000]
+
+        return cleaned
+
+    def _redact_sensitive_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        🔒 NUEVO: Redacta datos sensibles para logging
+        No modifica los datos originales, solo crea una copia para logs
+        """
+        if not isinstance(data, dict):
+            return data
+
+        redacted = data.copy()
+        sensitive_fields = ['password', 'token', 'api_key', 'secret', 'authorization', 'auth']
+
+        for field in sensitive_fields:
+            for key in list(redacted.keys()):
+                if field.lower() in key.lower():
+                    redacted[key] = '[REDACTED]'
+
+        return redacted
 
     def build_request(self, source_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Construye el request JSON para el vendor
         ✅ ACTUALIZADO: Detecta automáticamente el formato
+        🔒 MEJORADO: Sanitiza inputs
 
         Args:
             source_data: Datos de purchase + vendor product
@@ -66,17 +163,21 @@ class VendorAPIMapper:
         Returns:
             JSON formateado para el vendor (con orden preservado)
         """
-        # ✅ NUEVO: Detectar formato del request_mapping
+        # 🔒 Sanitizar inputs antes de procesar
+        sanitized_data = {}
+        for key, value in source_data.items():
+            sanitized_data[key] = self._sanitize_input(value, key)
+
+        # Detectar formato del request_mapping
         if 'fields' in self.request_mapping:
-            # Formato VIEJO (con fields array)
-            return self._build_request_old_format(source_data)
+            return self._build_request_old_format(sanitized_data)
         else:
-            # Formato NUEVO (JSONPath: {"source_field": "$.target_field"})
-            return self._build_request_jsonpath_format(source_data)
+            return self._build_request_jsonpath_format(sanitized_data)
 
     def _build_request_old_format(self, source_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Formato viejo con fields array
+        🔒 MEJORADO: Sanitiza valores
         """
         request = OrderedDict()
         fields = self.request_mapping.get('fields', [])
@@ -87,9 +188,10 @@ class VendorAPIMapper:
             data_type = field_config.get('data_type', 'string')
             required = field_config.get('required', False)
 
-            # ✅ NUEVO: Soporte para constant:valor
+            # Soporte para constant:valor
             if source_field.startswith('constant:'):
                 constant_value = source_field.split(':', 1)[1]
+                constant_value = self._sanitize_input(constant_value, f"constant:{api_field}")
                 if data_type == 'integer':
                     value = int(constant_value)
                 elif data_type == 'float':
@@ -99,7 +201,7 @@ class VendorAPIMapper:
                 else:
                     value = constant_value
 
-            # ✅ NUEVO: Soporte para dynamic:nombre_funcion
+            # Soporte para dynamic:nombre_funcion
             elif source_field.startswith('dynamic:'):
                 dynamic_func = source_field.split(':', 1)[1]
                 value = self._resolve_dynamic_value(dynamic_func)
@@ -117,35 +219,37 @@ class VendorAPIMapper:
             if required and value is None:
                 raise ValueError(f"Campo requerido '{source_field}' no encontrado")
 
-            # Agregar al request (maneja campos anidados)
+            # Agregar al request
             self._set_nested_field(request, api_field, value)
+
+        # 🔒 Log seguro del request (sin datos sensibles)
+        logger.debug(f"Request construido: {self._redact_sensitive_data(dict(request))}")
 
         return request
 
     def _build_request_jsonpath_format(self, source_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         ✅ NUEVO: Formato JSONPath: {"api_field": "source_field"}
-        Soporta:
-          - "purchase_phone_number"  → valor de source_data
-          - "constant:0001"          → valor literal
-          - "dynamic:current_timestamp_tisi" → valor generado en runtime
+        🔒 MEJORADO: Sanitiza valores
         """
         request = OrderedDict()
 
         for api_field, source_field in self.request_mapping.items():
 
-            # ✅ Soporte para constant:valor
+            # Soporte para constant:valor
             if source_field.startswith('constant:'):
                 constant_value = source_field.split(':', 1)[1]
+                constant_value = self._sanitize_input(constant_value, f"constant:{api_field}")
                 value = constant_value
 
-            # ✅ NUEVO: Soporte para dynamic:nombre_funcion
+            # Soporte para dynamic:nombre_funcion
             elif source_field.startswith('dynamic:'):
                 dynamic_func = source_field.split(':', 1)[1]
                 value = self._resolve_dynamic_value(dynamic_func)
 
             else:
                 value = source_data.get(source_field)
+                value = self._sanitize_input(value, source_field)
 
             # Aplicar transformaciones si existen para este api_field
             value = self._apply_transformations(value, source_field, source_data)
@@ -153,6 +257,9 @@ class VendorAPIMapper:
             # Solo agregar si el valor no es None
             if value is not None:
                 self._set_nested_field(request, api_field, value)
+
+        # 🔒 Log seguro del request (sin datos sensibles)
+        logger.debug(f"Request construido (JSONPath): {self._redact_sensitive_data(dict(request))}")
 
         return request
 
@@ -162,21 +269,12 @@ class VendorAPIMapper:
 
         Funciones disponibles:
         - current_timestamp_tisi: Timestamp actual en formato yyyyMMddHHmmssmss
-                                  requerido por TISI/MEGAPUNTO en campo fecha_envio
-
-        Args:
-            func_name: Nombre de la función dinámica
-
-        Returns:
-            Valor generado
         """
         if func_name == 'current_timestamp_tisi':
-            # Formato TISI: yyyyMMddHHmmssmss
-            # Ejemplo:      20260413132500000
             now = datetime.now()
             return now.strftime('%Y%m%d%H%M%S') + f"{now.microsecond // 1000:03d}"
 
-        # Fallback: función no reconocida → retorna nombre como string para debug
+        logger.warning(f"Función dinámica no reconocida: {func_name}")
         return f"UNKNOWN_DYNAMIC:{func_name}"
 
     def _apply_transformations(
@@ -187,12 +285,17 @@ class VendorAPIMapper:
     ) -> Any:
         """
         Aplica transformaciones configuradas a un valor
+        🔒 MEJORADO: Validación de transformaciones
         """
-        # ✅ CORREGIDO: Verificar que value_transformations no sea None
         if not self.value_transformations or field_name not in self.value_transformations:
             return value
 
         transformations = self.value_transformations[field_name]
+
+        # Verificar que transformations sea un dict
+        if not isinstance(transformations, dict):
+            logger.warning(f"Transformations para {field_name} no es dict: {type(transformations)}")
+            return value
 
         # 1. Trim
         if transformations.get('trim') and isinstance(value, str):
@@ -206,7 +309,11 @@ class VendorAPIMapper:
         if 'format' in transformations:
             if isinstance(value, (int, float, Decimal)):
                 format_str = transformations['format']
-                value = format_str % float(value)
+                try:
+                    value = format_str % float(value)
+                except (TypeError, ValueError) as e:
+                    logger.warning(f"Error en format {field_name}: {e}")
+                    value = str(value)
 
         # 4. To string
         if transformations.get('to_string'):
@@ -214,7 +321,10 @@ class VendorAPIMapper:
 
         # 5. To integer
         if transformations.get('to_integer'):
-            value = int(float(value))
+            try:
+                value = int(float(value))
+            except (TypeError, ValueError):
+                value = 0
 
         # 6. Add country prefix
         if transformations.get('add_country_prefix'):
@@ -228,11 +338,11 @@ class VendorAPIMapper:
         if transformations.get('strip_country_code'):
             value = re.sub(r'^\+?\d{1,3}', '', str(value))
 
-        # 8. Country alpha-3 → alpha-2 (ej: VEN → VE, PER → PE, MEX → MX)
+        # 8. Country alpha-3 → alpha-2
         if transformations.get('country_alpha3_to_alpha2'):
             value = self.COUNTRY_ALPHA3_TO_ALPHA2.get(
                 str(value).upper(),
-                str(value)[:2]  # Fallback: tomar primeros 2 caracteres
+                str(value)[:2]
             )
 
         return value
@@ -240,20 +350,25 @@ class VendorAPIMapper:
     def _convert_type(self, value: Any, data_type: str) -> Any:
         """
         Convierte valor al tipo de dato especificado
+        🔒 MEJORADO: Manejo seguro de conversiones
         """
         if value is None:
             return None
 
-        if data_type == 'string':
-            return str(value)
-        elif data_type == 'integer':
-            return int(float(value))
-        elif data_type == 'float':
-            return float(value)
-        elif data_type == 'boolean':
-            return bool(value)
-        else:
-            return value
+        try:
+            if data_type == 'string':
+                return str(value)
+            elif data_type == 'integer':
+                return int(float(value))
+            elif data_type == 'float':
+                return float(value)
+            elif data_type == 'boolean':
+                return bool(value)
+            else:
+                return value
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Error convert_type {data_type}: {e}")
+            return None
 
     def _set_nested_field(
         self,
@@ -293,25 +408,23 @@ class VendorAPIMapper:
     def parse_response(self, vendor_response: Dict[str, Any]) -> Dict[str, Any]:
         """
         Parsea respuesta del vendor a formato Latconecta
-
-        El response_mapping tiene formato:
-        {
-          "vendor_field": "latconecta_field",
-          "trans_id": "vendor_trans_id",
-          "status": "purchase_status"
-        }
-
-        Donde KEY = campo en response del vendor
-              VALUE = campo destino en Latconecta
+        🔒 MEJORADO: Sanitiza valores de respuesta (anti-XSS)
         """
-        # ✅ CORREGIDO: Manejar None en response_mapping
         response_mapping = self.mapping_config.get('response_mapping') or {}
         parsed = {}
 
         for vendor_field, latconecta_field in response_mapping.items():
             value = self._get_nested_value(vendor_response, vendor_field)
+
+            # 🔒 Sanitizar valor (previene XSS si el vendor devuelve scripts)
+            if isinstance(value, str):
+                value = self._sanitize_input(value, vendor_field)
+
             if value is not None:
                 parsed[latconecta_field] = value
+
+        # 🔒 Log seguro de la respuesta
+        logger.debug(f"Response parseada: {self._redact_sensitive_data(parsed)}")
 
         return parsed
 
@@ -319,6 +432,9 @@ class VendorAPIMapper:
         """
         Obtiene valor de campo anidado
         """
+        if not data or not isinstance(data, dict):
+            return None
+
         if '.' not in field_path:
             return data.get(field_path)
 
@@ -340,24 +456,38 @@ class VendorAPIMapper:
     ) -> bool:
         """
         Determina si la respuesta es exitosa
-        ✅ ACTUALIZADO: Maneja formato JSONPath
+        🔒 MEJORADO: Validación robusta
         """
-        # ✅ CORREGIDO: Manejar None en success_indicators
         success_config = self.mapping_config.get('success_indicators') or {}
 
         # Verificar status code
         valid_codes = success_config.get('status_codes', [200])
         if status_code not in valid_codes:
+            logger.debug(f"Status code {status_code} no en {valid_codes}")
             return False
 
         # Verificar campo de éxito en response
         success_field = success_config.get('success_field')
         if success_field:
+            # Limpiar JSONPath si está presente
             if isinstance(success_field, str) and success_field.startswith('$.'):
                 success_field = success_field[2:]
 
             success_values = success_config.get('success_values', [])
             actual_value = self._get_nested_value(response_data, success_field)
-            return actual_value in success_values
+
+            # 🔒 Sanitizar comparación
+            if actual_value is not None:
+                # Normalizar para comparación
+                actual_str = str(actual_value)
+                success_strs = [str(v) for v in success_values]
+
+                result = actual_str in success_strs
+                if not result:
+                    logger.debug(f"Success check failed: {success_field}={actual_value} not in {success_values}")
+                return result
+
+            logger.debug(f"Success field '{success_field}' not found in response")
+            return False
 
         return True

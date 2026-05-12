@@ -15,6 +15,9 @@ from app.config import settings
 from app.events import startup_event, shutdown_event
 from app.payments.router import router as payments_router
 
+# ✅ NUEVO: Rate limiting
+from app.rate_limit import limiter, RATE_LIMITS, configure_rate_limits
+
 # Deshabilitar docs en producción
 _docs_url    = None if settings.ENVIRONMENT == "production" else "/docs"
 _redoc_url   = None if settings.ENVIRONMENT == "production" else "/redoc"
@@ -67,6 +70,9 @@ app = FastAPI(
     redoc_url=_redoc_url,
     openapi_url=_openapi_url
 )
+
+# ✅ NUEVO: Configurar rate limiting
+configure_rate_limits(app)
 
 # Configurar CORS
 app.add_middleware(
@@ -227,6 +233,3 @@ async def internal_error_handler(request: Request, exc):
             "message": str(exc) if settings.DEBUG else "Error interno"
         }
     )
-
-
-

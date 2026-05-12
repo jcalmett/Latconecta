@@ -1,31 +1,36 @@
 """
-Dependencies para autenticación opcional
-Permite que endpoints acepten usuarios autenticados o anónimos
+Dependencies para autenticación opcional y obligatoria
+Permite compras anónimas en Users y protege recursos personales
 
 CORREGIDO: Cambio de payload.get("sub") a payload.get("user_id")
 El backend genera tokens con "user_id", no "sub"
+AGREGADO: Validación de usuario activo (user_status = 'active')
+AGREGADO: Funciones para prevenir IDOR
 """
 
 from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import logging
 
 from app.database import get_db
 from app.models.user import User
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 # OAuth2 scheme OPCIONAL - No lanza error si falta el token
 oauth2_scheme_optional = OAuth2PasswordBearer(
-    tokenUrl="api/v1/auth/login",
+    tokenUrl="/api/v1/auth/login",
     auto_error=False  # ✅ Clave: No falla si no hay token
 )
 
 # OAuth2 scheme REQUERIDO - Para endpoints que sí necesitan autenticación
 oauth2_scheme_required = OAuth2PasswordBearer(
-    tokenUrl="api/v1/auth/login",
+    tokenUrl="/api/v1/auth/login",
     auto_error=True
 )
 
@@ -38,8 +43,8 @@ async def get_current_user_optional(
     Obtener usuario actual de forma OPCIONAL
 
     Retorna:
-        - User object si el token es válido
-        - None si no hay token o el token es inválido
+        - User object si el token es válido y el usuario está ACTIVO
+        - None si no hay token, token inválido, o usuario inactivo
 
     Uso:
         Para endpoints que aceptan tanto usuarios autenticados como anónimos.
@@ -56,8 +61,7 @@ async def get_current_user_optional(
             algorithms=[settings.ALGORITHM]
         )
 
-        # ✅ CORREGIDO: Buscar "user_id" en vez de "sub"
-        # El backend auth.py genera el token con "user_id"
+        # Soporte para "user_id" y legacy "sub"
         user_id: int = payload.get("user_id") or payload.get("sub")
         
         if user_id is None:
@@ -65,17 +69,22 @@ async def get_current_user_optional(
 
         # Buscar usuario en base de datos
         result = await db.execute(
-            select(User).filter(User.user_id == user_id)
+            select(User).where(User.user_id == user_id)
         )
         user = result.scalar_one_or_none()
+
+        # ✅ NUEVO: Verificar que el usuario esté ACTIVO
+        if user and user.user_status != 'active':
+            logger.warning(f"Intento de acceso de usuario inactivo: {user.user_email}")
+            return None
 
         return user
 
     except JWTError:
-        # Token inválido o expirado
+        # Token inválido o expirado - silencioso
         return None
-    except Exception:
-        # Cualquier otro error
+    except Exception as e:
+        logger.error(f"Error inesperado en get_current_user_optional: {str(e)}")
         return None
 
 
@@ -87,19 +96,21 @@ async def get_current_user_required(
     Obtener usuario actual de forma REQUERIDA
 
     Retorna:
-        - User object si el token es válido
-        - HTTPException 401 si no hay token o es inválido
+        - User object si el token es válido y el usuario está ACTIVO
+        - HTTPException 401 si no hay token, es inválido, o usuario inactivo
 
     Uso:
         Para endpoints que SÍ requieren autenticación obligatoria.
-        Ejemplo: Ver perfil, actualizar datos, etc.
+        Ejemplo: Ver perfil, actualizar datos, ver historial de compras.
     """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No autenticado. Inicie sesión para acceder a este recurso.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No autenticado",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise credentials_exception
 
     try:
         # Decodificar token JWT
@@ -109,38 +120,41 @@ async def get_current_user_required(
             algorithms=[settings.ALGORITHM]
         )
 
-        # ✅ CORREGIDO: Buscar "user_id" en vez de "sub"
-        # El backend auth.py genera el token con "user_id"
+        # Soporte para "user_id" y legacy "sub"
         user_id: int = payload.get("user_id") or payload.get("sub")
         
         if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token inválido - sin user_id",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            logger.warning("Token sin user_id/sub")
+            raise credentials_exception
 
         # Buscar usuario en base de datos
         result = await db.execute(
-            select(User).filter(User.user_id == user_id)
+            select(User).where(User.user_id == user_id)
         )
         user = result.scalar_one_or_none()
 
         if user is None:
+            logger.warning(f"Usuario no encontrado para ID: {user_id}")
+            raise credentials_exception
+
+        # ✅ NUEVO: Verificar que el usuario esté ACTIVO
+        if user.user_status != 'active':
+            logger.warning(f"Intento de acceso de usuario inactivo: {user.user_email}")
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Usuario no encontrado",
-                headers={"WWW-Authenticate": "Bearer"},
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Usuario inactivo. Contacte al administrador."
             )
 
         return user
 
     except JWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token inválido o expirado: {str(e)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        logger.warning(f"JWTError en get_current_user_required: {str(e)}")
+        raise credentials_exception
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error inesperado en get_current_user_required: {str(e)}")
+        raise credentials_exception
 
 
 async def get_current_admin_user(
@@ -157,6 +171,7 @@ async def get_current_admin_user(
         Para endpoints administrativos que requieren rol de admin.
     """
     if current_user.user_role not in ["admin", "superadmin"]:
+        logger.warning(f"Acceso denegado a admin: {current_user.user_email} (rol: {current_user.user_role})")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permisos de administrador"
@@ -179,6 +194,7 @@ async def get_current_superadmin_user(
         Para endpoints críticos que requieren máximos permisos.
     """
     if current_user.user_role != "superadmin":
+        logger.warning(f"Acceso denegado a superadmin: {current_user.user_email} (rol: {current_user.user_role})")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Requiere permisos de superadministrador"
@@ -187,53 +203,129 @@ async def get_current_superadmin_user(
     return current_user
 
 
-# =====================================================
-# EJEMPLO DE USO
-# =====================================================
+# ============================================================================
+# FUNCIONES PARA PREVENIR IDOR (Insecure Direct Object Reference)
+# ============================================================================
+
+async def verify_ownership(
+    resource_user_id: int,
+    current_user: Optional[User],
+    resource_name: str = "recurso"
+) -> None:
+    """
+    Verifica que el usuario actual sea el propietario del recurso o un admin.
+
+    Args:
+        resource_user_id: ID del usuario propietario del recurso
+        current_user: Usuario autenticado (puede ser None)
+        resource_name: Nombre del recurso para logs
+
+    Raises:
+        HTTPException 401: Si no hay usuario autenticado
+        HTTPException 403: Si el usuario no es el propietario ni admin
+    """
+    # Si no hay usuario autenticado, no puede acceder a recursos de otros
+    if current_user is None:
+        logger.warning(f"Acceso denegado a {resource_name}: no autenticado")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Debe iniciar sesión para acceder a este recurso"
+        )
+    
+    # Admin puede ver cualquier recurso
+    if current_user.user_role in ["admin", "superadmin"]:
+        return
+    
+    # Usuario normal solo puede ver sus propios recursos
+    if current_user.user_id != resource_user_id:
+        logger.warning(
+            f"IDOR detectado: Usuario {current_user.user_id} intentó acceder "
+            f"al {resource_name} del usuario {resource_user_id}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para acceder a este recurso"
+        )
+
+
+def verify_ownership_sync(
+    resource_user_id: int,
+    current_user: Optional[User],
+    resource_name: str = "recurso"
+) -> None:
+    """
+    Versión síncrona de verify_ownership (para usar dentro de funciones async).
+    Lanza las mismas excepciones HTTP.
+    """
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Debe iniciar sesión para acceder a este recurso"
+        )
+    
+    if current_user.user_role in ["admin", "superadmin"]:
+        return
+    
+    if current_user.user_id != resource_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para acceder a este recurso"
+        )
+
+
+# ============================================================================
+# EJEMPLOS DE USO
+# ============================================================================
 
 """
-# En tus routers:
-
-from app.dependencies import (
-    get_current_user_optional,
-    get_current_user_required,
-    get_current_admin_user
-)
-
-# Endpoint que acepta usuarios o anónimos
+# 1. Endpoint que acepta compras anónimas (NO requiere verify_ownership)
 @router.post("/purchases/")
 async def create_purchase(
     purchase: PurchaseCreate,
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    # current_user puede ser None (compra anónima)
-    # o User object (compra registrada)
-
+    # current_user puede ser None (compra anónima) o User object
     purchase_data = purchase.dict()
     purchase_data['purchase_user_id'] = current_user.user_id if current_user else None
-    purchase_data['created_by'] = current_user.user_email if current_user else 'anonymous'
-
     # ... crear compra
 
 
-# Endpoint que REQUIERE autenticación
+# 2. Endpoint que muestra el perfil del usuario autenticado
 @router.get("/profile/")
 async def get_profile(
     current_user: User = Depends(get_current_user_required)
 ):
-    # current_user SIEMPRE será un User object válido
-    # Si no hay token válido, se lanza HTTPException 401
+    # No necesita verify_ownership porque current_user ES el usuario
     return current_user
 
 
-# Endpoint solo para admins
+# 3. Endpoint que muestra el historial de compras de un usuario específico
+@router.get("/purchases/{user_id}")
+async def get_user_purchases(
+    user_id: int,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
+):
+    # Verificar que el usuario autenticado sea el propietario o admin
+    await verify_ownership(user_id, current_user, "historial de compras")
+    
+    # Si pasa la verificación, mostrar las compras
+    result = await db.execute(
+        select(Purchase).where(Purchase.purchase_user_id == user_id)
+    )
+    return result.scalars().all()
+
+
+# 4. Endpoint solo para admins (no necesita verify_ownership)
 @router.delete("/products/{id}")
 async def delete_product(
     id: int,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # Solo admins y superadmins pueden llegar aquí
-    # ...
+    # Solo admins llegan aquí por la dependency
+    # No necesita verify_ownership
+    await db.delete(product)
+    await db.commit()
 """
