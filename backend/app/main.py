@@ -1,7 +1,10 @@
 """
 FastAPI Main Application - Latconecta Backend
 API REST para la plataforma Latconecta
+🔒 MEJORADO: CORS usa settings.CORS_ORIGINS (dinámico por ambiente)
+🔒 MEJORADO: Security headers reforzados
 """
+
 from contextlib import asynccontextmanager
 from app.routers import exchange_rate
 from fastapi import FastAPI, Request
@@ -15,7 +18,7 @@ from app.config import settings
 from app.events import startup_event, shutdown_event
 from app.payments.router import router as payments_router
 
-# ✅ NUEVO: Rate limiting
+# ✅ Rate limiting
 from app.rate_limit import limiter, RATE_LIMITS, configure_rate_limits
 
 # Deshabilitar docs en producción
@@ -71,16 +74,16 @@ app = FastAPI(
     openapi_url=_openapi_url
 )
 
-# ✅ NUEVO: Configurar rate limiting
+# ✅ Configurar rate limiting
 configure_rate_limits(app)
 
-# Configurar CORS
+# ✅ Configurar CORS con orígenes seguros desde settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,  # 🔒 AHORA USA LA CONFIGURACIÓN
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -99,7 +102,13 @@ async def add_cors_headers_to_static_files(request: Request, call_next):
         # Verificar si es una imagen
         image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg')
         if any(request.url.path.lower().endswith(ext) for ext in image_extensions):
-            response.headers["Access-Control-Allow-Origin"] = "*"
+            # 🔒 En producción, solo permitir orígenes seguros
+            origin = request.headers.get("origin")
+            if settings.ENVIRONMENT in ["production", "uat"]:
+                if origin in settings.CORS_ORIGINS:
+                    response.headers["Access-Control-Allow-Origin"] = origin
+            else:
+                response.headers["Access-Control-Allow-Origin"] = "*"
             response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
             response.headers["Access-Control-Allow-Headers"] = "*"
 
@@ -122,6 +131,21 @@ async def add_process_time_header(request: Request, call_next):
     response = await call_next(request)
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
+    return response
+
+# 🔒 Middleware para security headers adicionales
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Agrega headers de seguridad a todas las respuestas"""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    if settings.ENVIRONMENT == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    
     return response
 
 

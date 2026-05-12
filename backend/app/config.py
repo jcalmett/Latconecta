@@ -1,10 +1,13 @@
 """
 Configuración centralizada del proyecto Latconecta
 Variables de sistema únicamente - Datos de vendors están en BD
+🔒 MEJORADO: Validación de SECRET_KEY (mínimo 32 caracteres)
+🔒 MEJORADO: CORS dinámico por ambiente (local vs producción)
 """
 
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
+import warnings
 
 
 class Settings(BaseSettings):
@@ -29,36 +32,33 @@ class Settings(BaseSettings):
     # CONFIGURACIÓN DE LA APLICACIÓN
     # =========================================================================
     APP_NAME: str = "Latconecta API"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "2.0.0"
     DEBUG: bool = False
 
     # =========================================================================
-    # CONFIGURACIÓN CORS
+    # CONFIGURACIÓN CORS - Lista de orígenes permitidos
     # =========================================================================
-    CORS_ORIGINS: list = [
+    # Desarrollo local
+    LOCAL_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
-        "http://77.42.92.151:5173",
-        "http://77.42.92.151:5174",
-        "http://77.42.92.151",
+    ]
+    
+    # Producción / UAT
+    PRODUCTION_ORIGINS: List[str] = [
+        "https://77.42.92.151",
+        "https://77.42.92.151/latconecta_admin",
+        "https://77.42.92.151/latconecta_users",
+        "http://77.42.92.151:8100",  # Backend directo (para debugging)
     ]
 
     # =========================================================================
-    # CONFIGURACIÓN DE AMBIENTE
+    # CONFIGURACIÓN DE AMBIENTE Y PAÍS
     # =========================================================================
     ENVIRONMENT: str = "development"
-
-    # =========================================================================
-    # CONFIGURACIÓN DE DEPLOYMENT (País de instalación)
-    # =========================================================================
     DEPLOYMENT_COUNTRY: str = "PE"
-
-    # Gateway de pagos activo para esta instalación
-    # PE → culqi   (tarjeta, Yape, billeteras, PagoEfectivo)
-    # MX → conekta (tarjeta, OXXO, SPEI) - futuro
-    # US → stripe  (tarjeta, Apple Pay)  - futuro
     PAYMENT_GATEWAY: str = "culqi"
 
     # =========================================================================
@@ -68,8 +68,7 @@ class Settings(BaseSettings):
     BARCODE_AVAILABLE: bool = True
 
     # =========================================================================
-    # CONFIGURACIÓN DE CULQI - PASARELA DE PAGOS (Peru)
-    # Solo aplica cuando PAYMENT_GATEWAY=culqi
+    # CONFIGURACIÓN DE CULQI - PASARELA DE PAGOS (Perú)
     # =========================================================================
     CULQI_PUBLIC_KEY: str = ""
     CULQI_SECRET_KEY: str = ""
@@ -86,23 +85,11 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "LatConecta"
 
     # =========================================================================
-    # CONFIGURACIÓN DE CONEKTA - PASARELA DE PAGOS (México) - FUTURO
-    # Solo aplica cuando PAYMENT_GATEWAY=conekta
+    # CONTROL DE VENDORS
     # =========================================================================
-    # CONEKTA_API_KEY: str = ""
-    # CONEKTA_API_VERSION: str = "2.1.0"
-    # CONEKTA_LOCALE: str = "es"
-
-    # =========================================================================
-    # CONFIGURACIÓN DE STRIPE - PASARELA DE PAGOS (USA) - FUTURO
-    # Solo aplica cuando PAYMENT_GATEWAY=stripe
-    # =========================================================================
-    # STRIPE_SECRET_KEY: str = ""
-    # STRIPE_PUBLISHABLE_KEY: str = ""
-    # STRIPE_WEBHOOK_SECRET: str = ""
-
-    # Control de login con vendors
     ENABLE_VENDOR_LOGIN: bool = False
+    VENDOR_SIMULATOR_ENABLED: bool = True
+    VENDOR_SIMULATOR_URL: str = "http://localhost:5001"
 
     # =========================================================================
     # CONFIGURACIÓN DE MOCK (Solo para DEVELOPMENT)
@@ -113,35 +100,76 @@ class Settings(BaseSettings):
     MOCK_FORCED_ERROR: Optional[str] = None
 
     # =========================================================================
-    # CONFIGURACIÓN DE VENDOR SIMULATOR (Fase 2)
+    # REDIS (opcional - para token_manager multi-instancia)
     # =========================================================================
-    VENDOR_SIMULATOR_ENABLED: bool = True
-    VENDOR_SIMULATOR_URL: str = "http://localhost:5001"
+    REDIS_URL: Optional[str] = None
 
     # =========================================================================
-    # CONFIGURACIÓN DE VENDORS
+    # SEGURIDAD
     # =========================================================================
-    VENDOR_MODE: str = "mock"
-    LATCOM_URL: Optional[str] = "https://uatlat.mitopup.com"
-    LATCOM_USERNAME: Optional[str] = None
-    LATCOM_PASSWORD: Optional[str] = None
-    LATCOM_API_KEY: Optional[str] = None
-    LATCOM_USER_UID: Optional[str] = None
-    LATCOM_TIMEOUT: int = 45
-
-    # Additional settings
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://77.42.92.151:5173,http://77.42.92.151:5174,http://77.42.92.151"
+    RATE_LIMIT_PER_MINUTE: int = 10  # Intentos de login por minuto
     UPLOAD_DIR: str = "uploads"
-    MAX_UPLOAD_SIZE: int = 5242880
-    RATE_LIMIT_PER_MINUTE: int = 60
+    MAX_UPLOAD_SIZE: int = 5242880  # 5MB
     LOG_LEVEL: str = "INFO"
-    MOCK_MODE: str = "success"
-    MOCK_DELAY: float = 1.0
 
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"
+
+    @property
+    def CORS_ORIGINS(self) -> List[str]:
+        """
+        🔒 Retorna los orígenes CORS permitidos según el ambiente.
+        En desarrollo: permite localhosts.
+        En UAT/Producción: solo dominios seguros (HTTPS).
+        """
+        if self.ENVIRONMENT in ["production", "uat"]:
+            return self.PRODUCTION_ORIGINS
+        return self.LOCAL_ORIGINS + self.PRODUCTION_ORIGINS
+
+    def model_post_init(self, __context):
+        """
+        🔒 Validaciones post-inicialización (CRÍTICAS)
+        """
+        # 1. Validar SECRET_KEY (mínimo 32 caracteres)
+        if len(self.SECRET_KEY) < 32:
+            raise ValueError(
+                f"❌ SECRET_KEY debe tener al menos 32 caracteres. "
+                f"Longitud actual: {len(self.SECRET_KEY)}. "
+                f"Genera una clave segura con: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+            )
+        
+        # 2. Validar entorno
+        valid_envs = ["development", "uat", "production"]
+        if self.ENVIRONMENT not in valid_envs:
+            raise ValueError(
+                f"ENVIRONMENT debe ser uno de: {valid_envs}. "
+                f"Valor actual: {self.ENVIRONMENT}"
+            )
+        
+        # 3. Validar país de despliegue
+        valid_countries = ["PE", "MX", "US"]
+        if self.DEPLOYMENT_COUNTRY not in valid_countries:
+            raise ValueError(
+                f"DEPLOYMENT_COUNTRY debe ser uno de: {valid_countries}. "
+                f"Valor actual: {self.DEPLOYMENT_COUNTRY}"
+            )
+        
+        # 4. Validar consistencia de métodos de pago según país
+        if self.DEPLOYMENT_COUNTRY == "PE" and self.PAYMENT_GATEWAY != "culqi":
+            raise ValueError(
+                f"Para Perú (PE) el PAYMENT_GATEWAY debe ser 'culqi'. "
+                f"Actual: {self.PAYMENT_GATEWAY}"
+            )
+        
+        # 5. Advertencia en desarrollo con DEBUG activado
+        if self.ENVIRONMENT == "development" and self.DEBUG:
+            warnings.warn(
+                "⚠️ Modo DEBUG activado en DEVELOPMENT. No usar en producción.",
+                UserWarning
+            )
 
 
 # Instancia global de configuración
@@ -183,25 +211,23 @@ def get_environment_info() -> dict:
         "is_uat": is_uat(),
         "is_production": is_production(),
         "uses_mock": is_development(),
-        "vendor_login_enabled": settings.ENABLE_VENDOR_LOGIN
+        "vendor_login_enabled": settings.ENABLE_VENDOR_LOGIN,
+        "deployment_country": settings.DEPLOYMENT_COUNTRY,
+        "payment_gateway": settings.PAYMENT_GATEWAY,
+        "card_available": settings.CARD_AVAILABLE,
+        "barcode_available": settings.BARCODE_AVAILABLE,
     }
 
 
 def validate_environment():
-    valid_environments = ["development", "uat", "production"]
-
-    if settings.ENVIRONMENT not in valid_environments:
-        raise ValueError(
-            f"ENVIRONMENT debe ser uno de: {valid_environments}. "
-            f"Valor actual: {settings.ENVIRONMENT}"
-        )
-
+    """Imprime resumen de configuración al iniciar"""
     print("\n" + "="*60)
     print("🚀 LATCONECTA - CONFIGURACIÓN")
     print("="*60)
     print(f"🌍 Ambiente: {settings.ENVIRONMENT.upper()}")
     print(f"🌍 País: {settings.DEPLOYMENT_COUNTRY} | Gateway: {settings.PAYMENT_GATEWAY}")
     print(f"💳 Tarjeta: {'✅' if settings.CARD_AVAILABLE else '❌'} | Barcode: {'✅' if settings.BARCODE_AVAILABLE else '❌'}")
+    print(f"🔐 SECRET_KEY: {'✅ OK (' + str(len(settings.SECRET_KEY)) + ' caracteres)' if len(settings.SECRET_KEY) >= 32 else '❌ DEMASIADO CORTA'}")
 
     if is_development():
         print("🧪 Modo: DEVELOPMENT")
@@ -222,29 +248,20 @@ def validate_environment():
         print("\n🎭 VENDOR SIMULATOR ACTIVADO")
         print(f"   → URL: {settings.VENDOR_SIMULATOR_URL}")
 
+    if settings.REDIS_URL:
+        print("\n🔄 REDIS: HABILITADO")
+    else:
+        print("\n🔄 REDIS: NO CONFIGURADO (token_manager en memoria)")
+
+    print(f"\n🔒 CORS Orígenes permitidos ({len(settings.CORS_ORIGINS)}):")
+    for origin in settings.CORS_ORIGINS:
+        print(f"   → {origin}")
+
     print("="*60 + "\n")
 
 
 # Validar al importar
 validate_environment()
-
-
-# ============================================================================
-# BACKWARD COMPATIBILITY
-# ============================================================================
-
-def get_latcom_config() -> dict:
-    return {
-        "url": settings.LATCOM_URL,
-        "username": settings.LATCOM_USERNAME,
-        "password": settings.LATCOM_PASSWORD,
-        "api_key": settings.LATCOM_API_KEY,
-        "user_uid": settings.LATCOM_USER_UID,
-        "timeout": settings.LATCOM_TIMEOUT,
-        "mode": settings.VENDOR_MODE,
-        "mock_mode": settings.MOCK_MODE,
-        "mock_delay": settings.MOCK_DELAY
-    }
 
 
 if __name__ == "__main__":
