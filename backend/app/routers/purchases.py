@@ -7,14 +7,9 @@ Ya no hay lógica dispersa de mock_api_service.
 
 FLUJO: ops_config.is_fase1('operacion') → Simular
        ops_config.is_fase2('operacion') → Real (gateway, api_mapping, función)
-
-MEJORAS DE SEGURIDAD (Mayo 2026):
-- GET /{purchase_id}: verifica que el usuario sea el dueño de la compra
-- GET /: restringe filtro user_id según rol del usuario
-- POST /create: valida que user_id del request coincida con el token
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import joinedload
@@ -38,6 +33,7 @@ from app.services.operations_config_service import ops_config
 from app.services.universal_vendor_service import UniversalVendorService
 from app.barcode import barcode_service
 from app.dependencies import get_current_user_optional, verify_ownership
+from app.rate_limit import limiter, RATE_LIMITS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -247,25 +243,25 @@ class PurchaseResponse(BaseModel):
 
 
 @router.post("/create", response_model=PurchaseResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def create_purchase(
-    request: PurchaseCreateRequest,
+    request: Request,
+    purchase_data: PurchaseCreateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)  # ✅ AGREGADO
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     try:
-        logger.info(f"Creating purchase for product_id={request.product_id}")
+        logger.info(f"Creating purchase for product_id={purchase_data.product_id}")
 
         # ✅ VALIDACIÓN DE SEGURIDAD: Verificar que user_id coincida con el token
-        if request.user_id:
-            # Si el request tiene user_id, debe haber un usuario autenticado
+        if purchase_data.user_id:
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Debe iniciar sesión para crear una compra asociada a su cuenta"
                 )
-            # Y ese user_id debe ser el mismo que el del token
-            if request.user_id != current_user.user_id:
-                logger.warning(f"Intento de suplantación: request.user_id={request.user_id}, token.user_id={current_user.user_id}")
+            if purchase_data.user_id != current_user.user_id:
+                logger.warning(f"Intento de suplantación: request.user_id={purchase_data.user_id}, token.user_id={current_user.user_id}")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="No puede crear compras en nombre de otro usuario"
@@ -274,10 +270,10 @@ async def create_purchase(
         # PASO 1: CARGAR DATOS
         product_query = await db.execute(
             select(Product).options(joinedload(Product.company), joinedload(Product.service))
-            .where(Product.product_id == request.product_id))
+            .where(Product.product_id == purchase_data.product_id))
         product = product_query.scalar_one_or_none()
         if not product:
-            raise HTTPException(status_code=400, detail=f"Product {request.product_id} not found")
+            raise HTTPException(status_code=400, detail=f"Product {purchase_data.product_id} not found")
 
         vp_query = await db.execute(select(VendorProduct).where(and_(
             VendorProduct.vendor_code == product.product_vendor_code,
@@ -300,13 +296,15 @@ async def create_purchase(
 
         # PASO 2: CALCULAR MONTOS
         user_data = {
-            'product_type': request.product_type, 'user_selected_amount': request.user_selected_amount,
-            'bill_total_debt': request.bill_total_debt, 'bill_currency': request.bill_currency,
-            'payment_type': request.payment_type
+            'product_type': purchase_data.product_type,
+            'user_selected_amount': purchase_data.user_selected_amount,
+            'bill_total_debt': purchase_data.bill_total_debt,
+            'bill_currency': purchase_data.bill_currency,
+            'payment_type': purchase_data.payment_type
         }
         calculation = await purchase_calculator_service.calculate(
             product=product, vendor_product=vendor_product, vendor=vendor, user_data=user_data,
-            exchange_rate_override=Decimal(str(request.exchange_rate)) if request.exchange_rate else None, db=db)
+            exchange_rate_override=Decimal(str(purchase_data.exchange_rate)) if purchase_data.exchange_rate else None, db=db)
 
         # PASO 3: VALIDAR BALANCE
         if vendor_product.vp_currency == 'USD':
@@ -336,15 +334,13 @@ async def create_purchase(
         izipay_order_code = None
         izipay_form_token = None
 
-        if request.payment_method == 'card':
-            if request.payment_gateway and request.payment_transaction_id:
-                # FASE 2: Pago real ya procesado por frontend
+        if purchase_data.payment_method == 'card':
+            if purchase_data.payment_gateway and purchase_data.payment_transaction_id:
                 payment_status = 'Success'
-                payment_ref = request.payment_reference_number or request.payment_transaction_id
-                izipay_order_code = request.payment_order_number
-                logger.info(f"💳 FASE 2: Card payment by {request.payment_gateway}, ref={payment_ref}")
+                payment_ref = purchase_data.payment_reference_number or purchase_data.payment_transaction_id
+                izipay_order_code = purchase_data.payment_order_number
+                logger.info(f"💳 FASE 2: Card payment by {purchase_data.payment_gateway}, ref={payment_ref}")
             else:
-                # FASE 1: Pago simulado
                 sim = ops_config.simulate_response('pago_tarjeta', {'amount': float(calculation.purchase_total_amount)})
                 if sim.get('success'):
                     payment_status = 'Success'
@@ -354,7 +350,7 @@ async def create_purchase(
                     logger.info("🎭 FASE 1: Card sim FAIL")
                     raise HTTPException(status_code=400, detail="Pago con tarjeta rechazado (simulado)")
 
-        elif request.payment_method == 'barcode':
+        elif purchase_data.payment_method == 'barcode':
             if ops_config.is_fase2('pago_barcode'):
                 barcode_result = barcode_service.generate_barcode(amount=calculation.purchase_total_amount)
                 if barcode_result['success']:
@@ -382,23 +378,22 @@ async def create_purchase(
         delivery_status = None
         purchase_status = 'Pending'
         requires_manual_intervention = False
-        provision_op = ops_config.get_provision_operation(request.product_type)
+        provision_op = ops_config.get_provision_operation(purchase_data.product_type)
 
         if payment_status == 'Success':
             if ops_config.is_fase1(provision_op):
-                # FASE 1: Provisión simulada
-                logger.info(f"🎭 FASE 1: Provisión sim {request.product_type}")
+                logger.info(f"🎭 FASE 1: Provisión sim {purchase_data.product_type}")
                 try:
                     sim = ops_config.simulate_response(provision_op, {})
                     if sim.get('success'):
                         purchase_status = 'Success'
                         provision_ref = sim.get('provision_ref')
-                        if request.product_type == 'smartphone':
+                        if purchase_data.product_type == 'smartphone':
                             delivery_status = sim.get('delivery_status', 'ordered')
                         logger.info(f"✅ Provisión sim OK: {provision_ref}")
                     else:
                         logger.warning("❌ Provisión sim FAIL - anulando")
-                        rev = await _attempt_payment_reversal(request, calculation, payment_ref)
+                        rev = await _attempt_payment_reversal(purchase_data, calculation, payment_ref)
                         if rev.get('success'):
                             payment_status = 'Reversed'
                             purchase_status = 'Failed'
@@ -411,7 +406,7 @@ async def create_purchase(
                 except Exception as e:
                     logger.error(f"Exception provisión sim: {e}")
                     try:
-                        rev = await _attempt_payment_reversal(request, calculation, payment_ref)
+                        rev = await _attempt_payment_reversal(purchase_data, calculation, payment_ref)
                         if rev.get('success'):
                             payment_status, purchase_status = 'Reversed', 'Failed'
                             reversal_ref = rev.get('reversal_ref') or rev.get('cancel_id')
@@ -422,12 +417,11 @@ async def create_purchase(
                         payment_status, purchase_status = 'Success', 'Failed'
                         requires_manual_intervention = True
             else:
-                # FASE 2: Provisión real (API Mappings)
                 try:
                     vendor_service = UniversalVendorService(db)
                     provision_data = {
-                        'purchase_phone_number': request.phone_number,
-                        'purchase_account_number': request.account_number,
+                        'purchase_phone_number': purchase_data.phone_number,
+                        'purchase_account_number': purchase_data.account_number,
                         'purchase_vendor_amount': float(calculation.purchase_vendor_amount),
                         'purchase_vendor_currency': calculation.purchase_vendor_currency,
                         'purchase_reference': f"REF-{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -441,7 +435,6 @@ async def create_purchase(
                     prov_result = await vendor_service.execute_vendor_request(
                         vendor_code=vendor.vendor_code, api_group_code=vendor_product.api_group_code,
                         operation_type='provision', data=provision_data)
-                    print(f"DEBUG prov_result: {prov_result}", flush=True)
                     vendor_request_json = json.dumps(prov_result.get('vendor_request', provision_data))
                     vendor_response_json = json.dumps(prov_result.get('vendor_response', {}))
 
@@ -450,14 +443,14 @@ async def create_purchase(
                         provision_ref = prov_result.get('provision_ref')
                         vendor_trans_id = ext.get('vendor_trans_id')
                         vendor_provider_trans_id = ext.get('vendor_provider_trans_id')
-                        if request.product_type == 'smartphone':
+                        if purchase_data.product_type == 'smartphone':
                             ds = ext.get('purchase_delivery_status', 'ordered')
                             delivery_status = 'Success' if ds in ['completed','SUCCESS','success'] else ('Ordered' if ds == 'ordered' else ds)
                         purchase_status = 'Success'
                         logger.info(f"✅ Provisión real OK: {provision_ref}")
                     else:
                         logger.warning(f"❌ Provisión real FAIL: {prov_result.get('error')}")
-                        rev = await _attempt_payment_reversal(request, calculation, payment_ref)
+                        rev = await _attempt_payment_reversal(purchase_data, calculation, payment_ref)
                         if rev.get('success'):
                             payment_status = 'Refunded' if rev.get('cancel_id') else 'Reversed'
                             purchase_status = 'Failed'
@@ -469,7 +462,7 @@ async def create_purchase(
                 except Exception as e:
                     logger.error(f"Exception provisión real: {e}", exc_info=True)
                     try:
-                        rev = await _attempt_payment_reversal(request, calculation, payment_ref)
+                        rev = await _attempt_payment_reversal(purchase_data, calculation, payment_ref)
                         if rev.get('success'):
                             payment_status = 'Refunded' if rev.get('cancel_id') else 'Reversed'
                             purchase_status = 'Failed'
@@ -481,7 +474,7 @@ async def create_purchase(
                         payment_status, purchase_status = 'Success', 'Failed'
                         requires_manual_intervention = True
 
-        elif request.payment_method == 'barcode':
+        elif purchase_data.payment_method == 'barcode':
             purchase_status, payment_status = 'Pending', 'Pending'
 
         # PASO 6: ACTUALIZAR BALANCE
@@ -501,10 +494,10 @@ async def create_purchase(
         timestamp = datetime.now()
         reference = f"REF-{timestamp.strftime('%Y%m%d%H%M%S')}"
         purchase = Purchase(
-            purchase_reference=reference, purchase_user_id=request.user_id,
+            purchase_reference=reference, purchase_user_id=purchase_data.user_id,
             purchase_product_id=product.product_id, purchase_service_name=product.service.service_name,
-            purchase_product_name=product.product_name, purchase_product_type=request.product_type,
-            purchase_phone_number=request.phone_number, purchase_account_number=request.account_number,
+            purchase_product_name=product.product_name, purchase_product_type=purchase_data.product_type,
+            purchase_phone_number=purchase_data.phone_number, purchase_account_number=purchase_data.account_number,
             purchase_base_price=float(calculation.purchase_base_price),
             purchase_discount=float(calculation.purchase_discount),
             purchase_fee=float(calculation.purchase_fee),
@@ -516,15 +509,15 @@ async def create_purchase(
             purchase_exch_rate=float(calculation.purchase_exch_rate) if calculation.purchase_exch_rate else None,
             purchase_vendpro_code=vendor_product.vp_code, purchase_vendor_skuid=vendor_product.vp_skuid,
             purchase_vendpro_country=vendor_product.vp_country, purchase_vendpro_operator=vendor_product.vp_operator,
-            purchase_vendpro_product_type=request.purchase_vendpro_product_type or vendor_product.vp_product_type,
-            purchase_vendpro_amount_type=request.purchase_vendpro_amount_type or vendor_product.vp_amount_type,
-            purchase_vendpro_maximum_amount=float(request.purchase_vendpro_maximum_amount) if request.purchase_vendpro_maximum_amount else (float(vendor_product.vp_maximum_amount) if vendor_product.vp_maximum_amount else None),
-            vendor_name=vendor.vendor_name, purchase_payment_method=request.payment_method,
+            purchase_vendpro_product_type=purchase_data.purchase_vendpro_product_type or vendor_product.vp_product_type,
+            purchase_vendpro_amount_type=purchase_data.purchase_vendpro_amount_type or vendor_product.vp_amount_type,
+            purchase_vendpro_maximum_amount=float(purchase_data.purchase_vendpro_maximum_amount) if purchase_data.purchase_vendpro_maximum_amount else (float(vendor_product.vp_maximum_amount) if vendor_product.vp_maximum_amount else None),
+            vendor_name=vendor.vendor_name, purchase_payment_method=purchase_data.payment_method,
             purchase_payment_status=payment_status, purchase_payment_ref=payment_ref,
             purchase_status=purchase_status, purchase_delivery_status=delivery_status,
             purchase_provision_ref=provision_ref, purchase_reversal_ref=reversal_ref,
-            purchase_delivery_name=request.delivery_name, purchase_delivery_phone=request.delivery_phone,
-            purchase_delivery_address=request.delivery_address,
+            purchase_delivery_name=purchase_data.delivery_name, purchase_delivery_phone=purchase_data.delivery_phone,
+            purchase_delivery_address=purchase_data.delivery_address,
             purchase_barcode_code=barcode, purchase_barcode_image=barcode_image,
             purchase_balance_currency=balance_currency,
             purchase_initial_balance=float(vendor_initial_balance),
@@ -532,8 +525,8 @@ async def create_purchase(
             vendor_trans_id=vendor_trans_id, vendor_provider_trans_id=vendor_provider_trans_id,
             vendor_request=vendor_request_json, vendor_response=vendor_response_json,
             requires_manual_intervention=requires_manual_intervention,
-            purchase_ip_petition=request.ip_address,
-            created_by=f"user_{request.user_id}" if request.user_id else "anonymous",
+            purchase_ip_petition=purchase_data.ip_address,
+            created_by=f"user_{purchase_data.user_id}" if purchase_data.user_id else "anonymous",
             last_update_date=timestamp)
 
         db.add(purchase)
@@ -541,7 +534,7 @@ async def create_purchase(
         await db.refresh(purchase)
         logger.info(f"Purchase saved: ID={purchase.purchase_id}, REF={reference}, status={purchase_status}")
 
-        if request.payment_method == 'card' and izipay_order_code:
+        if purchase_data.payment_method == 'card' and izipay_order_code:
             purchase.izipay_order_code = izipay_order_code
             purchase.izipay_form_token = izipay_form_token
 
@@ -554,8 +547,6 @@ async def create_purchase(
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating purchase: {str(e)}")
 
-
-# VALIDACIÓN ENDPOINTS
 
 @router.post("/validate-phone")
 async def validate_phone(product_id: int, phone_number: str, db: AsyncSession = Depends(get_db)):
@@ -573,7 +564,6 @@ async def validate_phone(product_id: int, phone_number: str, db: AsyncSession = 
             from app.services.universal_vendor_service import validate_vendor_phone
             result = await validate_vendor_phone(db=db, vendor_code=product.product_vendor_code, api_group_code=vp.api_group_code, phone_number=phone_number, additional_data={'vp_operator': vp.vp_operator, 'vp_country': vp.vp_country, 'vp_code': vp.vp_code})
 
-            # Si el vendor no tiene mapping de validación → ejecutar validación local de prefijos
             if result.get('message') == 'Validation not required by vendor':
                 from app.services.phone_validation_service import validate_phone_local
                 local_result = validate_phone_local(
@@ -626,11 +616,6 @@ async def check_balance(product_id: int, product_type: Optional[str] = None,
                         bill_total_debt: Optional[float] = None, bill_currency: Optional[str] = None,
                         payment_type: Optional[str] = None, exchange_rate: Optional[float] = None,
                         db: AsyncSession = Depends(get_db)):
-    """
-    Verifica si el vendor tiene balance suficiente para ejecutar la venta.
-    Debe llamarse antes de pasar al paso de selección de método de pago.
-    Usa vendor_usd_balance o vendor_local_balance según la moneda del vendor_product.
-    """
     try:
         product = (await db.execute(
             select(Product).where(Product.product_id == product_id)
@@ -654,7 +639,6 @@ async def check_balance(product_id: int, product_type: Optional[str] = None,
         if not vendor:
             raise HTTPException(status_code=400, detail="Vendor no encontrado")
 
-        # Calcular montos (misma lógica que create)
         user_data = {
             'product_type': product_type or product.product_vendpro_product_type or 'topup',
             'user_selected_amount': user_selected_amount,
@@ -669,7 +653,6 @@ async def check_balance(product_id: int, product_type: Optional[str] = None,
             db=db
         )
 
-        # Validar balance según moneda del vendor_product (misma lógica que create)
         if vendor_product.vp_currency == 'USD':
             balance_currency = 'USD'
             available_balance = Decimal(str(vendor.vendor_usd_balance or 0))
@@ -701,31 +684,21 @@ async def check_balance(product_id: int, product_type: Optional[str] = None,
         raise HTTPException(status_code=500, detail=f"Error verificando disponibilidad: {str(e)}")
 
 
-# ✅ ENDPOINT MEJORADO: GET /{purchase_id} con verificación de ownership
 @router.get("/{purchase_id}", response_model=PurchaseResponse)
 async def get_purchase(
     purchase_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """
-    Obtiene una compra por su ID.
-    
-    - Usuario autenticado: solo puede ver sus propias compras
-    - Admin/Superadmin: puede ver cualquier compra
-    - Usuario anónimo: NO puede ver compras
-    """
     result = await db.execute(select(Purchase).where(Purchase.purchase_id == purchase_id))
     purchase = result.scalar_one_or_none()
     
     if not purchase:
         raise HTTPException(status_code=404, detail=f"Purchase {purchase_id} not found")
     
-    # ✅ Verificar ownership
     if current_user:
         await verify_ownership(purchase.purchase_user_id, current_user, "compra")
     else:
-        # Usuario no autenticado: no puede ver compras
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Debe iniciar sesión para ver el detalle de una compra"
@@ -734,7 +707,6 @@ async def get_purchase(
     return _map_purchase_to_response(purchase)
 
 
-# ✅ ENDPOINT MEJORADO: GET / con restricción de filtro user_id
 @router.get("/", response_model=list[PurchaseResponse])
 async def list_purchases(
     skip: int = 0,
@@ -744,14 +716,6 @@ async def list_purchases(
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """
-    Lista compras con filtros.
-    
-    - Admin/Superadmin: puede listar todas las compras y filtrar por cualquier user_id
-    - Usuario autenticado NO admin: solo puede listar sus propias compras (ignora user_id si lo envía)
-    - Usuario anónimo: no puede listar compras
-    """
-    # ✅ Usuario no autenticado no puede listar compras
     if not current_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -760,14 +724,11 @@ async def list_purchases(
     
     query = select(Purchase)
     
-    # ✅ Admin puede ver todo y filtrar por cualquier user_id
     if current_user.user_role in ["admin", "superadmin"]:
         if user_id:
             query = query.where(Purchase.purchase_user_id == user_id)
     else:
-        # ✅ Usuario normal solo puede ver sus propias compras
         query = query.where(Purchase.purchase_user_id == current_user.user_id)
-        # Si intentó filtrar por otro user_id, lo logueamos como intento sospechoso
         if user_id and user_id != current_user.user_id:
             logger.warning(f"Intento de acceso no autorizado: Usuario {current_user.user_id} intentó filtrar compras de usuario {user_id}")
     

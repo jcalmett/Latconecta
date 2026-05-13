@@ -1,3 +1,10 @@
+"""
+Router de Autenticación
+Endpoints para login, registro y obtención de usuario actual
+✅ Rate limiting en login (5/min), forgot (3/min), reset (5/min), register (3/min)
+✅ Refresh tokens con Redis
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -86,6 +93,55 @@ async def login(
     )
 
 
+@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
+@limiter.limit("3/minute")
+async def register(
+    request: Request,
+    user_data: UserRegister,
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(User).where(User.user_email == user_data.user_email)
+    )
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email ya registrado")
+
+    db_user = User(
+        user_name=user_data.user_name,
+        user_email=user_data.user_email,
+        user_password=get_password_hash(user_data.user_password),
+        user_phone_country_code=user_data.user_phone_country_code or '+51',
+        user_phone_number=user_data.user_phone_number,
+        user_role="user",
+        user_status="active",
+        created_by="self-registration"
+    )
+    db.add(db_user)
+    await db.commit()
+    await db.refresh(db_user)
+
+    access_token = create_access_token(data={
+        "user_id": db_user.user_id,
+        "email": db_user.user_email,
+        "role": db_user.user_role,
+        "type": "access"
+    })
+    refresh_token = refresh_token_manager.generate_refresh_token(db_user.user_id)
+
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        user_id=db_user.user_id,
+        user_email=db_user.user_email,
+        user_name=db_user.user_name,
+        user_role=db_user.user_role,
+        user_photo=db_user.user_photo,
+        user_phone_country_code=db_user.user_phone_country_code,
+        user_phone_number=db_user.user_phone_number,
+        refresh_token=refresh_token
+    )
+
+
 @router.post("/refresh", response_model=RefreshTokenResponse)
 @limiter.limit("10/minute")
 async def refresh_access_token(
@@ -140,53 +196,6 @@ async def logout_all_devices(
 ):
     count = refresh_token_manager.revoke_all_user_tokens(current_user.user_id)
     return {"success": True, "message": f"Sesión cerrada en {count} dispositivo(s)"}
-
-
-@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def register(
-    user_data: UserRegister,
-    db: AsyncSession = Depends(get_db)
-):
-    result = await db.execute(
-        select(User).where(User.user_email == user_data.user_email)
-    )
-    if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email ya registrado")
-
-    db_user = User(
-        user_name=user_data.user_name,
-        user_email=user_data.user_email,
-        user_password=get_password_hash(user_data.user_password),
-        user_phone_country_code=user_data.user_phone_country_code or '+51',
-        user_phone_number=user_data.user_phone_number,
-        user_role="user",
-        user_status="active",
-        created_by="self-registration"
-    )
-    db.add(db_user)
-    await db.commit()
-    await db.refresh(db_user)
-
-    access_token = create_access_token(data={
-        "user_id": db_user.user_id,
-        "email": db_user.user_email,
-        "role": db_user.user_role,
-        "type": "access"
-    })
-    refresh_token = refresh_token_manager.generate_refresh_token(db_user.user_id)
-
-    return Token(
-        access_token=access_token,
-        token_type="bearer",
-        user_id=db_user.user_id,
-        user_email=db_user.user_email,
-        user_name=db_user.user_name,
-        user_role=db_user.user_role,
-        user_photo=db_user.user_photo,
-        user_phone_country_code=db_user.user_phone_country_code,
-        user_phone_number=db_user.user_phone_number,
-        refresh_token=refresh_token
-    )
 
 
 @router.get("/me", response_model=UserResponse)
