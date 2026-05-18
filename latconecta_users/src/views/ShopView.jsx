@@ -1272,7 +1272,7 @@ Dirección: ${purchaseData.deliveryAddress}
               </div>
 
               <a
-                href="/select"
+                href="/latconecta_users/select"
                 className="flex items-center space-x-2 text-bitel-blue hover:text-blue-700 transition-colors"
               >
                 <ArrowLeft size={20} />
@@ -1314,7 +1314,7 @@ Dirección: ${purchaseData.deliveryAddress}
                 : 'No hay productos disponibles'}
             </p>
             <a
-              href="/select"
+              href="/latconecta_users/select"
               className="inline-block mt-4 text-bitel-blue hover:text-blue-700 font-semibold"
             >
               ← Volver a Selección

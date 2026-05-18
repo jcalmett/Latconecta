@@ -804,6 +804,7 @@ const PurchasePopup = React.memo(({
 
                         if (purchaseData.paymentMethod === 'card') {
                           if (cardMode === 'fase2') {
+                            setShowGatewayCheckout(true);
                           } else {
                             // FASE 1: Pago simulado, va directo al backend
                             handlePaymentAndProvision();
