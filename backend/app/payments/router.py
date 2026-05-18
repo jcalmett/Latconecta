@@ -209,8 +209,10 @@ async def get_payment_config():
         "rsa_public_key":    settings.CULQI_RSA_PUBLIC_KEY or None,
         "card_available":    settings.CARD_AVAILABLE,
         "barcode_available": settings.BARCODE_AVAILABLE,
-        "yape_available":    True,    # Yape disponible — requiere crear Order primero
-        "wallet_available":  True,    # Billeteras disponibles — requiere crear Order primero
+        "yape_available":    True,
+        "wallet_available":  True,
+        "card":              {"mode": "fase2"},
+        "barcode":           {"mode": "fase2"},
     }
 
 

@@ -192,7 +192,7 @@ function AppContent() {
 
 function App() {
   return (
-    <Router>
+    <Router basename="/latconecta_users">
       <AppContent />
     </Router>
   );

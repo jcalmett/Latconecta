@@ -30,6 +30,8 @@ const PurchasePopup = React.memo(({
 }) => {
   if (!showPurchasePopup || !selectedProduct) return null;
 
+  // --- Refs ---
+  const isSubmitting = useRef(false);
   // --- Payment Gateway State ---
   const [showGatewayCheckout, setShowGatewayCheckout] = useState(false);
   const [gatewayResult, setGatewayResult] = useState(null);
