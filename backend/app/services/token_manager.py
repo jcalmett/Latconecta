@@ -3,7 +3,7 @@ Token Manager Service
 Gestiona tokens de autenticación de vendors en cache de memoria
 """
 from typing import Optional, Dict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 import logging
 
@@ -44,7 +44,7 @@ class TokenManager:
                 return None
             
             # Verificar expiración
-            if datetime.utcnow() >= token_data['expires_at']:
+            if datetime.now(timezone.utc) >= token_data['expires_at']:
                 logger.warning(f"⚠️ Token expirado para {vendor_code}")
                 del self._tokens[vendor_code]
                 return None
@@ -67,12 +67,12 @@ class TokenManager:
             expires_in_seconds: Tiempo de vida en segundos (default: 50 min)
         """
         async with self._lock:
-            expires_at = datetime.utcnow() + timedelta(seconds=expires_in_seconds)
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)
             
             self._tokens[vendor_code] = {
                 'token': token,
                 'expires_at': expires_at,
-                'created_at': datetime.utcnow()
+                'created_at': datetime.now(timezone.utc)
             }
             
             logger.info(
@@ -98,7 +98,7 @@ class TokenManager:
             Lista de vendor_codes que necesitan refresh
         """
         async with self._lock:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             threshold = now + timedelta(minutes=threshold_minutes)
             
             vendors_to_refresh = []
@@ -122,7 +122,7 @@ class TokenManager:
         """
         async with self._lock:
             status = {}
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             for vendor_code, token_data in self._tokens.items():
                 time_remaining = (token_data['expires_at'] - now).total_seconds()

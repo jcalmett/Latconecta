@@ -933,10 +933,7 @@ class UniversalVendorService:
                     f"⚠️ [{vendor_code}/catalog_sync] NO_VINO vp_code={bd_row.vp_code} precio_ref={precio_ref_bd} Bs"
                 )
 
-        # 12. Commit de todos los cambios
-        await self.db.commit()
-
-        # 13. Actualizar last_sync_date del vendor
+        # 12. Actualizar last_sync_date del vendor (dentro de la misma transacción)
         await self.db.execute(
             text("""
                 UPDATE vendors
@@ -947,6 +944,8 @@ class UniversalVendorService:
             """),
             {"vendor_code": vendor_code}
         )
+
+        # 13. Commit único — precios + last_sync_date en una sola transacción
         await self.db.commit()
 
         count_nuevo = sum(1 for r in reporte if r["status"] == "NUEVO")

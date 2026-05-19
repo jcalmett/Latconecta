@@ -8,7 +8,7 @@ from app.database import Base
 
 class Product(Base):
     """
-    Modelo de productos de Bitel
+    Modelo de productos Latconecta
     Sincronizado con la estructura real de la tabla products
     """
     __tablename__ = "products"

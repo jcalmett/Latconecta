@@ -72,6 +72,45 @@ async def _attempt_payment_reversal(request, calculation, payment_ref: str) -> D
             return {'success': False, 'reversal_ref': None, 'cancel_id': None, 'message': f'Error: {str(e)}'}
 
 
+async def _calculate_balance_info(
+    vendor,
+    vendor_product,
+    calculation,
+    db
+) -> tuple:
+    """
+    Calcula la información de balance del vendor para una compra.
+
+    Centraliza la lógica de selección de balance (USD vs local) y
+    el cálculo del monto a deducir según la moneda del vendor_product.
+
+    Returns:
+        tuple: (available_balance, amount_to_deduct, balance_currency, balance_to_use_type)
+    """
+    if vendor_product.vp_currency == 'USD':
+        balance_to_use_type = 'usd'
+        balance_currency    = 'USD'
+        available_balance   = Decimal(str(vendor.vendor_usd_balance or 0))
+        amount_to_deduct    = calculation.purchase_vendor_amount
+    else:
+        if calculation.purchase_vendor_currency == 'USD':
+            balance_to_use_type = 'usd'
+            balance_currency    = 'USD'
+            available_balance   = Decimal(str(vendor.vendor_usd_balance or 0))
+            rate = await exchange_rate_service.get_exchange_rate(
+                vendor_product.vp_currency, 'USD',
+                margin_type='conciliation', db=db
+            )
+            amount_to_deduct = calculation.purchase_vendor_amount / Decimal(str(rate))
+        else:
+            balance_to_use_type = 'local'
+            balance_currency    = vendor.vendor_local_currency
+            available_balance   = Decimal(str(vendor.vendor_local_balance or 0))
+            amount_to_deduct    = calculation.purchase_vendor_amount
+
+    return available_balance, amount_to_deduct, balance_currency, balance_to_use_type
+
+
 def _map_purchase_to_response(purchase: Purchase) -> 'PurchaseResponse':
     return PurchaseResponse(
         purchase_id=purchase.purchase_id, purchase_reference=purchase.purchase_reference,
@@ -307,21 +346,8 @@ async def create_purchase(
             exchange_rate_override=Decimal(str(purchase_data.exchange_rate)) if purchase_data.exchange_rate else None, db=db)
 
         # PASO 3: VALIDAR BALANCE
-        if vendor_product.vp_currency == 'USD':
-            balance_to_use_type, balance_currency = 'usd', 'USD'
-            available_balance = Decimal(str(vendor.vendor_usd_balance or 0))
-            amount_to_deduct = calculation.purchase_vendor_amount
-        else:
-            if calculation.purchase_vendor_currency == 'USD':
-                balance_to_use_type, balance_currency = 'usd', 'USD'
-                available_balance = Decimal(str(vendor.vendor_usd_balance or 0))
-                rate = await exchange_rate_service.get_exchange_rate(vendor_product.vp_currency, 'USD', margin_type='conciliation', db=db)
-                amount_to_deduct = calculation.purchase_vendor_amount / Decimal(str(rate))
-            else:
-                balance_to_use_type = 'local'
-                balance_currency = vendor.vendor_local_currency
-                available_balance = Decimal(str(vendor.vendor_local_balance or 0))
-                amount_to_deduct = calculation.purchase_vendor_amount
+        available_balance, amount_to_deduct, balance_currency, balance_to_use_type = \
+            await _calculate_balance_info(vendor, vendor_product, calculation, db)
 
         if amount_to_deduct > 0 and available_balance < amount_to_deduct:
             raise HTTPException(status_code=400, detail=f"Insufficient vendor balance. Available: {available_balance} {balance_currency}")
@@ -653,21 +679,8 @@ async def check_balance(product_id: int, product_type: Optional[str] = None,
             db=db
         )
 
-        if vendor_product.vp_currency == 'USD':
-            balance_currency = 'USD'
-            available_balance = Decimal(str(vendor.vendor_usd_balance or 0))
-            amount_to_deduct = calculation.purchase_vendor_amount
-        else:
-            if calculation.purchase_vendor_currency == 'USD':
-                balance_currency = 'USD'
-                available_balance = Decimal(str(vendor.vendor_usd_balance or 0))
-                rate = await exchange_rate_service.get_exchange_rate(
-                    vendor_product.vp_currency, 'USD', margin_type='conciliation', db=db)
-                amount_to_deduct = calculation.purchase_vendor_amount / Decimal(str(rate))
-            else:
-                balance_currency = vendor.vendor_local_currency
-                available_balance = Decimal(str(vendor.vendor_local_balance or 0))
-                amount_to_deduct = calculation.purchase_vendor_amount
+        available_balance, amount_to_deduct, balance_currency, _ = \
+            await _calculate_balance_info(vendor, vendor_product, calculation, db)
 
         if amount_to_deduct > 0 and available_balance < amount_to_deduct:
             raise HTTPException(
