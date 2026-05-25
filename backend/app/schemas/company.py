@@ -116,11 +116,21 @@ class CompanyUpdate(BaseModel):
 
     company_barcode_available: Optional[str] = None
     
-    # Emails de soporte
-    company_mail_customer_support: Optional[EmailStr] = None
-    company_mail_commercial_support: Optional[EmailStr] = None
+    # Emails de soporte (str en lugar de EmailStr para permitir vacío)
+    company_mail_customer_support: Optional[str] = None
+    company_mail_commercial_support: Optional[str] = None
 
     updated_by: Optional[str] = Field(None, max_length=100, description="Usuario que actualiza")
+
+    @field_validator("company_mail_customer_support", "company_mail_commercial_support", mode="before")
+    @classmethod
+    def validate_email_optional(cls, v):
+        """Convierte string vacío a None y valida formato si hay valor"""
+        if not v or v.strip() == "":
+            return None
+        if "@" not in v:
+            raise ValueError(f"Email inválido: debe contener @")
+        return v.strip()
 
     @field_validator("country_id")
     @classmethod
