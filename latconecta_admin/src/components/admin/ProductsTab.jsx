@@ -7,6 +7,22 @@ import servicesService from "../../services/servicesService";
 import vendorProductsService from "../../services/vendorProductsService";
 import { getImageUrl, FALLBACK_IMAGES } from "../../utils/imageHelper";
 
+// ─── REGLAS DE NEGOCIO: tipos de monto permitidos por servicio ───────────────
+// service_id: 2=Paquetes, 3=Bill Payment, 4=Smartphones, 5=TopUps, 6=Transfers
+const ALLOWED_AMOUNT_TYPES = {
+  2: ['F'],           // Paquetes       → solo Fijo
+  3: ['V', 'F'],      // Bill Payment   → Variable o Fijo
+  4: ['F'],           // Smartphones    → solo Fijo
+  5: ['F', 'R'],      // TopUps         → Fijo o Rango
+  6: ['R'],           // Transfers      → solo Rango
+};
+
+const AMOUNT_TYPE_LABELS = {
+  F: 'F - Fijo',
+  R: 'R - Rango',
+  V: 'V - Variable',
+};
+
 const ProductsTab = ({
   formData,
   setFormData,
@@ -143,6 +159,15 @@ const ProductsTab = ({
       }
     }
   }, [formData.country_id, formData.service_id, companies]);
+
+  // Resetear amount_type si el servicio cambia y el tipo actual no es permitido
+  useEffect(() => {
+    const sid = parseInt(formData.service_id);
+    const allowed = ALLOWED_AMOUNT_TYPES[sid];
+    if (allowed && formData.product_amount_type && !allowed.includes(formData.product_amount_type)) {
+      setFormData(prev => ({ ...prev, product_amount_type: allowed[0] }));
+    }
+  }, [formData.service_id]);
 
   // ==================== CARGAR EN MODO EDICIÓN ====================
   useEffect(() => {
@@ -834,9 +859,10 @@ const ProductsTab = ({
                           }}
                           className="w-full px-4 py-1.5 border rounded-lg"
                         >
-                          <option value="F">F - Fixed</option>
-                          <option value="R">R - Range</option>
-                          <option value="V">V - Variable</option>
+                          {/* Opciones filtradas según servicio seleccionado */}
+                          {(ALLOWED_AMOUNT_TYPES[parseInt(formData.service_id)] || ['F', 'R', 'V']).map(type => (
+                            <option key={type} value={type}>{AMOUNT_TYPE_LABELS[type]}</option>
+                          ))}
                         </select>
                       </div>
 

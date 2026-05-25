@@ -1,8 +1,15 @@
 """
 LATCONECTA - Product Schemas
 Esquemas Pydantic para validación de datos de productos
-Actualizado: 2026-01-11 - Agregados campos para rangos de precios
+Actualizado: 2026-05-25 - Validación de amount_type por servicio
 Sincronizado con tabla products (24 campos)
+
+REGLAS DE NEGOCIO — product_amount_type por servicio (IDs de BD):
+  service_id=2 Paquetes     → solo F
+  service_id=3 Bill Payment → solo V o F
+  service_id=4 Smartphones  → solo F
+  service_id=5 TopUps       → F o R
+  service_id=6 Transfers    → solo R
 """
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional
@@ -89,6 +96,48 @@ class ProductBase(BaseModel):
             if self.product_total_price_max < self.product_total_price:
                 raise ValueError("product_total_price_max debe ser >= product_total_price")
         
+        return self
+
+    @model_validator(mode='after')
+    def validate_amount_type_by_service(self):
+        """
+        Valida que product_amount_type sea válido para el servicio seleccionado.
+
+        Reglas de negocio:
+          service_id=2 Paquetes     → solo F
+          service_id=3 Bill Payment → V o F
+          service_id=4 Smartphones  → solo F
+          service_id=5 TopUps       → F o R
+          service_id=6 Transfers    → solo R
+        """
+        # Mapa de tipos permitidos por service_id
+        ALLOWED_TYPES = {
+            2: ['F'],           # Paquetes
+            3: ['V', 'F'],      # Bill Payment
+            4: ['F'],           # Smartphones
+            5: ['F', 'R'],      # TopUps
+            6: ['R'],           # Transfers
+        }
+
+        SERVICE_NAMES = {
+            2: 'Paquetes',
+            3: 'Bill Payment',
+            4: 'Smartphones',
+            5: 'TopUps',
+            6: 'Transfers',
+        }
+
+        sid = self.service_id
+        amt = self.product_amount_type
+
+        if sid in ALLOWED_TYPES and amt not in ALLOWED_TYPES[sid]:
+            allowed = ', '.join(ALLOWED_TYPES[sid])
+            svc_name = SERVICE_NAMES.get(sid, f'service_id={sid}')
+            raise ValueError(
+                f"Para el servicio '{svc_name}' el tipo de monto debe ser: {allowed}. "
+                f"Valor recibido: '{amt}'"
+            )
+
         return self
 
 
@@ -178,6 +227,43 @@ class ProductUpdate(BaseModel):
                 if self.product_total_price_max < self.product_total_price:
                     raise ValueError("product_total_price_max debe ser >= product_total_price")
         
+        return self
+
+    @model_validator(mode='after')
+    def validate_amount_type_by_service(self):
+        """
+        Valida que product_amount_type sea válido para el servicio seleccionado.
+        Solo aplica si ambos service_id y product_amount_type están presentes en el update.
+        """
+        ALLOWED_TYPES = {
+            2: ['F'],
+            3: ['V', 'F'],
+            4: ['F'],
+            5: ['F', 'R'],
+            6: ['R'],
+        }
+
+        SERVICE_NAMES = {
+            2: 'Paquetes',
+            3: 'Bill Payment',
+            4: 'Smartphones',
+            5: 'TopUps',
+            6: 'Transfers',
+        }
+
+        sid = self.service_id
+        amt = self.product_amount_type
+
+        # Solo validar si ambos campos están presentes en el update
+        if sid is not None and amt is not None:
+            if sid in ALLOWED_TYPES and amt not in ALLOWED_TYPES[sid]:
+                allowed = ', '.join(ALLOWED_TYPES[sid])
+                svc_name = SERVICE_NAMES.get(sid, f'service_id={sid}')
+                raise ValueError(
+                    f"Para el servicio '{svc_name}' el tipo de monto debe ser: {allowed}. "
+                    f"Valor recibido: '{amt}'"
+                )
+
         return self
 
 
