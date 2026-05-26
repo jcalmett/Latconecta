@@ -1,4 +1,4 @@
-// latconecta_users/src/services/vendorProductsService.js
+// src/services/vendorProductsService.js
 import apiClient from './apiClient';
 
 const vendorProductsService = {

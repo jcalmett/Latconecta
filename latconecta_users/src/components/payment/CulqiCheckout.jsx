@@ -1,4 +1,4 @@
-// latconecta_users/src/components/payment/CulqiCheckout.jsx
+// src/components/payment/CulqiCheckout.jsx
 /**
  * Culqi Checkout V4 Component
  *

@@ -109,7 +109,7 @@ const PurchasePopup = React.memo(({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
           <h3 className="text-2xl font-bold text-bitel-blue">Compra - {getStepTitle()}</h3>
           <button onClick={closePurchasePopup} className="text-gray-400 hover:text-gray-600">
@@ -118,10 +118,57 @@ const PurchasePopup = React.memo(({
         </div>
 
         <div className="p-6">
-          {/* PASO 2: Validación de número/cuenta */}
+          {/* PASO 2: Detalle del Producto + Validación */}
           {purchaseStep === 2 && (
             <div>
-              <h4 className="text-xl font-bold text-bitel-blue mb-4">
+
+              {/* ── Detalle del producto ── */}
+              <div className="mb-5">
+                <div className="flex gap-4 items-start">
+                  {selectedProduct?.product_photo && (
+                    <img
+                      src={getImageUrl(selectedProduct.product_photo, 'product')}
+                      alt={selectedProduct.product_name}
+                      onError={(e) => (e.target.src = FALLBACK_IMAGES.product)}
+                      className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-lg font-bold text-bitel-blue leading-tight mb-1">
+                      {selectedProduct?.product_name}
+                    </h4>
+                    {selectedProduct?.product_description && (
+                      <p className="text-xs text-gray-500 mb-2 line-clamp-2">
+                        {selectedProduct.product_description}
+                      </p>
+                    )}
+                    {selectedProduct?.product_amount_type === 'R' ? (
+                      <div className="text-sm text-blue-700 font-semibold">
+                        💰 Rango: {selectedProduct.product_currency} {parseFloat(selectedProduct.product_base_price).toFixed(2)} – {parseFloat(selectedProduct.product_base_price_max).toFixed(2)}
+                      </div>
+                    ) : selectedProduct?.product_amount_type === 'V' ? (
+                      <div className="text-sm text-blue-700 font-semibold">
+                        💰 Monto según consulta de deuda
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl font-bold text-bitel-blue">
+                          {selectedProduct?.product_currency} {parseFloat(selectedProduct?.product_total_price || 0).toFixed(2)}
+                        </span>
+                        {parseFloat(selectedProduct?.product_discount_percentage || 0) > 0 && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
+                            -{parseFloat(selectedProduct.product_discount_percentage).toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <hr className="mt-4 border-gray-200" />
+              </div>
+
+              {/* ── Input de validación ── */}
+              <h4 className="text-base font-bold text-gray-700 mb-3">
                 {purchaseData.productType === 'bill_payment'
                   ? 'Ingrese número de cuenta'
                   : purchaseData.productType === 'smartphone'

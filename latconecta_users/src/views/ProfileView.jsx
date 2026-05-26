@@ -469,7 +469,7 @@ const ProfileView = ({ user, showNotification, onUserUpdate }) => {
                 <div className="text-center py-8">
                   <p className="text-gray-500">No tienes compras aún</p>
                   <button
-                    onClick={() => (window.location.href = '/latconecta_users/shop')}
+                    onClick={() => (window.location.href = '/shop')}
                     className="mt-4 bg-bitel-yellow text-bitel-blue px-6 py-2 rounded-lg font-semibold hover:bg-bitel-yellow-dark transition-colors"
                   >
                     Ir a la Tienda
