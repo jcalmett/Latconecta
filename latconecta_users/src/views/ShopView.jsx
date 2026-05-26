@@ -32,6 +32,7 @@ const ShopView = ({ user, showNotification }) => {
   const [loading, setLoading] = useState(true);
 
   // Estados para modales
+  const [showProductDetail, setShowProductDetail] = useState(false);
   const [showPurchasePopup, setShowPurchasePopup] = useState(false);
 
   // Estados para flujo de compra
@@ -164,14 +165,14 @@ const ShopView = ({ user, showNotification }) => {
 
   const handleProductClick = (product) => {
     setSelectedProduct(product);
-    handleBuyClick(product);
+    setShowProductDetail(true);
   };
 
-  const handleBuyClick = async (product) => {
+  const handleBuyClick = async () => {
     console.log('🔍 selectedService al comprar:', selectedService?.service_name, selectedService?.service_id);
     const productType = detectProductType(selectedService);
-    const currentProduct = product || selectedProduct;
 
+    setShowProductDetail(false);
     setShowPurchasePopup(true);
     setPurchaseStep(2);
     setError(null);
@@ -181,15 +182,15 @@ const ShopView = ({ user, showNotification }) => {
       console.log('📦 Cargando vendor_product...');
 
       const vendorProduct = await vendorProductsService.getByKeys(
-        currentProduct.product_vendor_code,
-        currentProduct.product_vendpro_code,
-        currentProduct.product_vendpro_skuid
+        selectedProduct.product_vendor_code,
+        selectedProduct.product_vendpro_code,
+        selectedProduct.product_vendpro_skuid
       );
 
       console.log('✅ Vendor product cargado:', vendorProduct);
       setSelectedVendorProduct(vendorProduct);
 
-      const productCurrency = currentProduct.product_currency;
+      const productCurrency = selectedProduct.product_currency;
       const vendorCurrency = vendorProduct.vp_currency;
 
       console.log(`💱 Monedas: Product=${productCurrency}, Vendor=${vendorCurrency}`);
@@ -282,6 +283,11 @@ const ShopView = ({ user, showNotification }) => {
         );
 
         console.log('Account validation response:', response);
+        logOperationResult('val_cuenta', response, {
+          account_number: purchaseData.accountNumber,
+          monto_base: response?.data?.monto_base,
+          indicador: response?.data?.indicador,
+        });
 
         if (response && (response.status === 200 || response.status === 'success')) {
           const isValid = response.data?.valid === true;
@@ -328,6 +334,10 @@ const ShopView = ({ user, showNotification }) => {
         );
 
         console.log('Phone validation response:', response);
+        logOperationResult('val_telefono', response, {
+          phone_number: purchaseData.phoneNumber,
+          valid: response?.data?.valid,
+        });
 
         if (response && (response.status === 200 || response.status === 'success')) {
           const isValid = response.data?.valid === true;
@@ -451,6 +461,36 @@ const ShopView = ({ user, showNotification }) => {
       const response = await purchasesService.create(purchaseRequest);
 
       console.log('✅ Purchase response:', response);
+
+      // Log de cada sub-operación del proceso de compra
+      const pMethod = purchaseData.paymentMethod === 'card' ? 'pago_tarjeta' : 'pago_barcode';
+      const pType   = purchaseData.productType || 'topup';
+      const provOp  = `provision_${pType}`;
+
+      const payOk  = response.payment_status === 'Success' || response.payment_status === 'Pending';
+      const provOk = response.purchase_status === 'Success';
+      const revOk  = response.purchase_status === 'Failed' && response.payment_status === 'Reversed';
+      const isSimulated = response.simulated === true;
+
+      // Pago
+      console.log(
+        `${isSimulated ? '🎭 [F1]' : '🚀 [F2]'} ${pMethod} → ${payOk ? '✅ SUCCESS' : '❌ FAIL'}`,
+        { payment_status: response.payment_status, payment_ref: response.payment_ref, simulated: isSimulated }
+      );
+
+      // Provisión
+      console.log(
+        `${isSimulated ? '🎭 [F1]' : '🚀 [F2]'} ${provOp} → ${provOk ? '✅ SUCCESS' : '❌ FAIL'}`,
+        { purchase_status: response.purchase_status, provision_ref: response.provision_ref, simulated: isSimulated }
+      );
+
+      // Reversión (si aplica)
+      if (!provOk && payOk) {
+        console.log(
+          `${isSimulated ? '🎭 [F1]' : '🚀 [F2]'} anulacion_tarjeta → ${revOk ? '✅ SUCCESS' : '❌ FAIL — 🚨 INTERVENCIÓN MANUAL'}`,
+          { reversal_ref: response.reversal_ref, requires_manual: response.requires_manual_intervention, simulated: isSimulated }
+        );
+      }
 
       setPurchaseResult({
         success: response.purchase_status === 'Success' ||
@@ -1125,6 +1165,102 @@ Dirección: ${purchaseData.deliveryAddress}
     setError(null);
   };
 
+  const ProductDetailModal = () => {
+    if (!showProductDetail || !selectedProduct) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+            <h3 className="text-2xl font-bold text-bitel-blue">Detalle del Producto</h3>
+            <button onClick={() => setShowProductDetail(false)} className="text-gray-400 hover:text-gray-600">
+              <X size={24} />
+            </button>
+          </div>
+
+          <div className="p-6">
+            <div className="mb-6">
+              <img
+                src={getImageUrl(selectedProduct.product_photo, 'product')}
+                alt={selectedProduct.product_name}
+                onError={(e) => (e.target.src = FALLBACK_IMAGES.product)}
+                className="w-full h-64 object-cover rounded-lg"
+              />
+            </div>
+
+            <h2 className="text-3xl font-bold text-bitel-blue mb-4">{selectedProduct.product_name}</h2>
+            <p className="text-gray-700 mb-6">{selectedProduct.product_description}</p>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              {selectedProduct.product_amount_type === 'R' &&
+               selectedProduct.product_base_price &&
+               selectedProduct.product_base_price_max ? (
+                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                  <div className="mb-2 p-2 bg-blue-50 rounded">
+                    <div className="text-sm font-semibold text-blue-800 mb-1">
+                      💰 Producto con Monto Variable
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700 text-sm">Rango permitido:</span>
+                      <span className="font-bold text-blue-900">
+                        {selectedProduct.product_currency} {parseFloat(selectedProduct.product_base_price).toFixed(2)} - {parseFloat(selectedProduct.product_base_price_max).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-600 text-center mt-2">
+                    Podrás ingresar el monto deseado en el siguiente paso
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg p-3 border border-gray-200">
+                  <div className="flex justify-between items-center text-sm mb-1">
+                    <span className="text-gray-700">Precio Base:</span>
+                    <span className="font-semibold">
+                      {selectedProduct.product_currency} {parseFloat(selectedProduct.product_base_price).toFixed(2)}
+                    </span>
+                  </div>
+
+                  {parseFloat(selectedProduct.product_discount_percentage || 0) > 0 && (
+                    <div className="flex justify-between items-center text-sm mb-1 text-green-600">
+                      <span>Descuento ({parseFloat(selectedProduct.product_discount_percentage || 0).toFixed(2)}%):</span>
+                      <span>
+                        -{selectedProduct.product_currency} {parseFloat(selectedProduct.product_discount_amount || 0).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+
+                  {parseFloat(selectedProduct.product_fee || 0) > 0 && (
+                    <div className="flex justify-between items-center text-sm mb-2">
+                      <span className="text-gray-700">Fee:</span>
+                      <span className="font-semibold">
+                        +{selectedProduct.product_currency} {parseFloat(selectedProduct.product_fee || 0).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-300">
+                    <span className="font-bold text-gray-900">Total a Pagar:</span>
+                    <span className="text-xl font-bold text-bitel-blue">
+                      {selectedProduct.product_currency} {parseFloat(selectedProduct.product_total_price || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={handleBuyClick}
+              className="w-full bg-bitel-yellow text-bitel-blue py-3 rounded-lg font-bold text-lg hover:bg-bitel-yellow-dark transition-colors flex items-center justify-center space-x-2"
+            >
+              <ShoppingCart size={24} />
+              <span>Comprar Ahora</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50 py-12">
@@ -1175,7 +1311,7 @@ Dirección: ${purchaseData.deliveryAddress}
               </div>
 
               <a
-                href="/select"
+                href="/latconecta_users/select"
                 className="flex items-center space-x-2 text-bitel-blue hover:text-blue-700 transition-colors"
               >
                 <ArrowLeft size={20} />
@@ -1217,7 +1353,7 @@ Dirección: ${purchaseData.deliveryAddress}
                 : 'No hay productos disponibles'}
             </p>
             <a
-              href="/select"
+              href="/latconecta_users/select"
               className="inline-block mt-4 text-bitel-blue hover:text-blue-700 font-semibold"
             >
               ← Volver a Selección
@@ -1275,6 +1411,7 @@ Dirección: ${purchaseData.deliveryAddress}
         )}
       </div>
 
+      <ProductDetailModal />
       <OperationsPanel />
       <PurchasePopup
         showPurchasePopup={showPurchasePopup}

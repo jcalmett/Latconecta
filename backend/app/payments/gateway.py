@@ -3,9 +3,16 @@
 Payment Gateway Service - Orquestador Genérico Multi-Gateway
 
 Arquitectura:
-  purchases.py → PaymentGatewayService → CulqiAdapter   (PE - activo)
-                                        → ConektaAdapter (MX - futuro)
-                                        → StripeAdapter  (US - futuro)
+  purchases.py → PaymentGatewayService → CulqiAdapter    (PE - activo)
+                                        → StripeAdapter   (MX/US - futuro)
+                                        → LatamGroup      (MX barcode - futuro)
+
+Para agregar un nuevo país o procesador:
+  1. Agregar entrada en COUNTRY_PAYMENT_CONFIG con card_gateway y barcode_gateway
+  2. Agregar entrada en PAYMENT_ADAPTER_REGISTRY con el módulo y clase del adaptador
+  3. Agregar entrada en BARCODE_ADAPTER_REGISTRY si aplica
+  4. Implementar el adaptador correspondiente
+  5. Actualizar valid_gateways_by_country en config.py
 """
 
 import logging
@@ -15,33 +22,72 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# ─── TABLA MAESTRA: configuración de procesadores por país ───────────────────
+#
+# card_gateway:    procesador de tarjeta de crédito activo para este país
+# barcode_gateway: procesador de barcode activo para este país (None si no aplica)
+#
+# Para agregar MX: agregar entrada con sus procesadores cuando estén definidos
+# Para agregar US: agregar entrada con stripe y barcode=None
+#
+COUNTRY_PAYMENT_CONFIG = {
+    "PE": {
+        "card_gateway":    "culqi",       # Culqi — tarjeta, Yape, billeteras
+        "barcode_gateway": "barcodeapi",  # barcodeapi.org
+    },
+    "MX": {
+        "card_gateway":    "stripe",      # Stripe (pendiente integración)
+        "barcode_gateway": "latamgroup",  # LatamGroup (pendiente integración)
+    },
+    "US": {
+        "card_gateway":    "stripe",      # Stripe (pendiente integración)
+        "barcode_gateway": None,          # No aplica en USA
+    },
+}
+
+# ─── REGISTRY DE ADAPTADORES DE TARJETA ──────────────────────────────────────
+#
+# Agregar entrada cuando el adaptador esté implementado.
+# El gateway_name debe coincidir con card_gateway en COUNTRY_PAYMENT_CONFIG.
+#
 PAYMENT_ADAPTER_REGISTRY = {
     "culqi": {
         "module": "app.payments.culqi_adapter",
         "class": "CulqiAdapter",
-        "country": "PE",
-        "description": "Culqi - Perú (tarjeta, Yape, billeteras, PagoEfectivo)"
+        "countries": ["PE"],
+        "description": "Culqi — Perú (tarjeta, Yape, billeteras, PagoEfectivo)"
     },
-    # "conekta": {
-    #     "module": "app.payments.conekta_adapter",
-    #     "class": "ConektaAdapter",
-    #     "country": "MX",
-    #     "description": "Conekta - México (tarjeta, OXXO, SPEI)"
-    # },
     # "stripe": {
     #     "module": "app.payments.stripe_adapter",
     #     "class": "StripeAdapter",
-    #     "country": "US",
-    #     "description": "Stripe - USA (tarjeta, Apple Pay)"
+    #     "countries": ["MX", "US"],
+    #     "description": "Stripe — México / USA (tarjeta, Apple Pay)"
+    # },
+    # "latamgroup": {
+    #     "module": "app.payments.latamgroup_adapter",
+    #     "class": "LatamGroupAdapter",
+    #     "countries": ["MX"],
+    #     "description": "LatamGroup — México (tarjeta)"
     # },
 }
 
+# ─── REGISTRY DE ADAPTADORES DE BARCODE ──────────────────────────────────────
+#
+# key: barcode_gateway name (debe coincidir con barcode_gateway en COUNTRY_PAYMENT_CONFIG)
+#
 BARCODE_ADAPTER_REGISTRY = {
-    "PE": {
+    "barcodeapi": {
         "module": "app.barcode.service",
         "class": "PeruBarcodeAdapter",
-        "description": "Barcode Perú (barcodeapi.org)"
+        "countries": ["PE"],
+        "description": "barcodeapi.org — Perú"
     },
+    # "latamgroup": {
+    #     "module": "app.barcode.latamgroup_adapter",
+    #     "class": "LatamGroupBarcodeAdapter",
+    #     "countries": ["MX"],
+    #     "description": "LatamGroup — México (barcode/OXXO)"
+    # },
 }
 
 

@@ -202,17 +202,36 @@ async def get_payment_config():
       - Saber qué métodos de pago están disponibles
       - Determinar si activar Yape/billeteras (requiere llamar a /payments/order primero)
     """
+    # Obtener configuración del país activo desde la tabla maestra
+    from app.payments.gateway import COUNTRY_PAYMENT_CONFIG
+    country_cfg = COUNTRY_PAYMENT_CONFIG.get(settings.DEPLOYMENT_COUNTRY, {})
+
     return {
-        "gateway":           settings.PAYMENT_GATEWAY,
-        "public_key":        settings.CULQI_PUBLIC_KEY,
-        "rsa_id":            settings.CULQI_RSA_ID or None,
-        "rsa_public_key":    settings.CULQI_RSA_PUBLIC_KEY or None,
-        "card_available":    settings.CARD_AVAILABLE,
-        "barcode_available": settings.BARCODE_AVAILABLE,
-        "yape_available":    True,
-        "wallet_available":  True,
-        "card":              {"mode": "fase2"},
-        "barcode":           {"mode": "fase2"},
+        # País e instalación
+        "deployment_country":  settings.DEPLOYMENT_COUNTRY,
+
+        # Procesadores activos para este país
+        "gateway":             settings.PAYMENT_GATEWAY,
+        "card_gateway":        country_cfg.get("card_gateway", settings.PAYMENT_GATEWAY),
+        "barcode_gateway":     country_cfg.get("barcode_gateway"),
+
+        # Disponibilidad de métodos (controlada por .env)
+        "card_available":      settings.CARD_AVAILABLE,
+        "barcode_available":   settings.BARCODE_AVAILABLE,
+
+        # Claves públicas del gateway de tarjeta activo
+        # Al agregar nuevos gateways, agregar sus public_keys aquí
+        "public_key":          settings.CULQI_PUBLIC_KEY if settings.PAYMENT_GATEWAY == "culqi" else None,
+        "rsa_id":              settings.CULQI_RSA_ID or None if settings.PAYMENT_GATEWAY == "culqi" else None,
+        "rsa_public_key":      settings.CULQI_RSA_PUBLIC_KEY or None if settings.PAYMENT_GATEWAY == "culqi" else None,
+
+        # Capacidades adicionales del gateway
+        "yape_available":      settings.PAYMENT_GATEWAY == "culqi",   # Solo Culqi tiene Yape
+        "wallet_available":    settings.PAYMENT_GATEWAY == "culqi",   # Solo Culqi tiene billeteras
+
+        # Modo de operación (F1/F2 — controlado por OperationsPanel)
+        "card":                {"mode": "fase2"},
+        "barcode":             {"mode": "fase2"},
     }
 
 

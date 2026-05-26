@@ -161,9 +161,17 @@ class Settings(BaseSettings):
             )
         
         # 4. Validar consistencia de métodos de pago según país
-        if self.DEPLOYMENT_COUNTRY == "PE" and self.PAYMENT_GATEWAY != "culqi":
+        #    La tabla COUNTRY_PAYMENT_CONFIG (en gateway.py) es la fuente de verdad.
+        #    Aquí solo validamos que el país tenga configuración definida.
+        valid_gateways_by_country = {
+            "PE": ["culqi"],
+            "MX": ["stripe", "latamgroup"],   # por definir al integrar MX
+            "US": ["stripe"],
+        }
+        allowed = valid_gateways_by_country.get(self.DEPLOYMENT_COUNTRY, [])
+        if allowed and self.PAYMENT_GATEWAY not in allowed:
             raise ValueError(
-                f"Para Perú (PE) el PAYMENT_GATEWAY debe ser 'culqi'. "
+                f"Para {self.DEPLOYMENT_COUNTRY} el PAYMENT_GATEWAY debe ser uno de: {allowed}. "
                 f"Actual: {self.PAYMENT_GATEWAY}"
             )
         
