@@ -224,6 +224,8 @@ app.include_router(mock_vendors.router, prefix="/api/v1/mock", tags=["Mock Vendo
 
 # Upload router
 app.include_router(upload.router, prefix="/api/v1")
+from app.routers.upload_reclamaciones import router as upload_reclamaciones_router
+app.include_router(upload_reclamaciones_router, prefix="/api/v1")
 
 # Payments router
 app.include_router(payments_router, prefix="/api/v1")

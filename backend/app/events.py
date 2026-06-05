@@ -10,6 +10,7 @@ from app.services.scheduler_service import scheduler_service
 from app.services.token_manager import token_manager
 from app.services.vendor_login_service import VendorLoginService
 from app.config import settings
+from app.database import AsyncSessionLocal as _AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,26 @@ async def startup_event():
             logger.info("⚠️ Vendor login DESHABILITADO (modo desarrollo/mock)")
             logger.info("💡 Usando simulador local para vendors")
         
+        # Scheduler diario 08:00 Lima — alertas de vencimiento de reclamaciones
+        try:
+            from apscheduler.triggers.cron import CronTrigger
+            from app.complaints.service import check_complaint_deadlines as _check_lr
+            import pytz
+
+            async def _lr_deadline_job():
+                async with _AsyncSessionLocal() as db:
+                    await _check_lr(db)
+
+            scheduler_service.scheduler.add_job(
+                _lr_deadline_job,
+                trigger=CronTrigger(hour=8, minute=0, timezone=pytz.timezone("America/Lima")),
+                id="lr_deadline_check",
+                replace_existing=True,
+            )
+            logger.info("✅ Scheduler LR-001: alerta vencimiento reclamaciones — 08:00 Lima")
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo registrar scheduler LR-001: {e}")
+
         logger.info("=" * 80)
         logger.info("✅ STARTUP COMPLETADO - BACKEND LISTO")
         logger.info("=" * 80)

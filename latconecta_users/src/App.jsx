@@ -12,6 +12,8 @@ import { useAuth } from './hooks/useAuth';
 import latconectaService from './services/latconectaService';
 import ShopView from './views/ShopView';
 import ProfileView from './views/ProfileView';
+import LibroReclamaciones from './components/complaints/LibroReclamaciones';
+import RespuestaOferta from './components/complaints/RespuestaOferta';
 
 
 function AppContent() {
@@ -157,6 +159,9 @@ function AppContent() {
             </div>
           }
         />
+        {/* Libro de Reclamaciones Virtual — LR-001 (público, sin auth) */}
+        <Route path="/reclamaciones" element={<LibroReclamaciones showNotification={showNotification} />} />
+        <Route path="/reclamaciones/oferta/:numero" element={<RespuestaOferta showNotification={showNotification} />} />
       </Routes>
 
       <OperationsPanel />

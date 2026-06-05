@@ -6,28 +6,25 @@ const WelcomeView = ({ latconectaData }) => {
   const navigate = useNavigate();
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
-  // Fotos de marketing de Latconecta
   const marketingPhotos = [
     latconectaData?.latconecta_photo_mkt1,
     latconectaData?.latconecta_photo_mkt2,
     latconectaData?.latconecta_photo_mkt3,
     latconectaData?.latconecta_photo_mkt4
-  ].filter(Boolean); // Filtrar nulos/undefined
+  ].filter(Boolean);
 
-  // Carrusel automático - cambio cada 3 segundos
   useEffect(() => {
     if (marketingPhotos.length > 0) {
       const interval = setInterval(() => {
         setCurrentPhotoIndex((prev) => (prev + 1) % marketingPhotos.length);
       }, 3000);
-
       return () => clearInterval(interval);
     }
   }, [marketingPhotos.length]);
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50">
-      {/* SECCIÓN 1: LOGO (30% altura) */}
+      {/* SECCIÓN 1: LOGO */}
       <div className="flex items-center justify-center" style={{ height: '30vh' }}>
         <div className="w-full max-w-md px-4">
           <img
@@ -40,10 +37,9 @@ const WelcomeView = ({ latconectaData }) => {
         </div>
       </div>
 
-      {/* ESPACIO REDUCIDO - Distancia entre Logo y Lema 1 */}
       <div className="-mt-12"></div>
 
-      {/* SECCIÓN 2: SLOGAN 1 (20% altura) */}
+      {/* SECCIÓN 2: SLOGAN 1 */}
       <div className="flex items-center justify-center" style={{ height: '20vh' }}>
         <div className="text-center px-4">
           <h1 className="text-3xl md:text-5xl font-bold text-bitel-blue">
@@ -52,13 +48,11 @@ const WelcomeView = ({ latconectaData }) => {
         </div>
       </div>
 
-      {/* ESPACIO REDUCIDO - Distancia entre Lema 1 y Carrusel */}
       <div className="-mt-10"></div>
 
-      {/* SECCIÓN 3: CARRUSEL DE FOTOS (30% altura) */}
+      {/* SECCIÓN 3: CARRUSEL */}
       <div className="flex items-center justify-center" style={{ height: '30vh' }}>
         <div className="relative w-full max-w-4xl px-4 h-full flex items-center">
-          {/* Contenedor del carrusel */}
           <div className="relative w-full h-full max-h-80 overflow-hidden rounded-lg shadow-lg">
             {marketingPhotos.length > 0 ? (
               marketingPhotos.map((photo, index) => (
@@ -86,8 +80,6 @@ const WelcomeView = ({ latconectaData }) => {
               </div>
             )}
           </div>
-
-          {/* Indicadores de posición */}
           {marketingPhotos.length > 1 && (
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
               {marketingPhotos.map((_, index) => (
@@ -107,10 +99,9 @@ const WelcomeView = ({ latconectaData }) => {
         </div>
       </div>
 
-      {/* ESPACIO REDUCIDO - Distancia entre Carrusel y Lema 2 */}
       <div className="-mt-4"></div>
 
-      {/* SECCIÓN 4: SLOGAN 2 + BOTÓN (20% altura) */}
+      {/* SECCIÓN 4: SLOGAN 2 + BOTÓN */}
       <div className="flex items-center justify-center" style={{ height: '20vh' }}>
         <div className="text-center px-4 space-y-6">
           <h2 className="text-2xl md:text-4xl font-semibold text-gray-700">

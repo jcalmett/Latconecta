@@ -21,6 +21,7 @@ import VendorsTab from '../components/admin/VendorsTab';
 import VendorProductsTab from '../components/admin/VendorProductsTab';
 import LatconectaTab from '../components/admin/LatconectaTab';
 import APIMappingsTab from '../components/admin/APIMappingsTab';  // ✅ NUEVO
+import ReclamacionesTab from '../components/admin/ReclamacionesTab';  // ✅ LR-001
 
 
 const LatconectaAdmin = () => {
@@ -515,7 +516,8 @@ const LatconectaAdmin = () => {
     { id: 'users', label: 'Usuarios' },
     { id: 'vendors', label: 'Vendors' },
     { id: 'vendor-products', label: 'Productos Vendor' },
-    { id: 'api-mappings', label: '🗺️ API Mappings' }  // ✅ NUEVO
+    { id: 'api-mappings', label: '🗺️ API Mappings' },  // ✅ NUEVO
+    { id: 'reclamaciones', label: '📋 Reclamaciones' }   // ✅ LR-001
   ];
 
   const renderTabContent = () => {
@@ -644,6 +646,12 @@ const LatconectaAdmin = () => {
 
       case 'api-mappings':  // ✅ NUEVO
         return <APIMappingsTab
+          showNotification={showNotification}
+          setConfirmDialog={setConfirmDialog}
+        />;
+
+      case 'reclamaciones':  // ✅ LR-001
+        return <ReclamacionesTab
           showNotification={showNotification}
           setConfirmDialog={setConfirmDialog}
         />;
