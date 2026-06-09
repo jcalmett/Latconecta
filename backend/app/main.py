@@ -68,6 +68,7 @@ app = FastAPI(
     * **Vendor API Mappings** - Mapeo de APIs de vendors
     * **Mock Vendors** - Sistema de mock para testing
     * **Operations Config** - Control centralizado de operaciones
+    * **Reclamaciones** - Libro de Reclamaciones Virtual LR-001
     """,
     docs_url=_docs_url,
     redoc_url=_redoc_url,
@@ -80,7 +81,7 @@ configure_rate_limits(app)
 # ✅ Configurar CORS con orígenes seguros desde settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,  # 🔒 AHORA USA LA CONFIGURACIÓN
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
@@ -97,12 +98,9 @@ async def add_cors_headers_to_static_files(request: Request, call_next):
     """
     response = await call_next(request)
 
-    # Solo aplicar a archivos de imagen en /uploads
     if request.url.path.startswith("/uploads"):
-        # Verificar si es una imagen
         image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg')
         if any(request.url.path.lower().endswith(ext) for ext in image_extensions):
-            # 🔒 En producción, solo permitir orígenes seguros
             origin = request.headers.get("origin")
             if settings.ENVIRONMENT in ["production", "uat"]:
                 if origin in settings.CORS_ORIGINS:
@@ -142,21 +140,16 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    
+
     if settings.ENVIRONMENT == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    
+
     return response
 
 
 # Root endpoint
 @app.get("/", tags=["Root"])
 async def root():
-    """
-    Endpoint raíz de la API
-
-    Retorna información básica sobre la API
-    """
     return {
         "message": "Latconecta API - Backend",
         "version": "2.0.0",
@@ -169,11 +162,6 @@ async def root():
 # Health check endpoint
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """
-    Health check endpoint
-
-    Verifica que la API esté funcionando correctamente
-    """
     environment = os.getenv("ENVIRONMENT", "development")
     return {
         "status": "ok",
@@ -199,10 +187,13 @@ from app.routers import (
     latconecta,
     vendor_api_mappings,
     mock_vendors,
-    operations_config,     # ✅ NUEVO: Reemplaza mock_config
+    operations_config,
 )
 
-# Registrar routers con PREFIXES CORRECTOS
+# ✅ LR-001 — Libro de Reclamaciones Virtual
+from app.complaints.router import router as complaints_router
+
+# Registrar routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(companies.router, prefix="/api/v1/companies", tags=["Companies"])
 app.include_router(services.router, prefix="/api/v1/services", tags=["Services"])
@@ -215,20 +206,23 @@ app.include_router(vendor_products.router, prefix="/api/v1/vendor-products", tag
 app.include_router(latconecta.router, prefix="/api/v1/latconecta", tags=["Latconecta"])
 app.include_router(exchange_rate.router, prefix="/api/v1/exchange-rate", tags=["Exchange Rate"])
 
-# ✅ NUEVO: Control centralizado de operaciones (reemplaza mock_config)
+# ✅ Control centralizado de operaciones
 app.include_router(operations_config.router, prefix="/api/v1/operations", tags=["Operations Config"])
 
-# Vendor API Mappings y Mock Vendors (se mantienen)
+# Vendor API Mappings y Mock Vendors
 app.include_router(vendor_api_mappings.router, prefix="/api/v1/vendor-api-mappings", tags=["Vendor API Mappings"])
 app.include_router(mock_vendors.router, prefix="/api/v1/mock", tags=["Mock Vendors"])
 
-# Upload router
-app.include_router(upload.router, prefix="/api/v1")
+# Upload routers
 from app.routers.upload_reclamaciones import router as upload_reclamaciones_router
 app.include_router(upload_reclamaciones_router, prefix="/api/v1")
+app.include_router(upload.router, prefix="/api/v1")
 
 # Payments router
 app.include_router(payments_router, prefix="/api/v1")
+
+# ✅ LR-001 — Libro de Reclamaciones Virtual
+app.include_router(complaints_router, prefix="/api/v1", tags=["Reclamaciones"])
 
 # Servir archivos estáticos
 uploads_dir = Path("uploads")
@@ -239,7 +233,6 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 # Exception handlers
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
-    """Handler para errores 404"""
     return JSONResponse(
         status_code=404,
         content={
@@ -251,7 +244,6 @@ async def not_found_handler(request: Request, exc):
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):
-    """Handler para errores 500"""
     return JSONResponse(
         status_code=500,
         content={
