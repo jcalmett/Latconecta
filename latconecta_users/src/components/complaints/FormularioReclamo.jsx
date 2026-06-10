@@ -103,8 +103,8 @@ const FormularioReclamo = ({ onSuccess, onBack, showNotification }) => {
     const e = {};
     if (!form.consumidor_nombre.trim()) e.consumidor_nombre = 'Requerido';
     if (!form.consumidor_nro_doc.trim()) e.consumidor_nro_doc = 'Requerido';
-    if (!form.consumidor_email.trim() && !form.consumidor_domicilio.trim())
-      e.consumidor_email = 'Ingrese un correo válido o su domicilio';
+    if (!form.consumidor_email.trim())
+      e.consumidor_email = 'El correo electrónico es requerido para enviar la confirmación';
     if (form.consumidor_menor_edad && !form.representante_nombre.trim())
       e.representante_nombre = 'Requerido para menor de edad';
     if (!form.bien_descripcion.trim()) e.bien_descripcion = 'Requerido';
@@ -223,7 +223,6 @@ const FormularioReclamo = ({ onSuccess, onBack, showNotification }) => {
                 value={form.consumidor_domicilio}
                 onChange={e => set('consumidor_domicilio', e.target.value)}
               />
-              <p className="text-xs text-gray-400 mt-1">Requerido si no proporciona correo electrónico.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -255,7 +254,7 @@ const FormularioReclamo = ({ onSuccess, onBack, showNotification }) => {
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Correo electrónico
+                Correo electrónico <span className="text-red-500">*</span>
               </label>
               <input
                 type="email"
@@ -265,8 +264,8 @@ const FormularioReclamo = ({ onSuccess, onBack, showNotification }) => {
                 onChange={e => set('consumidor_email', e.target.value)}
               />
               {errors.consumidor_email && <p className="text-red-500 text-xs mt-1">{errors.consumidor_email}</p>}
-              <p className="text-xs text-gray-400 mt-1">
-                El acuse de recibo se enviará a este correo (Art. 4-B DS 006-2014).
+              <p className="text-xs text-blue-600 bg-blue-50 rounded px-2 py-1 mt-1">
+                📧 Ingrese un correo válido para recibir la confirmación de su reclamación (Art. 4-B DS 006-2014).
               </p>
             </div>
 

@@ -49,19 +49,21 @@ async def registrar_reclamacion(
 ) -> ComplaintRecord:
     from app.services import email_service
 
-    email_valido = False
-    if data.consumidor_email and _valid_email_format(data.consumidor_email):
-        email_valido = await _valid_email_domain(data.consumidor_email)
-
-    if not email_valido and not data.consumidor_domicilio:
+    # Validar email — siempre requerido para el acuse de recibo (Art. 4-B DS 006-2014)
+    if not data.consumidor_email or not _valid_email_format(data.consumidor_email):
         raise HTTPException(
             status_code=422,
-            detail="Ingrese un correo válido o su domicilio para poder registrar su reclamación."
+            detail="Ingrese un correo electrónico válido para recibir la confirmación de su reclamación."
+        )
+    email_valido = await _valid_email_domain(data.consumidor_email)
+    if not email_valido:
+        raise HTTPException(
+            status_code=422,
+            detail="El dominio del correo electrónico no existe. Ingrese un correo válido para recibir la confirmación."
         )
 
+    # El canal de respuesta lo elige el consumidor — no se fuerza
     canal = data.canal_respuesta
-    if not email_valido:
-        canal = "CARTA"
 
     result = await db.execute(text("SELECT * FROM latconecta LIMIT 1"))
     lc = result.fetchone()
@@ -115,35 +117,25 @@ async def registrar_reclamacion(
     acuse_email = data.consumidor_email
     if data.consumidor_menor_edad and data.representante_email:
         acuse_email = data.representante_email
-    email_destino_valido = email_valido or (data.consumidor_menor_edad and data.representante_email)
-
-    if email_valido or (data.consumidor_menor_edad and data.representante_email):
-        try:
-            await email_service.send_complaint_ack(
-                to_email      = acuse_email,
-                nombre        = data.consumidor_nombre,  # nombre del menor siempre
-                numero        = numero,
-                fecha         = complaint.fecha_registro,
-                tipo          = data.tipo_reclamacion,
-                fecha_lim     = fecha_limite,
-                canal         = canal,
-                bien_desc     = data.bien_descripcion,
-                bien_monto    = float(data.bien_monto),
-                detalle       = data.detalle,
-                pedido        = data.pedido_concreto,
-            )
-            complaint.acuse_enviado    = True
-            complaint.acuse_enviado_at = datetime.now(timezone.utc)
-        except Exception as e:
-            logger.error(f"Email acuse fallido {numero}: {e}")
-    else:
-        try:
-            await email_service.send_complaint_admin_alert(
-                numero = numero,
-                motivo = f"Email del consumidor inválido ({data.consumidor_email}). Canal forzado a CARTA. Acuse físico requerido al domicilio: {data.consumidor_domicilio}"
-            )
-        except Exception as e:
-            logger.error(f"Alerta admin fallida {numero}: {e}")
+    # Email siempre válido en este punto — enviar acuse de recibo (Art. 4-B DS 006-2014)
+    try:
+        await email_service.send_complaint_ack(
+            to_email      = acuse_email,
+            nombre        = data.consumidor_nombre,  # nombre del menor siempre
+            numero        = numero,
+            fecha         = complaint.fecha_registro,
+            tipo          = data.tipo_reclamacion,
+            fecha_lim     = fecha_limite,
+            canal         = canal,
+            bien_desc     = data.bien_descripcion,
+            bien_monto    = float(data.bien_monto),
+            detalle       = data.detalle,
+            pedido        = data.pedido_concreto,
+        )
+        complaint.acuse_enviado    = True
+        complaint.acuse_enviado_at = datetime.now(timezone.utc)
+    except Exception as e:
+        logger.error(f"Email acuse fallido {numero}: {e}")
 
     await db.commit()
     await db.refresh(complaint)
@@ -231,14 +223,28 @@ async def responder_oferta(db: AsyncSession, data: OfertaRespuesta) -> Complaint
         complaint.fecha_respuesta     = datetime.now(timezone.utc)
 
     else:
-        # P-3: Recalcular fecha límite restituyendo los días de suspensión no usados
+        # Art. 6-A DS 101-2022: al rechazar, el plazo se reanuda
+        # con los días hábiles que quedaban antes de la suspensión.
         complaint.estado = "EN_PROCESO"
-        if complaint.fecha_suspension_plazo:
-            dias_suspendidos = (date.today() - complaint.fecha_suspension_plazo).days
-            dias_restantes_suspension = max(0, (complaint.dias_suspension or 0) - dias_suspendidos)
-            if dias_restantes_suspension > 0:
-                nueva_fecha = complaint.fecha_limite_respuesta + timedelta(days=dias_restantes_suspension)
+        if complaint.fecha_suspension_plazo and complaint.fecha_limite_respuesta:
+            # Contar días hábiles que quedaban entre suspensión y fecha límite original
+            result_h = await db.execute(
+                text("SELECT fecha FROM calendar_holidays WHERE activo = TRUE ORDER BY fecha")
+            )
+            feriados = {row[0] for row in result_h.fetchall()}
+            dias_habiles_restantes = 0
+            cursor = complaint.fecha_suspension_plazo
+            while cursor < complaint.fecha_limite_respuesta:
+                cursor += timedelta(days=1)
+                if cursor.weekday() < 5 and cursor not in feriados:
+                    dias_habiles_restantes += 1
+            # Reanudar desde hoy con esos días hábiles restantes
+            if dias_habiles_restantes > 0:
+                nueva_fecha = await calcular_fecha_limite(db, date.today(), dias_habiles_restantes)
                 complaint.fecha_limite_respuesta = nueva_fecha
+        # Limpiar campos de suspensión
+        complaint.fecha_suspension_plazo = None
+        complaint.dias_suspension        = 0
 
         # P-4: Notificar al admin
         dias_restantes = (complaint.fecha_limite_respuesta - date.today()).days
