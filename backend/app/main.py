@@ -231,16 +231,21 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 # Exception handlers
-@app.exception_handler(404)
-async def not_found_handler(request: Request, exc):
-    return JSONResponse(
-        status_code=404,
-        content={
-            "detail": "Endpoint no encontrado",
-            "path": str(request.url)
-        }
-    )
 
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+@app.exception_handler(StarletteHTTPException)
+async def not_found_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404:
+        detail = exc.detail if exc.detail != "Not Found" else "Endpoint no encontrado"
+        return JSONResponse(
+            status_code=404,
+            content={"detail": detail, "path": str(request.url)}
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):
