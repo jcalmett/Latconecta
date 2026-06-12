@@ -14,6 +14,10 @@ import OperationsPanel from '../components/OperationsPanel';
 import jsPDF from 'jspdf';
 import countriesService from '../services/countriesService';
 
+const logOperationResult = (operation, response, data = {}) => {
+  console.log(`[${operation}]`, response, data);
+};
+
 const ShopView = ({ user, showNotification }) => {
   // Leer parámetros de URL
   const [searchParams] = useSearchParams();
@@ -417,7 +421,7 @@ const ShopView = ({ user, showNotification }) => {
         : null;
 
       const userSelectedAmount = rawVariableAmount ?? rawTransferAmount ?? rawBillAmount ?? null;
-      // ─────────────────────────────────────────────────────────────────────────
+      // ----------------------------------------------------------------------───
 
       const purchaseRequest = {
         product_id: selectedProduct.product_id,
@@ -509,6 +513,10 @@ const ShopView = ({ user, showNotification }) => {
         fee: parseFloat(response.purchase_fee),
         amount: parseFloat(response.purchase_total_amount),
         porcentaje_descuento: parseFloat(response.amount_breakdown?.discount_percentage || 0),
+        tax_label: response.purchase_tax_label || 'IGV',
+        tax_rate: parseFloat(response.purchase_tax_rate || 0.18),
+        tax_amount: parseFloat(response.purchase_tax_amount || 0),
+        base_imponible: parseFloat(response.purchase_base_imponible || 0),
         barcode: response.barcode,
         barcode_image: response.barcode_image,
         requires_manual_intervention: response.requires_manual_intervention || false,
@@ -581,7 +589,7 @@ const ShopView = ({ user, showNotification }) => {
         });
         setPurchaseStep(6);
       }
-      // ─────────────────────────────────────────────────────────────────────────
+      // ----------------------------------------------------------------------───
 
     } finally {
       setProcessing(false);
@@ -686,23 +694,35 @@ const ShopView = ({ user, showNotification }) => {
       doc.setFontSize(8);
       doc.setFont('courier', 'normal');
 
-      doc.text('Monto a pagar:', 12, y);
-      doc.text(`${receiptData.currency} ${receiptData.montoPagar.toFixed(2)}`, 93, y, { align: 'right' });
+      doc.text('Valor de venta:', 12, y);
+      doc.text(`${receiptData.currency} ${receiptData.baseImponible.toFixed(2)}`, 93, y, { align: 'right' });
       y += spacing.medium;
 
       if (receiptData.descuento > 0) {
         doc.setTextColor(0, 128, 0);
         doc.text(`Descuento (${receiptData.porcentajeDescuento}%):`, 12, y);
-        doc.text(`-${receiptData.currency} ${receiptData.descuento.toFixed(2)}`, 93, y, { align: 'right' });
+        doc.text(`-${receiptData.currency} ${(receiptData.descuento / (1 + receiptData.taxRate)).toFixed(2)}`, 93, y, { align: 'right' });
         doc.setTextColor(0, 0, 0);
         y += spacing.medium;
       }
 
       if (receiptData.fee > 0) {
         doc.text('Comision:', 12, y);
-        doc.text(`+${receiptData.currency} ${receiptData.fee.toFixed(2)}`, 93, y, { align: 'right' });
+        doc.text(`+${receiptData.currency} ${(receiptData.fee / (1 + receiptData.taxRate)).toFixed(2)}`, 93, y, { align: 'right' });
         y += spacing.medium;
       }
+
+      doc.setLineWidth(0.3);
+      doc.line(12, y, 93, y);
+      y += 3;
+
+      doc.text('Op. Gravada:', 12, y);
+      doc.text(`${receiptData.currency} ${receiptData.baseImponible.toFixed(2)}`, 93, y, { align: 'right' });
+      y += spacing.medium;
+
+      doc.text(`${receiptData.taxLabel} (${(receiptData.taxRate * 100).toFixed(0)}%):`, 12, y);
+      doc.text(`+${receiptData.currency} ${receiptData.taxAmount.toFixed(2)}`, 93, y, { align: 'right' });
+      y += spacing.medium;
 
       doc.setLineWidth(0.5);
       doc.line(12, y, 93, y);
@@ -710,7 +730,7 @@ const ShopView = ({ user, showNotification }) => {
 
       doc.setFontSize(10);
       doc.setFont('courier', 'bold');
-      doc.text('PAGO TOTAL:', 12, y);
+      doc.text('IMPORTE TOTAL:', 12, y);
       doc.text(`${receiptData.currency} ${receiptData.totalAmount.toFixed(2)}`, 93, y, { align: 'right' });
       y += spacing.large;
 
@@ -949,28 +969,10 @@ const ShopView = ({ user, showNotification }) => {
         console.warn('⚠️ PDF pequeño (<10 KB)');
       }
 
-      const formData = new FormData();
-      formData.append('file', pdfBlob, `recibo_${receiptData.reference}.pdf`);
-
-      const token = localStorage.getItem('token') || localStorage.getItem('bitel_token');
-
-      const baseURL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8100/api/v1';
-      const response = await fetch(`${baseURL}/upload/receipts`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al subir PDF');
-      }
-
-      const result = await response.json();
-      console.log('✅ PDF subido:', result.url);
-
-      return result.url;
+      // Descarga directa al dispositivo del usuario
+      doc.save(`recibo-${receiptData.reference}.pdf`);
+      console.log('✅ PDF descargado directamente');
+      return 'direct_download';
 
     } catch (error) {
       console.error('❌ Error:', error);
@@ -981,13 +983,12 @@ const ShopView = ({ user, showNotification }) => {
   const handleDownloadReceiptPDF = () => {
     if (!purchaseResult) return;
 
-    if (purchaseResult.receipt_pdf_url) {
-      const fullUrl = getUploadUrl(purchaseResult.receipt_pdf_url);
+    if (purchaseResult.purchase_receip_url) {
+      const fullUrl = getUploadUrl(purchaseResult.purchase_receip_url);
       window.open(fullUrl, '_blank');
       return;
     }
 
-    alert('Generando PDF del recibo...');
     generateAndUploadReceiptPDF({
       reference: purchaseResult.reference,
       date: purchaseResult.date,
@@ -1002,6 +1003,10 @@ const ShopView = ({ user, showNotification }) => {
       fee: purchaseResult.fee,
       totalAmount: parseFloat(purchaseResult.amount),
       porcentajeDescuento: purchaseResult.porcentaje_descuento,
+      baseImponible: purchaseResult.base_imponible || 0,
+      taxLabel: purchaseResult.tax_label || 'IGV',
+      taxRate: purchaseResult.tax_rate || 0.18,
+      taxAmount: purchaseResult.tax_amount || 0,
       purchaseStatus: purchaseResult.purchase_status,
       paymentStatus: purchaseResult.payment_status,
       deliveryStatus: purchaseResult.delivery_status,
@@ -1014,18 +1019,9 @@ const ShopView = ({ user, showNotification }) => {
       deliveryPhone: purchaseData.deliveryPhone,
       deliveryName: purchaseData.deliveryName,
       deliveryAddress: purchaseData.deliveryAddress,
-    }).then(pdfUrl => {
-      if (pdfUrl) {
-        const fullUrl = getUploadUrl(pdfUrl);
-        window.open(fullUrl, '_blank');
-        setPurchaseResult(prev => ({
-          ...prev,
-          receipt_pdf_url: pdfUrl
-        }));
-      }
     }).catch(err => {
       console.error('Error generando PDF:', err);
-      alert('No se pudo generar el PDF');
+      alert('No se pudo generar el PDF. Intente nuevamente.');
     });
   };
 
@@ -1050,33 +1046,35 @@ const ShopView = ({ user, showNotification }) => {
     const porcentajeDesc = purchaseResult.porcentaje_descuento || 0;
 
     const receiptText = `
-╔═══════════════════════════════════╗
+===================================
         COMPROBANTE DE COMPRA
            LATCONECTA
-╚═══════════════════════════════════╝
+===================================
 
 Fecha: ${new Date(purchaseResult.date).toLocaleString()}
 Referencia: ${purchaseResult.reference}
 ${destinatario}
 
-───────────────────────────────────
+-----------------------------------
 PRODUCTO
-───────────────────────────────────
+-----------------------------------
 ${selectedProduct.product_name}
 Servicio: ${selectedService.service_name}
 
-───────────────────────────────────
+-----------------------------------
 MONTO
-───────────────────────────────────
-Monto a pagar:    ${selectedProduct.product_currency} ${montoAPagar.toFixed(2)}
-${descuento > 0 ? `Descuento (${porcentajeDesc}%):   ${selectedProduct.product_currency} -${descuento.toFixed(2)}` : ''}
-${fee > 0 ? `Comisión:         ${selectedProduct.product_currency} +${fee.toFixed(2)}` : ''}
-───────────────────────────────────
-PAGO TOTAL:       ${selectedProduct.product_currency} ${totalAmount.toFixed(2)}
+-----------------------------------
+Valor de venta:   ${selectedProduct.product_currency} ${(purchaseResult.base_imponible || 0).toFixed(2)}
+${descuento > 0 ? `Descuento (${porcentajeDesc}%):   ${selectedProduct.product_currency} -${(descuento / (1 + (purchaseResult.tax_rate || 0.18))).toFixed(2)}` : ''}
+${fee > 0 ? `Comision:         ${selectedProduct.product_currency} +${(fee / (1 + (purchaseResult.tax_rate || 0.18))).toFixed(2)}` : ''}
+Op. Gravada:      ${selectedProduct.product_currency} ${(purchaseResult.base_imponible || 0).toFixed(2)}
+${purchaseResult.tax_label || 'IGV'} (${((purchaseResult.tax_rate || 0.18) * 100).toFixed(0)}%):       ${selectedProduct.product_currency} +${(purchaseResult.tax_amount || 0).toFixed(2)}
+-----------------------------------
+IMPORTE TOTAL:    ${selectedProduct.product_currency} ${totalAmount.toFixed(2)}
 
-───────────────────────────────────
+-----------------------------------
 ESTADO
-───────────────────────────────────
+-----------------------------------
 Estado Compra: ${purchaseResult.purchase_status}
 Estado Pago: ${purchaseResult.payment_status}
 ${purchaseResult.delivery_status ? `Estado Provisión: ${purchaseResult.delivery_status}` : ''}
@@ -1087,9 +1085,9 @@ ${purchaseResult.reversal_ref ? `Ref. Reversión: ${purchaseResult.reversal_ref}
 ${purchaseResult.barcode ? `Código Barras: ${purchaseResult.barcode}` : ''}
 
 ${purchaseResult.purchase_status === 'Failed' && purchaseResult.payment_status === 'Reversed' ? `
-───────────────────────────────────
+-----------------------------------
 ⚠️  PROVISIÓN FALLIDA
-───────────────────────────────────
+-----------------------------------
 No se pudo completar la provisión
 del servicio solicitado.
 
@@ -1099,9 +1097,9 @@ tarjeta de crédito.
 ` : ''}
 
 ${purchaseResult.requires_manual_intervention ? `
-───────────────────────────────────
+-----------------------------------
 ⚠️  INTERVENCIÓN MANUAL REQUERIDA
-───────────────────────────────────
+-----------------------------------
 La provisión falló y no se pudo 
 revertir el pago automáticamente.
 
@@ -1114,17 +1112,17 @@ soporte@latconecta.com
 Referencia: ${purchaseResult.reference}
 ` : ''}
 
-${purchaseData.productType === 'smartphone' ? `───────────────────────────────────
+${purchaseData.productType === 'smartphone' ? `-----------------------------------
 CONTACTO
-───────────────────────────────────
+-----------------------------------
 Teléfono: ${purchaseData.deliveryPhone || purchaseData.phoneNumber}
 Nombre: ${purchaseData.deliveryName}
 Dirección: ${purchaseData.deliveryAddress}
 ` : ''}
 
-╔═══════════════════════════════════╗
+===================================
        Gracias por su compra
-╚═══════════════════════════════════╝
+===================================
     `.trim();
 
     const blob = new Blob([receiptText], { type: 'text/plain' });

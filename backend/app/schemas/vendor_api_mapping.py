@@ -412,11 +412,11 @@ def get_available_purchase_fields() -> List[AvailableField]:
             example="Av. Principal 123, Lima"
         ),
         AvailableField(
-            field_name="purchase_receip_image",
+            field_name="purchase_receip_url",
             field_type="string",
             description="URL de la imagen del recibo",
             source="purchase",
-            example="https://cdn.latconecta.com/receipts/12345.png"
+            example="https://cdn.latconecta.com/receipts/12345.pdf"
         ),
         AvailableField(
             field_name="purchase_account_number",

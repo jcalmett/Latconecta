@@ -163,7 +163,7 @@ class PurchaseCreate(PurchaseBaseSchema):
 
     # Control
     requires_manual_intervention: Optional[bool] = False
-    purchase_receip_image: Optional[str] = None
+    purchase_receip_url: Optional[str] = None
     purchase_date_sent_to_conciliation: Optional[datetime] = None
 
     # ────────────────────────────────────────────────────────────
@@ -330,7 +330,7 @@ class PurchaseInDB(BaseModel):
 
     # Control y Auditoría
     requires_manual_intervention: Optional[bool] = None
-    purchase_receip_image: Optional[str] = None
+    purchase_receip_url: Optional[str] = None
     purchase_date_sent_to_conciliation: Optional[datetime] = None
     created_by: Optional[str] = None
     updated_by: Optional[str] = None

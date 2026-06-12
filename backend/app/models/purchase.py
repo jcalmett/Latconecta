@@ -76,7 +76,7 @@ class Purchase(Base):
     # =========================================================================
     purchase_barcode_code = Column(String(50))
     purchase_barcode_image = Column(String(255))
-    purchase_receip_image = Column(String(255))
+    purchase_receip_url = Column(String(255))
 
     # =========================================================================
     # INFORMACIÓN DEL VENDOR (Original)

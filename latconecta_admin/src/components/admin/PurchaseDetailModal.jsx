@@ -199,7 +199,7 @@ const PurchaseDetailModal = ({ purchase, onClose }) => {
               <Section title="📦 ESTADO DE ENTREGA (Solo Smartphones)">
                 <Field label="Estado Entrega" value={purchase.purchase_delivery_status} statusType="delivery" />
                 <Field label="Ref. Provisión" value={purchase.purchase_provision_ref} />
-                <Field label="Imagen Recibo" value={purchase.purchase_receip_image} />
+                <Field label="Recibo PDF" value={purchase.purchase_receip_url} />
               </Section>
 
               {/* DATOS DE ENTREGA */}

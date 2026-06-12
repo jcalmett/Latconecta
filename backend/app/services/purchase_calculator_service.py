@@ -25,8 +25,21 @@ from app.models.product import Product
 from app.models.vendor_product import VendorProduct
 from app.models.vendor import Vendor
 from app.services.exchange_rate_service import exchange_rate_service
+from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _calculate_tax(total: Decimal) -> tuple:
+    """
+    Calcula IGV/IVA desde el total (precio ya incluye impuesto).
+    Regla SUNAT: total es fijo → igv redondeado → base absorbe residuo.
+    Returns: (base_imponible, tax_amount)
+    """
+    rate = Decimal(str(settings.TAX_RATE))
+    tax_amount = round(total / (1 + rate) * rate, 2)
+    base_imponible = total - tax_amount
+    return float(base_imponible), float(tax_amount)
 
 
 @dataclass
@@ -48,6 +61,13 @@ class PurchaseCalculation:
     purchase_exch_rate: Decimal
     conversion_applied: bool
     margin_type: str  # 'normal', 'inverse', 'none'
+
+    # Impuesto a las ventas (IGV/IVA) — desglosado desde el total
+    # Regla: total es fijo → igv = ROUND(total/1+rate * rate, 2) → base = total - igv
+    purchase_tax_label: str = "IGV"
+    purchase_tax_rate: float = 0.18
+    purchase_tax_amount: float = 0.0
+    purchase_base_imponible: float = 0.0
 
     # Mensajes informativos para el usuario
     info_message: Optional[str] = None
@@ -201,6 +221,8 @@ class PurchaseCalculatorService:
             f"Vendor receives {vendor_amount} {vendor_currency}"
         )
 
+        base_imponible, tax_amount = _calculate_tax(total_amount)
+
         return PurchaseCalculation(
             purchase_base_price=base_price,
             purchase_discount=discount_amount,
@@ -212,12 +234,17 @@ class PurchaseCalculatorService:
             purchase_exch_rate=exch_rate,
             conversion_applied=conversion_applied,
             margin_type=margin_type,
+            purchase_tax_label=settings.TAX_LABEL,
+            purchase_tax_rate=settings.TAX_RATE,
+            purchase_tax_amount=tax_amount,
+            purchase_base_imponible=base_imponible,
             info_message=info_message,
             amount_breakdown={
                 'base': float(base_price),
                 'discount': float(discount_amount),
                 'fee': float(fee),
-                'total': float(total_amount)
+                'total': float(total_amount),
+                'discount_percentage': float(product.product_discount_percentage or 0)
             }
         )
 
@@ -314,6 +341,8 @@ class PurchaseCalculatorService:
             f"Margin: {margin_type}"
         )
 
+        base_imponible, tax_amount = _calculate_tax(total_amount)
+
         return PurchaseCalculation(
             purchase_base_price=base_price,
             purchase_discount=discount_amount,
@@ -325,12 +354,17 @@ class PurchaseCalculatorService:
             purchase_exch_rate=exch_rate,
             conversion_applied=conversion_applied,
             margin_type=margin_type,
+            purchase_tax_label=settings.TAX_LABEL,
+            purchase_tax_rate=settings.TAX_RATE,
+            purchase_tax_amount=tax_amount,
+            purchase_base_imponible=base_imponible,
             info_message=info_message,
             amount_breakdown={
                 'base': float(base_price),
                 'discount': float(discount_amount),
                 'fee': float(fee),
                 'total': float(total_amount),
+                'discount_percentage': float(product.product_discount_percentage or 0),
                 'vendor_amount': float(vendor_amount),
                 'vendor_currency': vendor_currency
             }
@@ -486,6 +520,8 @@ class PurchaseCalculatorService:
                 f"Remaining debt: {remaining_debt} {bill_currency}"
             )
 
+        base_imponible, tax_amount = _calculate_tax(total_amount)
+
         return PurchaseCalculation(
             purchase_base_price=base_price,
             purchase_discount=discount_amount,
@@ -497,12 +533,17 @@ class PurchaseCalculatorService:
             purchase_exch_rate=exch_rate,
             conversion_applied=conversion_applied,
             margin_type=margin_type,
+            purchase_tax_label=settings.TAX_LABEL,
+            purchase_tax_rate=settings.TAX_RATE,
+            purchase_tax_amount=tax_amount,
+            purchase_base_imponible=base_imponible,
             info_message=info_message,
             amount_breakdown={
                 'base': float(base_price),
                 'discount': float(discount_amount),
                 'fee': float(fee),
                 'total': float(total_amount),
+                'discount_percentage': float(product.product_discount_percentage or 0),
                 'vendor_amount': float(vendor_amount),
                 'vendor_currency': vendor_currency,
                 'bill_total_debt': float(bill_total_debt),

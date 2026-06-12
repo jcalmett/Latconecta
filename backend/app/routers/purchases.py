@@ -139,7 +139,7 @@ def _map_purchase_to_response(purchase: Purchase) -> 'PurchaseResponse':
         purchase_delivery_address=purchase.purchase_delivery_address, purchase_status=purchase.purchase_status,
         purchase_provision_ref=purchase.purchase_provision_ref, purchase_reversal_ref=purchase.purchase_reversal_ref,
         purchase_barcode_code=purchase.purchase_barcode_code, purchase_barcode_image=purchase.purchase_barcode_image,
-        purchase_receip_image=purchase.purchase_receip_image,
+        purchase_receip_url=purchase.purchase_receip_url,
         izipay_order_code=getattr(purchase, 'izipay_order_code', None),
         izipay_form_token=getattr(purchase, 'izipay_form_token', None),
         purchase_balance_currency=purchase.purchase_balance_currency,
@@ -241,7 +241,7 @@ class PurchaseResponse(BaseModel):
     purchase_reversal_ref: Optional[str] = None
     purchase_barcode_code: Optional[str] = None
     purchase_barcode_image: Optional[str] = None
-    purchase_receip_image: Optional[str] = None
+    purchase_receip_url: Optional[str] = None
     izipay_order_code: Optional[str] = None
     izipay_form_token: Optional[str] = None
     purchase_balance_currency: Optional[str] = None
@@ -267,6 +267,11 @@ class PurchaseResponse(BaseModel):
     last_update_date: datetime
     info_message: Optional[str] = None
     amount_breakdown: Optional[Dict[str, Any]] = None
+    # Impuesto a las ventas (IGV/IVA)
+    purchase_tax_label: Optional[str] = None
+    purchase_tax_rate: Optional[float] = None
+    purchase_tax_amount: Optional[float] = None
+    purchase_base_imponible: Optional[float] = None
     company_initial_balance: Optional[Decimal] = None
     company_final_balance: Optional[Decimal] = None
     payment_status: Optional[str] = None
@@ -564,7 +569,13 @@ async def create_purchase(
             purchase.izipay_order_code = izipay_order_code
             purchase.izipay_form_token = izipay_form_token
 
-        return _map_purchase_to_response(purchase)
+        response = _map_purchase_to_response(purchase)
+        # Agregar campos de impuesto desde el calculation (no se guardan en BD)
+        response.purchase_tax_label  = calculation.purchase_tax_label
+        response.purchase_tax_rate   = calculation.purchase_tax_rate
+        response.purchase_tax_amount = calculation.purchase_tax_amount
+        response.purchase_base_imponible = calculation.purchase_base_imponible
+        return response
 
     except HTTPException:
         raise
@@ -695,6 +706,25 @@ async def check_balance(product_id: int, product_type: Optional[str] = None,
     except Exception as e:
         logger.error(f"Error check_balance: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error verificando disponibilidad: {str(e)}")
+
+
+@router.patch("/{purchase_id}/receip-url", tags=["Purchases"])
+async def update_receip_url(
+    purchase_id: int,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_optional)
+):
+    """Guarda la URL del recibo PDF generado por el frontend."""
+    result = await db.execute(
+        select(Purchase).where(Purchase.purchase_id == purchase_id)
+    )
+    purchase = result.scalar_one_or_none()
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Compra no encontrada")
+    purchase.purchase_receip_url = data.get("purchase_receip_url")
+    await db.commit()
+    return {"success": True, "purchase_receip_url": purchase.purchase_receip_url}
 
 
 @router.get("/{purchase_id}", response_model=PurchaseResponse)

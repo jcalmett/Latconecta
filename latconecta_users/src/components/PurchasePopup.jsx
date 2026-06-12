@@ -1270,27 +1270,35 @@ const PurchasePopup = React.memo(({
                       <p className="text-xs font-bold text-gray-700 mb-1">MONTO</p>
                       <div className="space-y-0.5 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Monto a pagar:</span>
+                          <span className="text-gray-600">Valor de venta:</span>
                           <span className="font-semibold">
-                            {selectedProduct.product_currency} {purchaseResult.monto_pagar.toFixed(2)}
+                            {selectedProduct.product_currency} {(purchaseResult.base_imponible || 0).toFixed(2)}
                           </span>
                         </div>
                         {purchaseResult.descuento > 0 && (
                           <div className="flex justify-between text-green-600">
                             <span>Descuento ({purchaseResult.porcentaje_descuento}%):</span>
-                            <span>-{selectedProduct.product_currency} {purchaseResult.descuento.toFixed(2)}</span>
+                            <span>-{selectedProduct.product_currency} {(purchaseResult.descuento / (1 + (purchaseResult.tax_rate || 0.18))).toFixed(2)}</span>
                           </div>
                         )}
                         {purchaseResult.fee > 0 && (
                           <div className="flex justify-between">
                             <span className="text-gray-600">Comisión:</span>
                             <span className="font-semibold">
-                              +{selectedProduct.product_currency} {purchaseResult.fee.toFixed(2)}
+                              +{selectedProduct.product_currency} {(purchaseResult.fee / (1 + (purchaseResult.tax_rate || 0.18))).toFixed(2)}
                             </span>
                           </div>
                         )}
+                        <div className="flex justify-between pt-1 border-t border-gray-200">
+                          <span className="text-gray-600">Op. Gravada:</span>
+                          <span>{selectedProduct.product_currency} {(purchaseResult.base_imponible || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-600">
+                          <span>{purchaseResult.tax_label || 'IGV'} ({((purchaseResult.tax_rate || 0.18) * 100).toFixed(0)}%):</span>
+                          <span>+{selectedProduct.product_currency} {(purchaseResult.tax_amount || 0).toFixed(2)}</span>
+                        </div>
                         <div className="flex justify-between pt-1 border-t border-gray-300 font-bold">
-                          <span>PAGO TOTAL:</span>
+                          <span>IMPORTE TOTAL:</span>
                           <span className="text-bitel-blue text-base">
                             {selectedProduct.product_currency} {parseFloat(purchaseResult.amount).toFixed(2)}
                           </span>

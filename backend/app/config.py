@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     PAYMENT_GATEWAY: str = "culqi"
 
     # =========================================================================
+    # IMPUESTO A LAS VENTAS — CONFIGURABLE POR PAÍS DE INSTALACIÓN
+    # PE: IGV 18% | MX: IVA 16% | VE: IVA 16%
+    # =========================================================================
+    TAX_LABEL: str = "IGV"
+    TAX_RATE: float = 0.18
+
+    # =========================================================================
     # MÉTODOS DE PAGO DISPONIBLES POR INSTALACIÓN
     # =========================================================================
     CARD_AVAILABLE: bool = True
