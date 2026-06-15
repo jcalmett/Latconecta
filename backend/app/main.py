@@ -216,6 +216,8 @@ app.include_router(mock_vendors.router, prefix="/api/v1/mock", tags=["Mock Vendo
 # Upload routers
 from app.routers.upload_reclamaciones import router as upload_reclamaciones_router
 app.include_router(upload_reclamaciones_router, prefix="/api/v1")
+from app.routers.upload_receipts import router as upload_receipts_router
+app.include_router(upload_receipts_router, prefix="/api/v1")
 app.include_router(upload.router, prefix="/api/v1")
 
 # Payments router
@@ -231,7 +233,6 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 # Exception handlers
-
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 @app.exception_handler(StarletteHTTPException)
@@ -246,6 +247,7 @@ async def not_found_handler(request: Request, exc: StarletteHTTPException):
         status_code=exc.status_code,
         content={"detail": exc.detail}
     )
+
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):

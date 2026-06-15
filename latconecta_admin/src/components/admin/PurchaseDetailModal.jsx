@@ -42,7 +42,8 @@ const PurchaseDetailModal = ({ purchase, onClose }) => {
     isBoolean = false, 
     isDate = false, 
     isCurrency = false, 
-    isJson = false, 
+    isJson = false,
+    isUrl = false,
     statusType = null  // 'transaction', 'payment', 'delivery'
   }) => (
     <div className="mb-3">
@@ -50,7 +51,16 @@ const PurchaseDetailModal = ({ purchase, onClose }) => {
         {label}
       </label>
       <div className="text-sm text-gray-900 bg-gray-50 p-2 rounded border border-gray-200">
-        {isBoolean ? (
+        {isUrl && value ? (
+          <a
+            href={value.startsWith('http') ? value : `https://peruse.latconecta.com${value}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 underline flex items-center gap-1"
+          >
+            📄 Ver Recibo PDF
+          </a>
+        ) : isBoolean ? (
           <span className={`px-2 py-1 rounded text-xs font-semibold ${value ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
             {value ? 'SÍ' : 'NO'}
           </span>
@@ -199,7 +209,7 @@ const PurchaseDetailModal = ({ purchase, onClose }) => {
               <Section title="📦 ESTADO DE ENTREGA (Solo Smartphones)">
                 <Field label="Estado Entrega" value={purchase.purchase_delivery_status} statusType="delivery" />
                 <Field label="Ref. Provisión" value={purchase.purchase_provision_ref} />
-                <Field label="Recibo PDF" value={purchase.purchase_receip_url} />
+                <Field label="Recibo PDF" value={purchase.purchase_receip_url} isUrl />
               </Section>
 
               {/* DATOS DE ENTREGA */}

@@ -386,7 +386,7 @@ const ShopView = ({ user, showNotification }) => {
     }
   };
 
-  const handlePaymentAndProvision = async (gatewayData = null) => {
+  const handlePaymentAndProvision = async () => {
     if (!purchaseData.paymentMethod) {
       setError('Selecciona un método de pago');
       return;
@@ -441,23 +441,7 @@ const ShopView = ({ user, showNotification }) => {
         delivery_address: purchaseData.deliveryAddress || null,
         user_email: user?.user_email || null,
 
-        // Datos del gateway de pago (Izipay) — críticos para reversión
-        ...(gatewayData && {
-          payment_gateway: gatewayData.payment_gateway,
-          payment_transaction_uuid: gatewayData.payment_transaction_uuid,
-          payment_transaction_id: gatewayData.payment_transaction_id,
-          payment_reference_number: gatewayData.payment_reference_number,
-          payment_order_number: gatewayData.payment_order_number,
-          payment_method_detail: gatewayData.payment_method_detail,
-          payment_code_auth: gatewayData.payment_code_auth,
-          // Normalizar payment_amount a string con 2 decimales para evitar
-          // cualquier problema de formato Decimal en el backend
-          payment_amount: gatewayData.payment_amount
-            ? parseFloat(gatewayData.payment_amount).toFixed(2)
-            : null,
-          payment_currency: gatewayData.payment_currency,
-          payment_transaction_datetime: gatewayData.payment_transaction_datetime,
-        }),
+        // Con Culqi el pago se procesa íntegramente en el backend — no hay datos de gateway desde el frontend
       };
 
       console.log('📤 Enviando purchase request:', purchaseRequest);
@@ -524,57 +508,84 @@ const ShopView = ({ user, showNotification }) => {
 
       setPurchaseStep(6);
 
+      // ✅ Generar y subir recibo PDF automáticamente en background
+      // Se ejecuta para todos los resultados (exitoso, fallido, revertido)
+      // El purchase_id viene siempre en la respuesta del backend
+      if (response.purchase_id) {
+        setTimeout(() => {
+          const receiptData = {
+            reference: response.purchase_reference,
+            date: response.purchase_date,
+            phoneNumber: purchaseData.phoneNumber,
+            accountNumber: purchaseData.accountNumber,
+            productType: purchaseData.productType,
+            productName: selectedProduct.product_name,
+            serviceName: selectedService.service_name,
+            currency: selectedProduct.product_currency || 'PEN',
+            montoPagar: parseFloat(response.purchase_base_price || 0),
+            descuento: parseFloat(response.purchase_discount || 0),
+            fee: parseFloat(response.purchase_fee || 0),
+            totalAmount: parseFloat(response.purchase_total_amount || 0),
+            porcentajeDescuento: parseFloat(response.amount_breakdown?.discount_percentage || 0),
+            baseImponible: parseFloat(response.purchase_base_imponible || 0),
+            taxLabel: response.purchase_tax_label || 'IGV',
+            taxRate: parseFloat(response.purchase_tax_rate || 0.18),
+            taxAmount: parseFloat(response.purchase_tax_amount || 0),
+            purchaseStatus: response.purchase_status,
+            paymentStatus: response.payment_status,
+            deliveryStatus: response.delivery_status,
+            paymentRef: response.payment_ref,
+            provisionRef: response.provision_ref,
+            reversalRef: response.reversal_ref,
+            requiresManualIntervention: response.requires_manual_intervention || false,
+            barcode: response.barcode,
+            barcodeImage: response.barcode_image,
+            deliveryPhone: purchaseData.deliveryPhone,
+            deliveryName: purchaseData.deliveryName,
+            deliveryAddress: purchaseData.deliveryAddress,
+          };
+
+          generateAndUploadReceiptPDF(receiptData).then(async pdfUrl => {
+            if (pdfUrl && pdfUrl !== 'direct_download') {
+              try {
+                const baseURL = import.meta.env.VITE_API_URL || '/api/v1';
+                await fetch(`${baseURL}/purchases/${response.purchase_id}/receip-url`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ purchase_receip_url: pdfUrl })
+                });
+                console.log('✅ URL recibo guardada en BD:', pdfUrl);
+              } catch (e) {
+                console.warn('⚠️ No se pudo guardar URL en BD:', e);
+              }
+            }
+          }).catch(e => console.warn('⚠️ Error generando recibo automático:', e));
+        }, 500); // pequeño delay para no bloquear el render del step 6
+      }
+
     } catch (error) {
       console.error('❌ Error en purchase:', error);
 
       const errorMsg = error.message || 'Error al procesar la compra';
 
-      // ─── CORRECCIÓN 2: Manejo de error diferenciado post-gateway ────────────
-      // Si el pago con Izipay ya fue aprobado (gatewayData != null) y luego
-      // el backend falla (500 u otro error), NO enviamos al Step 4 porque el
-      // pago ya se procesó — el usuario podría intentar pagar de nuevo creyendo
-      // que no pagó. En su lugar, mostramos el error en el Step 6 para informar
-      // claramente qué pasó y que contacte a soporte con la referencia.
-      if (gatewayData) {
-        // Pago Izipay exitoso + error en backend: ir a Step 6 con error claro
-        setPurchaseResult({
-          success: false,
-          error: `Error al registrar la compra en el sistema. Tu pago fue procesado por Izipay ` +
-                 `(orden: ${gatewayData.payment_order_number}). ` +
-                 `Por favor contacta a soporte@latconecta.com con este número de orden.`,
-          purchase_status: 'Failed',
-          payment_status: 'Success',
-          payment_ref: gatewayData.payment_order_number || null,
-          // Campos requeridos por el Step 6 para no romper el render
-          date: new Date().toISOString(),
-          reference: gatewayData.payment_order_number || 'N/A',
-          monto_pagar: 0,
-          descuento: 0,
-          fee: 0,
-          amount: 0,
-          porcentaje_descuento: 0,
-          requires_manual_intervention: true,
-        });
-        setPurchaseStep(6);
-        return;
-      }
+      // Con Culqi el pago se procesa íntegramente en el backend.
+      // Si el backend retornó un error, puede ser:
+      // A) Error de pago conocido (tarjeta rechazada, fondos insuficientes, etc.)
+      //    → Volver al Step 4 para reintentar
+      // B) Error técnico antes del pago (red, timeout, etc.)
+      //    → Mostrar en Step 6 sin purchase_id
 
-      // Sin gatewayData: error antes o durante el pago
-      const isPaymentError = errorMsg.includes('Payment failed') ||
-                             errorMsg.includes('Tarjeta rechazada') ||
-                             errorMsg.includes('Barcode generation failed') ||
-                             errorMsg.includes('rechazado') ||
-                             errorMsg.includes('fallido') ||
-                             errorMsg.includes('simulado') ||
-                             errorMsg.includes('Insufficient') ||
-                             errorMsg.includes('vendor balance');
+      // Determinar si es un error de pago (reintentar) o error técnico (step 6)
+      // Los errores de pago vienen del gateway (Culqi) o del validador de vendor
+      // y tienen mensajes específicos. Los errores técnicos son 500 o errores de red.
+      const isTechnicalError = errorMsg.includes('Error interno') ||
+                               errorMsg.includes('Error de conexión') ||
+                               errorMsg.includes('500') ||
+                               errorMsg.includes('Network') ||
+                               errorMsg.includes('Failed to fetch');
 
-      if (isPaymentError) {
-        // Error de pago conocido: volver al Step 4 para reintentar
-        setError(errorMsg);
-        setPurchaseStep(4);
-      } else {
-        // Error técnico desconocido: mostrar en Step 6
+      if (isTechnicalError) {
+        // Error técnico — mostrar en Step 6 sin posibilidad de reintentar
         setError(errorMsg);
         setPurchaseResult({
           success: false,
@@ -588,8 +599,12 @@ const ShopView = ({ user, showNotification }) => {
           porcentaje_descuento: 0,
         });
         setPurchaseStep(6);
+      } else {
+        // Error de pago (Culqi rechazó, vendor balance, código inválido, etc.)
+        // Volver al Step 4 para que el usuario pueda reintentar
+        setError(errorMsg);
+        setPurchaseStep(4);
       }
-      // ----------------------------------------------------------------------───
 
     } finally {
       setProcessing(false);
@@ -969,9 +984,34 @@ const ShopView = ({ user, showNotification }) => {
         console.warn('⚠️ PDF pequeño (<10 KB)');
       }
 
-      // Descarga directa al dispositivo del usuario
-      doc.save(`recibo-${receiptData.reference}.pdf`);
-      console.log('✅ PDF descargado directamente');
+      // Descargar al dispositivo si el usuario lo solicitó explícitamente
+      if (receiptData.downloadRequested) {
+        doc.save(`recibo-${receiptData.reference}.pdf`);
+        console.log('✅ PDF descargado por solicitud del usuario');
+      }
+
+      // Subir al servidor para consulta futura (sin auth — endpoint público)
+      try {
+        const pdfBlob = doc.output('blob');
+        const formData = new FormData();
+        formData.append('file', pdfBlob, `recibo_${receiptData.reference}.pdf`);
+
+        const baseURL = import.meta.env.VITE_API_URL || '/api/v1';
+        const uploadResponse = await fetch(`${baseURL}/upload/receipts-public`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (uploadResponse.ok) {
+          const result = await uploadResponse.json();
+          console.log('✅ Recibo guardado en servidor:', result.url);
+          return result.url;
+        } else {
+          console.warn('⚠️ No se pudo guardar recibo en servidor:', uploadResponse.status);
+        }
+      } catch (uploadErr) {
+        console.warn('⚠️ Error al guardar recibo en servidor:', uploadErr);
+      }
       return 'direct_download';
 
     } catch (error) {
@@ -989,7 +1029,8 @@ const ShopView = ({ user, showNotification }) => {
       return;
     }
 
-    generateAndUploadReceiptPDF({
+generateAndUploadReceiptPDF({
+      downloadRequested: true,
       reference: purchaseResult.reference,
       date: purchaseResult.date,
       phoneNumber: purchaseData.phoneNumber,
