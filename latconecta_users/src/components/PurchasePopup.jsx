@@ -33,30 +33,70 @@ const PurchasePopup = React.memo(({
   // --- Refs ---
   const isSubmitting = useRef(false);
   // --- Payment Gateway State ---
-  const [showGatewayCheckout, setShowGatewayCheckout] = useState(false);
+  // paymentPhase controla exclusivamente qué se muestra en Step 4:
+  //   'idle'      → esperando config (no renderiza nada visible)
+  //   'select'    → mostrar selección de método (solo cuando hay dos opciones)
+  //   'launching' → lanzando Culqi (spinner mínimo, sin texto de método de pago)
+  //   'open'      → Culqi abierto (CulqiCheckout montado)
+  //   'retry'     → Culqi cerró por rechazo, mostrando mensaje + botones
+  //   'abort'     → 3 intentos agotados o error técnico, mostrando mensaje final
+  const [paymentPhase, setPaymentPhase]   = useState('idle');
   const [gatewayResult, setGatewayResult] = useState(null);
   const [paymentConfig, setPaymentConfig] = useState(null);
+  const [retryData, setRetryData]         = useState(null);   // { message, retryFn }
+  const [abortReason, setAbortReason]     = useState(null);   // mensaje final
 
-
-  // Cargar config de pagos del backend al montar o al llegar al paso 4.
-  // GET /payments/config retorna card_available y barcode_available según
-  // DEPLOYMENT_COUNTRY — controles por país independientes del sistema de
-  // operaciones (fase1/fase2), que es exclusivo de desarrollo y UAT.
+  // Cargar config de pagos al montar el popup
   useEffect(() => {
-    if (purchaseStep === 4 || showPurchasePopup) {
+    if (showPurchasePopup) {
       paymentService.getConfig().then(cfg => {
-        console.log('📋 Payment config:', cfg);
         setPaymentConfig(cfg);
       });
+      // Resetear estado de pago al abrir
+      setPaymentPhase('idle');
+      setRetryData(null);
+      setAbortReason(null);
+      isSubmitting.current = false;
     }
-  }, [purchaseStep, showPurchasePopup]);
+  }, [showPurchasePopup]);
 
   // card_available / barcode_available vienen del backend según país de instalación
   const cardEnabled    = paymentConfig?.card_available !== false;
   const barcodeEnabled = paymentConfig?.barcode_available !== false;
-  // cardMode / barcodeMode siguen viniendo de ops_config (solo para dev/UAT)
-  const cardMode   = paymentConfig?.card?.mode || 'fase1';
-  const barcodeMode = paymentConfig?.barcode?.mode || 'fase1';
+  const cardMode       = paymentConfig?.card?.mode || 'fase1';
+  const barcodeEnabled_company = company?.company_barcode_available === 'Si' && barcodeEnabled;
+
+  // Cuando llega al Step 4 y ya tiene config, determinar phase automáticamente
+  useEffect(() => {
+    if (purchaseStep !== 4 || !paymentConfig || paymentPhase !== 'idle') return;
+
+    const barcodeAvailable = barcodeEnabled_company;
+    const bothAvailable    = cardEnabled && barcodeAvailable;
+    const noneAvailable    = !cardEnabled && !barcodeAvailable;
+
+    if (noneAvailable) {
+      setPaymentPhase('abort');
+      setAbortReason('No hay métodos de pago disponibles. Contacta a soporte.');
+    } else if (bothAvailable) {
+      setPaymentPhase('select');
+    } else {
+      // Una sola opción — lanzar directamente
+      setPaymentPhase('launching');
+      setPurchaseData(prev => ({
+        ...prev,
+        paymentMethod: cardEnabled ? 'card' : 'barcode'
+      }));
+      if (cardEnabled) {
+        if (cardMode === 'fase2') {
+          setTimeout(() => setPaymentPhase('open'), 0);
+        } else {
+          setTimeout(() => handlePaymentAndProvision(), 0);
+        }
+      } else {
+        setTimeout(() => handlePaymentAndProvision(), 0);
+      }
+    }
+  }, [purchaseStep, paymentConfig, paymentPhase]);
 
 
   const calculateTotalToPay = (amount) => {
@@ -107,8 +147,14 @@ const PurchasePopup = React.memo(({
     return `Paso ${Math.floor(purchaseStep)}`;
   };
 
+  // El popup se oculta visualmente (pero no se desmonta) cuando Culqi está activo
+  // para evitar el flash del header "Compra - Método de Pago" mientras Culqi está visible
+  const hiddenByculqi = (purchaseStep === 4 && ['idle', 'launching', 'open', 'done'].includes(paymentPhase))
+                     || (purchaseStep === 4 && processing);
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+         style={{ visibility: hiddenByculqi ? 'hidden' : 'visible' }}>
       <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
           <h3 className="text-2xl font-bold text-bitel-blue">Compra - {getStepTitle()}</h3>
@@ -719,98 +765,156 @@ const PurchasePopup = React.memo(({
             </div>
           )}
 
-          {/* PASO 4: Método de Pago + Checkout del Gateway */}
-          {purchaseStep === 4 && (
-            <div>
-              {/* --- MODO CHECKOUT: Muestra el formulario del proveedor --- */}
-              {showGatewayCheckout && (
+          {/* PASO 4: Pago */}
+          {purchaseStep === 4 && (() => {
+            // idle / launching: no mostrar nada hasta tener la config y decidir el phase
+            if (paymentPhase === 'idle' || paymentPhase === 'launching') {
+              return null;
+            }
+
+            // open: CulqiCheckout montado (modal de Culqi visible sobre la pantalla)
+            if (paymentPhase === 'open') {
+              const amount = selectedProduct.product_amount_type === 'F'
+                ? parseFloat(selectedProduct.product_total_price)
+                : selectedProduct.product_amount_type === 'R'
+                ? parseFloat(purchaseData.variableTotalToPay || 0)
+                : calculateTotalToPay(parseFloat(purchaseData.billPaymentAmount || 0));
+
+              return (
                 <CulqiCheckout
-                  amount={(() => {
-                    if (selectedProduct.product_amount_type === 'F') {
-                      return parseFloat(selectedProduct.product_total_price);
-                    } else if (selectedProduct.product_amount_type === 'R') {
-                      return parseFloat(purchaseData.variableTotalToPay || 0);
-                    } else if (selectedProduct.product_amount_type === 'V') {
-                      return calculateTotalToPay(parseFloat(purchaseData.billPaymentAmount || 0));
-                    }
-                    return 0;
-                  })()}
+                  amount={amount}
                   currency={selectedProduct.product_currency || 'PEN'}
                   orderNumber={`LC${Date.now().toString().slice(-12)}`}
                   user={user}
                   onResult={(result) => {
-                    console.log('📨 Culqi result:', result);
-                    setShowGatewayCheckout(false);
-                    if (result.success) {
-                      setGatewayResult(result);
-                      handlePaymentAndProvision();
-                    } else {
-                      // Pago rechazado por Culqi — resetear y volver al Step 4 para reintentar
-                      isSubmitting.current = false;
-                      setError(result.message || 'El pago no fue procesado. Intenta nuevamente.');
-                      setPurchaseStep(4);
-                    }
+                    setPaymentPhase('done');
+                    setGatewayResult(result);
+                    handlePaymentAndProvision();
                   }}
-                  onCancel={() => {
-                    console.log('🚫 Checkout cancelado por usuario');
-                    setShowGatewayCheckout(false);
-                    isSubmitting.current = false;
+                  onRetry={(message, retryFn) => {
+                    setRetryData({ message, retryFn });
+                    setPaymentPhase('retry');
+                  }}
+                  onAbort={(reason) => {
+                    if (reason === 'user_cancel') {
+                      closePurchasePopup();
+                    } else {
+                      setAbortReason(
+                        reason === 'max_retries'
+                          ? 'No se pudo completar el pago después de 3 intentos.'
+                          : 'El procesador de pagos no está disponible. Intenta más tarde.'
+                      );
+                      setPaymentPhase('abort');
+                    }
                   }}
                   autoStart={true}
                 />
-              )}
+              );
+            }
 
-              {/* --- MODO SELECCIÓN: Botones de método de pago --- */}
-              {!showGatewayCheckout && (
+            // retry: cargo rechazado, quedan intentos
+            if (paymentPhase === 'retry') {
+              return (
+                <div className="py-6">
+                  <div className="flex flex-col items-center mb-4">
+                    <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center mb-3">
+                      <AlertCircle size={32} className="text-orange-500" />
+                    </div>
+                    <h4 className="text-base font-semibold text-gray-800">Pago no procesado</h4>
+                  </div>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                    <p className="text-red-600 text-sm">{retryData?.message}</p>
+                  </div>
+                  <p className="text-gray-500 text-sm mb-5 text-center">
+                    Puedes intentar con otra tarjeta o con Yape.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={closePurchasePopup}
+                      className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-semibold hover:bg-gray-600"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => {
+                        const fn = retryData.retryFn;
+                        setRetryData(null);
+                        setPaymentPhase('open');
+                        fn();
+                      }}
+                      className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-semibold hover:opacity-90"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            // abort: 3 intentos agotados, error técnico, o sin métodos disponibles
+            if (paymentPhase === 'abort') {
+              return (
+                <div className="py-6">
+                  <div className="flex flex-col items-center mb-4">
+                    <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mb-3">
+                      <AlertCircle size={32} className="text-red-500" />
+                    </div>
+                    <h4 className="text-base font-semibold text-gray-800">No se pudo procesar el pago</h4>
+                  </div>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
+                    <p className="text-red-600 text-sm">{abortReason}</p>
+                  </div>
+                  <button
+                    onClick={closePurchasePopup}
+                    className="w-full bg-gray-500 text-white py-3 rounded-lg font-semibold hover:bg-gray-600"
+                  >
+                    Volver al catálogo
+                  </button>
+                </div>
+              );
+            }
+
+            // select: dos métodos disponibles
+            if (paymentPhase === 'select') {
+              return (
                 <>
                   <h4 className="text-xl font-bold text-bitel-blue mb-4">Selecciona Método de Pago</h4>
-
                   <div className="space-y-4 mb-6">
-                    {/* Opción: Tarjeta */}
-                    {cardEnabled && (
-                      <button
-                        onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'card' }))}
-                        className={`w-full p-4 rounded-lg border-2 transition-all ${
-                          purchaseData.paymentMethod === 'card'
-                            ? 'border-bitel-blue bg-blue-50'
-                            : 'border-gray-300 hover:border-gray-400'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <CreditCard size={24} className="text-bitel-blue" />
-                          <div className="flex-1 text-left">
-                            <div className="font-bold">Pago con tarjeta</div>
-                            <div className="text-sm text-gray-600">Pago inmediato y seguro</div>
-                          </div>
-                          {purchaseData.paymentMethod === 'card' && (
-                            <Check size={24} className="text-bitel-blue" />
-                          )}
+                    <button
+                      onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'card' }))}
+                      className={`w-full p-4 rounded-lg border-2 transition-all ${
+                        purchaseData.paymentMethod === 'card'
+                          ? 'border-bitel-blue bg-blue-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <CreditCard size={24} className="text-bitel-blue" />
+                        <div className="flex-1 text-left">
+                          <div className="font-bold">Pago con tarjeta</div>
+                          <div className="text-sm text-gray-600">Pago inmediato y seguro</div>
                         </div>
-                      </button>
-                    )}
+                        {purchaseData.paymentMethod === 'card' && <Check size={24} className="text-bitel-blue" />}
+                      </div>
+                    </button>
 
-                    {/* Opción: Barcode */}
-                    {company?.company_barcode_available === 'Si' && barcodeEnabled && (
-                      <button
-                        onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'barcode' }))}
-                        className={`w-full p-4 rounded-lg border-2 transition-all ${
-                          purchaseData.paymentMethod === 'barcode'
-                            ? 'border-bitel-blue bg-blue-50'
-                            : 'border-gray-300 hover:border-gray-400'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="text-2xl">📊</div>
-                          <div className="flex-1 text-left">
-                            <div className="font-bold">Código de Barras</div>
-                            <div className="text-sm text-gray-600">Paga en tienda autorizada</div>
-                          </div>
-                          {purchaseData.paymentMethod === 'barcode' && (
-                            <Check size={24} className="text-bitel-blue" />
-                          )}
+                    <button
+                      onClick={() => setPurchaseData(prev => ({ ...prev, paymentMethod: 'barcode' }))}
+                      className={`w-full p-4 rounded-lg border-2 transition-all ${
+                        purchaseData.paymentMethod === 'barcode'
+                          ? 'border-bitel-blue bg-blue-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="text-2xl">📊</div>
+                        <div className="flex-1 text-left">
+                          <div className="font-bold">Código de Barras</div>
+                          <div className="text-sm text-gray-600">Paga en tienda autorizada</div>
                         </div>
-                      </button>
-                    )}
+                        {purchaseData.paymentMethod === 'barcode' && <Check size={24} className="text-bitel-blue" />}
+                      </div>
+                    </button>
                   </div>
 
                   {error && (
@@ -822,6 +926,7 @@ const PurchasePopup = React.memo(({
                   <div className="flex gap-3">
                     <button
                       onClick={() => {
+                        setPaymentPhase('idle');
                         if (purchaseData.productType === 'smartphone') {
                           setPurchaseStep(2.5);
                         } else if (purchaseData.productType === 'bill_payment' && selectedProduct.product_amount_type === 'V') {
@@ -836,36 +941,34 @@ const PurchasePopup = React.memo(({
                     </button>
                     <button
                       onClick={() => {
-                        if (isSubmitting.current) return;
                         if (!purchaseData.paymentMethod) {
                           setError('Selecciona un método de pago');
                           return;
                         }
                         setError(null);
-                        isSubmitting.current = true;
-
+                        setPurchaseData(prev => ({ ...prev, paymentMethod: purchaseData.paymentMethod }));
                         if (purchaseData.paymentMethod === 'card') {
                           if (cardMode === 'fase2') {
-                            setShowGatewayCheckout(true);
+                            setPaymentPhase('open');
                           } else {
-                            // FASE 1: Pago simulado, va directo al backend
                             handlePaymentAndProvision();
                           }
-                        } else if (purchaseData.paymentMethod === 'barcode') {
-                          // Siempre va al backend (el backend decide fase1/fase2)
+                        } else {
                           handlePaymentAndProvision();
                         }
                       }}
                       disabled={!purchaseData.paymentMethod}
-                      className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
                     >
                       Procesar Compra
                     </button>
                   </div>
                 </>
-              )}
-            </div>
-          )}
+              );
+            }
+
+            return null;
+          })()}
 
           {/* PASO 5: Procesamiento */}
           {purchaseStep === 5 && !error && !purchaseResult && (

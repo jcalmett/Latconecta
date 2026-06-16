@@ -1,7 +1,5 @@
 import apiClient from './apiClient';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8100/api/v1';
-
 class PurchasesService {
   async create(purchaseData) {
     return await apiClient.post('/purchases/create', purchaseData);
