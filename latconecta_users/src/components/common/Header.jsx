@@ -38,7 +38,7 @@ const Header = ({ user, onLogout, latconectaData, onOpenLogin, onOpenSignUp }) =
 
   return (
     <header className="bg-bitel-yellow shadow-lg">
-      <div className="max-w-7xl mx-auto px-6 py-5">
+      <div className="max-w-7xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center">
@@ -46,7 +46,7 @@ const Header = ({ user, onLogout, latconectaData, onOpenLogin, onOpenSignUp }) =
               src={getImageUrl(latconectaData?.latconecta_logo, 'companies')}
               alt="Latconecta Logo"
               onError={(e) => e.target.src = FALLBACK_IMAGES.company}
-              className="h-20 w-auto object-contain"
+              className="h-14 lg:h-16 w-auto object-contain"
             />
           </Link>
 

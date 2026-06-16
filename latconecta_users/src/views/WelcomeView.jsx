@@ -24,36 +24,32 @@ const WelcomeView = ({ latconectaData }) => {
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50">
+
       {/* SECCIÓN 1: LOGO */}
-      <div className="flex items-center justify-center" style={{ height: '30vh' }}>
-        <div className="w-full max-w-md px-4">
+      <div className="flex items-center justify-center py-4 lg:py-7">
+        <div className="w-full max-w-xs lg:max-w-md px-4">
           <img
             src={getImageUrl(latconectaData?.latconecta_logo, 'companies')}
             alt="Latconecta Logo"
             onError={(e) => e.target.src = FALLBACK_IMAGES.company}
-            className="w-full h-auto object-contain"
-            style={{ maxHeight: '25vh' }}
+            className="w-full h-auto object-contain max-h-24 lg:max-h-32"
           />
         </div>
       </div>
 
-      <div className="-mt-12"></div>
-
       {/* SECCIÓN 2: SLOGAN 1 */}
-      <div className="flex items-center justify-center" style={{ height: '20vh' }}>
+      <div className="flex items-center justify-center py-2 lg:py-3">
         <div className="text-center px-4">
-          <h1 className="text-3xl md:text-5xl font-bold text-bitel-blue">
+          <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold text-bitel-blue">
             {latconectaData?.latconecta_lema_1 || 'Conectando el futuro'}
           </h1>
         </div>
       </div>
 
-      <div className="-mt-10"></div>
-
       {/* SECCIÓN 3: CARRUSEL */}
-      <div className="flex items-center justify-center" style={{ height: '30vh' }}>
-        <div className="relative w-full max-w-4xl px-4 h-full flex items-center">
-          <div className="relative w-full h-full max-h-80 overflow-hidden rounded-lg shadow-lg">
+      <div className="flex items-center justify-center py-2 lg:py-3">
+        <div className="relative w-full max-w-4xl px-4">
+          <div className="relative w-full overflow-hidden rounded-lg shadow-lg" style={{ height: '200px' }}>
             {marketingPhotos.length > 0 ? (
               marketingPhotos.map((photo, index) => (
                 <div
@@ -81,7 +77,7 @@ const WelcomeView = ({ latconectaData }) => {
             )}
           </div>
           {marketingPhotos.length > 1 && (
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
+            <div className="flex justify-center mt-2 space-x-2">
               {marketingPhotos.map((_, index) => (
                 <button
                   key={index}
@@ -89,7 +85,7 @@ const WelcomeView = ({ latconectaData }) => {
                   className={`w-3 h-3 rounded-full transition-all duration-300 ${
                     index === currentPhotoIndex
                       ? 'bg-bitel-yellow scale-125'
-                      : 'bg-white bg-opacity-50'
+                      : 'bg-gray-400 bg-opacity-50'
                   }`}
                   aria-label={`Ver foto ${index + 1}`}
                 />
@@ -99,12 +95,10 @@ const WelcomeView = ({ latconectaData }) => {
         </div>
       </div>
 
-      <div className="-mt-4"></div>
-
       {/* SECCIÓN 4: SLOGAN 2 + BOTÓN */}
-      <div className="flex items-center justify-center" style={{ height: '20vh' }}>
-        <div className="text-center px-4 space-y-6">
-          <h2 className="text-2xl md:text-4xl font-semibold text-gray-700">
+      <div className="flex items-center justify-center py-2 lg:py-4">
+        <div className="text-center px-4 space-y-4">
+          <h2 className="text-xl sm:text-2xl lg:text-4xl font-semibold text-gray-700">
             {latconectaData?.latconecta_lema_2 || 'Innovación sin fronteras'}
           </h2>
           <button
@@ -115,6 +109,7 @@ const WelcomeView = ({ latconectaData }) => {
           </button>
         </div>
       </div>
+
     </div>
   );
 };

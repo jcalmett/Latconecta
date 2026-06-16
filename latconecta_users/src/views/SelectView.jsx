@@ -181,125 +181,126 @@ const SelectView = () => {
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50">
-      {/* TÍTULO */}
-      <div className="bg-white shadow-md py-6">
+
+      {/* TÍTULO + DROPDOWNS — bloque único compacto */}
+      <div className="bg-white shadow-md py-3">
         <div className="container mx-auto px-4">
-          <h1 className="text-3xl md:text-4xl font-bold text-bitel-blue text-center">
+          <h1 className="text-xl md:text-2xl font-bold text-bitel-blue text-center mb-3">
             Seleccione País y Servicio
           </h1>
-        </div>
-      </div>
 
-      {/* BANDA DE SELECCIÓN */}
-      <div className="bg-white shadow-md py-6 border-t border-gray-200">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            {/* DROPDOWN PAÍS */}
-            <div className="relative">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                <Globe className="inline w-4 h-4 mr-1" />
-                País
-              </label>
-              <div className="relative">
-                <select
-                  value={selectedCountry?.country_code || ''}
-                  onChange={handleCountryChange}
-                  disabled={loadingCountries}
-                  className="w-full pl-4 pr-10 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-bitel-blue focus:border-bitel-blue transition-all appearance-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  <option value="">Seleccione un país...</option>
-                  {countries.map((country) => (
-                    <option key={country.country_code} value={country.country_code}>
-                      {country.country_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+          {/* Dropdowns: una línea en desktop, dos en móvil */}
+          <div className="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto">
+
+            {/* PAÍS — selector + bandera + nombre en línea */}
+            <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="relative flex-1">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  <Globe className="inline w-3 h-3 mr-1" />
+                  País
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedCountry?.country_code || ''}
+                    onChange={handleCountryChange}
+                    disabled={loadingCountries}
+                    className="w-full pl-3 pr-8 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-bitel-blue focus:border-bitel-blue transition-all appearance-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed text-sm"
+                  >
+                    <option value="">Seleccione un país...</option>
+                    {countries.map((country) => (
+                      <option key={country.country_code} value={country.country_code}>
+                        {country.country_name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
               </div>
-              {/* Previsualización de bandera */}
               {selectedCountry && (
-                <div className="mt-3 flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+                <div className="flex items-center space-x-2 px-2 py-1 bg-blue-50 rounded-lg sm:mt-5 flex-shrink-0">
                   <img
                     src={getImageUrl(selectedCountry.country_flag_photo, 'country')}
                     alt={`Bandera ${selectedCountry.country_name}`}
                     onError={(e) => e.target.src = FALLBACK_IMAGES.country}
-                    className="w-12 h-8 object-contain rounded shadow"
+                    className="w-8 h-5 object-contain rounded shadow"
                   />
-                  <span className="font-semibold text-bitel-blue">
+                  <span className="font-semibold text-bitel-blue text-sm whitespace-nowrap">
                     {selectedCountry.country_name}
                   </span>
                 </div>
               )}
             </div>
 
-            {/* DROPDOWN SERVICIO */}
-            <div className="relative">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                <Tag className="inline w-4 h-4 mr-1" />
-                Servicio
-              </label>
-              <div className="relative">
-                <select
-                  value={selectedService?.service_name || ''}
-                  onChange={handleServiceChange}
-                  disabled={!selectedCountry || loadingServices || loadingAllServices}
-                  className="w-full pl-4 pr-10 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-bitel-blue focus:border-bitel-blue transition-all appearance-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  <option value="">
-                    {!selectedCountry 
-                      ? 'Primero seleccione un país...' 
-                      : loadingServices || loadingAllServices
-                      ? 'Cargando servicios...'
-                      : services.length === 0
-                      ? 'No hay servicios activos disponibles'
-                      : 'Seleccione un servicio...'}
-                  </option>
-                  {services.map((service) => (
-                    <option key={service.service_name} value={service.service_name}>
-                      {service.service_name}
+            {/* SERVICIO — selector + foto + nombre en línea */}
+            <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="relative flex-1">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  <Tag className="inline w-3 h-3 mr-1" />
+                  Servicio
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedService?.service_name || ''}
+                    onChange={handleServiceChange}
+                    disabled={!selectedCountry || loadingServices || loadingAllServices}
+                    className="w-full pl-3 pr-8 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-bitel-blue focus:border-bitel-blue transition-all appearance-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed text-sm"
+                  >
+                    <option value="">
+                      {!selectedCountry
+                        ? 'Primero seleccione un país...'
+                        : loadingServices || loadingAllServices
+                        ? 'Cargando servicios...'
+                        : services.length === 0
+                        ? 'No hay servicios activos disponibles'
+                        : 'Seleccione un servicio...'}
                     </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                    {services.map((service) => (
+                      <option key={service.service_name} value={service.service_name}>
+                        {service.service_name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
               </div>
-              {/* Previsualización de servicio */}
               {selectedService && (
-                <div className="mt-3 flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+                <div className="flex items-center space-x-2 px-2 py-1 bg-blue-50 rounded-lg sm:mt-5 flex-shrink-0">
                   <img
                     src={getImageUrl(selectedService.service_photo, 'service')}
                     alt={selectedService.service_name}
                     onError={(e) => e.target.src = FALLBACK_IMAGES.service}
-                    className="w-12 h-12 object-contain rounded shadow"
+                    className="w-8 h-8 object-contain rounded shadow"
                   />
-                  <span className="font-semibold text-bitel-blue">
+                  <span className="font-semibold text-bitel-blue text-sm whitespace-nowrap">
                     {selectedService.service_name}
                   </span>
                 </div>
               )}
             </div>
+
           </div>
         </div>
       </div>
 
       {/* ZONA DE COMPAÑÍAS */}
-      <div className="flex-1 py-8">
+      <div className="flex-1 py-4">
         <div className="container mx-auto px-4">
           {/* Loading */}
           {loadingCompanies && (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-bitel-blue mb-4"></div>
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-bitel-blue mb-3"></div>
               <p className="text-gray-600">Cargando compañías...</p>
             </div>
           )}
 
           {/* Sin selección */}
           {!selectedCountry && !loadingCompanies && (
-            <div className="text-center py-12">
-              <Globe className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
+            <div className="text-center py-8">
+              <Globe className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-gray-700 mb-1">
                 Comience seleccionando un país
               </h3>
-              <p className="text-gray-500">
+              <p className="text-gray-500 text-sm">
                 Elija un país para ver los servicios disponibles
               </p>
             </div>
@@ -307,12 +308,12 @@ const SelectView = () => {
 
           {/* País seleccionado pero no servicio */}
           {selectedCountry && !selectedService && !loadingCompanies && (
-            <div className="text-center py-12">
-              <Tag className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
+            <div className="text-center py-8">
+              <Tag className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-gray-700 mb-1">
                 Ahora seleccione un servicio
               </h3>
-              <p className="text-gray-500">
+              <p className="text-gray-500 text-sm">
                 Elija el tipo de servicio que desea adquirir en {selectedCountry.country_name}
               </p>
             </div>
@@ -321,19 +322,19 @@ const SelectView = () => {
           {/* Compañías disponibles */}
           {selectedCountry && selectedService && !loadingCompanies && companies.length > 0 && (
             <div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">
-                Compañías que nos ofrecen el servicio <span className="text-bitel-blue">{selectedService.service_name}</span> en <span className="text-bitel-blue">{selectedCountry.country_name}</span>
+              <h2 className="text-lg font-bold text-gray-800 mb-4 text-center">
+                Compañías que ofrecen <span className="text-bitel-blue">{selectedService.service_name}</span> en <span className="text-bitel-blue">{selectedCountry.country_name}</span>
               </h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {companies.map((company) => (
                   <div
                     key={company.company_name}
                     onClick={() => handleCompanyClick(company)}
-                    className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer transform hover:scale-105 border-2 border-transparent hover:border-bitel-blue p-6"
+                    className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer transform hover:scale-105 border-2 border-transparent hover:border-bitel-blue p-4"
                   >
                     {/* Logo */}
-                    <div className="flex items-center justify-center mb-4 h-24">
+                    <div className="flex items-center justify-center mb-3 h-16">
                       <img
                         src={getImageUrl(company.company_logo, 'company')}
                         alt={company.company_name}
@@ -343,25 +344,25 @@ const SelectView = () => {
                     </div>
 
                     {/* Nombre */}
-                    <h3 className="text-xl font-bold text-bitel-blue text-center mb-2">
+                    <h3 className="text-base font-bold text-bitel-blue text-center mb-2">
                       {company.company_name}
                     </h3>
 
                     {/* Info adicional */}
-                    <div className="text-center text-sm text-gray-600 space-y-1">
+                    <div className="text-center text-xs text-gray-600 space-y-1">
                       <p className="flex items-center justify-center">
-                        <Globe className="w-4 h-4 mr-1" />
+                        <Globe className="w-3 h-3 mr-1" />
                         {selectedCountry.country_name}
                       </p>
                       <p className="flex items-center justify-center">
-                        <Tag className="w-4 h-4 mr-1" />
+                        <Tag className="w-3 h-3 mr-1" />
                         {selectedService.service_name}
                       </p>
                     </div>
 
                     {/* Botón */}
-                    <div className="mt-4">
-                      <button className="w-full bg-bitel-yellow text-bitel-blue py-2 rounded-lg font-semibold hover:bg-yellow-500 transition-colors">
+                    <div className="mt-3">
+                      <button className="w-full bg-bitel-yellow text-bitel-blue py-1.5 rounded-lg font-semibold hover:bg-yellow-500 transition-colors text-sm">
                         Ver Productos
                       </button>
                     </div>
@@ -373,15 +374,15 @@ const SelectView = () => {
 
           {/* Sin compañías */}
           {selectedCountry && selectedService && !loadingCompanies && companies.length === 0 && (
-            <div className="text-center py-12">
-              <Building2 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
+            <div className="text-center py-8">
+              <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-gray-700 mb-1">
                 No hay compañías activas disponibles
               </h3>
-              <p className="text-gray-500">
+              <p className="text-gray-500 text-sm">
                 No encontramos compañías activas que ofrezcan <strong>{selectedService.service_name}</strong> en <strong>{selectedCountry.country_name}</strong>
               </p>
-              <p className="text-gray-400 text-sm mt-2">
+              <p className="text-gray-400 text-xs mt-1">
                 Intente con otro país o servicio
               </p>
             </div>

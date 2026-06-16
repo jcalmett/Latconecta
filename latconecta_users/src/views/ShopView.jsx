@@ -1203,23 +1203,23 @@ Dirección: ${purchaseData.deliveryAddress}
   }
 
   return (
-    <div className="flex-1 bg-gray-50 py-8">
+    <div className="flex-1 bg-gray-50 py-4">
       <div className="container mx-auto px-4">
         {(urlCountry || urlService || urlCompany) && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <div className="bg-white rounded-lg shadow-md p-3 mb-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-6">
+              <div className="flex items-center space-x-4">
                 {company && (
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-3">
                     <img
                       src={getImageUrl(company.company_logo, 'company')}
                       alt={company.company_name}
                       onError={(e) => e.target.src = FALLBACK_IMAGES.company}
-                      className="h-16 w-auto object-contain"
+                      className="h-12 w-auto object-contain"
                     />
                     <div>
-                      <h2 className="text-2xl font-bold text-bitel-blue">{company.company_name}</h2>
-                      <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
+                      <h2 className="text-lg font-bold text-bitel-blue">{company.company_name}</h2>
+                      <div className="flex items-center space-x-3 text-sm text-gray-600 mt-0.5">
                         {country && (
                           <span className="flex items-center">
                             <img
@@ -1244,18 +1244,18 @@ Dirección: ${purchaseData.deliveryAddress}
                 to="/select"
                 className="flex items-center space-x-2 text-bitel-blue hover:text-blue-700 transition-colors"
               >
-                <ArrowLeft size={20} />
-                <span className="font-semibold">Volver a Selección</span>
+                <ArrowLeft size={18} />
+                <span className="font-semibold text-sm">Volver a Selección</span>
               </Link>
             </div>
           </div>
         )}
 
-        <h1 className="text-4xl font-bold text-bitel-blue mb-8">
+        <h1 className="text-2xl lg:text-3xl font-bold text-bitel-blue mb-4">
           {company ? `Productos de ${company.company_name}` : 'Tienda Latconecta'}
         </h1>
 
-        <div className="bg-white rounded-lg shadow-md mb-8 overflow-x-auto">
+        <div className="bg-white rounded-lg shadow-md mb-4 overflow-x-auto">
           <div className="flex">
             {services
               .filter(s => s.status === 'active')
@@ -1290,7 +1290,7 @@ Dirección: ${purchaseData.deliveryAddress}
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {products.map((product) => (
               <div
                 key={product.product_id}

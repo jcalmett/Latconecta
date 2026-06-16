@@ -10,73 +10,58 @@ const Footer = ({ latconectaData }) => {
 
   return (
     <footer className="bg-bitel-yellow mt-auto">
-      <div className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <div className="container mx-auto px-4 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Columna 1: Logo + Lema */}
           <div>
-            <div className="mb-4">
+            <div className="mb-3">
               <img
                 src={getImageUrl(latconectaData?.latconecta_logo, 'companies')}
                 alt="Latconecta Logo"
                 onError={(e) => e.target.src = FALLBACK_IMAGES.company}
-                className="h-12 w-auto object-contain"
+                className="h-10 w-auto object-contain"
               />
             </div>
-            <p className="text-gray-700 mb-4 text-sm">
+            <p className="text-gray-700 mb-2 text-sm">
               {latconectaData?.latconecta_lema_1 || 'Plataforma de Servicios Digitales'}
             </p>
           </div>
 
           {/* Columna 2: Contacto */}
           <div>
-            <h3 className="text-lg font-semibold mb-4 text-bitel-blue">Contacto</h3>
-            <div className="space-y-2">
+            <h3 className="text-base font-semibold mb-3 text-bitel-blue">Contacto</h3>
+            <div className="space-y-1">
               <div className="flex items-center text-gray-700 text-sm">
-                <Mail className="w-4 h-4 mr-2" />
+                <Mail className="w-4 h-4 mr-2 flex-shrink-0" />
                 <span>{latconectaData?.latconecta_mail_comercial || 'comercial@latconecta.com'}</span>
               </div>
               <div className="flex items-center text-gray-700 text-sm">
-                <Mail className="w-4 h-4 mr-2" />
+                <Mail className="w-4 h-4 mr-2 flex-shrink-0" />
                 <span>{latconectaData?.latconecta_mail_support || 'support@latconecta.com'}</span>
               </div>
               <div className="flex items-center text-gray-700 text-sm">
-                <MapPin className="w-4 h-4 mr-2" />
+                <MapPin className="w-4 h-4 mr-2 flex-shrink-0" />
                 <span>Miami, FL, USA</span>
               </div>
             </div>
           </div>
 
-          {/* Columna 3: Historia */}
+          {/* Columna 3: Enlaces + Libro de Reclamaciones en la misma fila */}
           <div>
-            <h3 className="text-lg font-semibold mb-4 text-bitel-blue">Historia</h3>
-            <p className="text-gray-700 text-sm">
-              {latconectaData?.latconecta_description || 'Plataforma líder en servicios digitales.'}
-            </p>
-          </div>
-
-          {/* Columna 4: Enlaces + Libro de Reclamaciones */}
-          <div>
-            <h3 className="text-lg font-semibold mb-4 text-bitel-blue">Enlaces</h3>
-            <ul className="space-y-2">
-              <li>
-                <Link to="/" className="text-gray-700 hover:text-bitel-blue transition-colors text-sm">
-                  Sobre Nosotros
-                </Link>
-              </li>
-              <li>
-                <a href="#" className="text-gray-700 hover:text-bitel-blue transition-colors text-sm">
-                  Términos
-                </a>
-              </li>
-            </ul>
-
-            {/* LIBRO DE RECLAMACIONES — imagen oficial — Art. 4-B + Art. 9 DS 006-2014 */}
-            <div className="mt-4">
+            <h3 className="text-base font-semibold mb-3 text-bitel-blue">Enlaces</h3>
+            <div className="flex items-center gap-4 flex-wrap">
+              <Link to="/" className="text-gray-700 hover:text-bitel-blue transition-colors text-sm">
+                Sobre Nosotros
+              </Link>
+              <a href="#" className="text-gray-700 hover:text-bitel-blue transition-colors text-sm">
+                Términos
+              </a>
+              {/* LIBRO DE RECLAMACIONES — Art. 4-B + Art. 9 DS 006-2014 */}
               <Link to="/reclamaciones" title="Libro de Reclamaciones Virtual">
                 <img
                   src={LIBRO_IMG}
                   alt="Libro de Reclamaciones Virtual"
-                  className="h-12 w-auto object-contain cursor-pointer hover:opacity-80 transition-opacity"
+                  className="h-10 w-auto object-contain cursor-pointer hover:opacity-80 transition-opacity"
                 />
               </Link>
             </div>
@@ -84,7 +69,7 @@ const Footer = ({ latconectaData }) => {
         </div>
 
         {/* Separador y Copyright */}
-        <div className="border-t border-yellow-600 mt-8 pt-6">
+        <div className="border-t border-yellow-600 mt-4 pt-3">
           <div className="text-center">
             <p className="text-gray-700 text-sm">
               © {currentYear} {latconectaData?.latconecta_name || 'Latconecta'}. Todos los derechos reservados.
