@@ -109,20 +109,27 @@ const ShopView = ({ user, showNotification }) => {
 
       const servicesData = await servicesService.getAll();
       const activeServices = servicesData.filter(s => s.status === 'active');
-      setServices(activeServices);
 
-      if (urlService && activeServices.length > 0) {
-        const foundService = activeServices.find(s => s.service_name === urlService);
+      // Mostrar solo el/los servicios que ofrece la compañía seleccionada
+      // La compañía tiene service_id que determina qué servicio vende
+      const companyServices = resolvedCompany?.service_id
+        ? activeServices.filter(s => s.service_id === resolvedCompany.service_id)
+        : activeServices;
+
+      setServices(companyServices);
+
+      if (urlService && companyServices.length > 0) {
+        const foundService = companyServices.find(s => s.service_name === urlService);
         if (foundService) {
           setSelectedService(foundService);
           await loadProducts(foundService.service_id, resolvedCompany?.company_id);
         } else {
-          setSelectedService(activeServices[0]);
-          await loadProducts(activeServices[0].service_id, resolvedCompany?.company_id);
+          setSelectedService(companyServices[0]);
+          await loadProducts(companyServices[0].service_id, resolvedCompany?.company_id);
         }
-      } else if (activeServices.length > 0) {
-        setSelectedService(activeServices[0]);
-        await loadProducts(activeServices[0].service_id, resolvedCompany?.company_id);
+      } else if (companyServices.length > 0) {
+        setSelectedService(companyServices[0]);
+        await loadProducts(companyServices[0].service_id, resolvedCompany?.company_id);
       }
 
     } catch (error) {
