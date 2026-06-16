@@ -176,7 +176,7 @@ const PurchasePopup = React.memo(({
                       src={getImageUrl(selectedProduct.product_photo, 'product')}
                       alt={selectedProduct.product_name}
                       onError={(e) => (e.target.src = FALLBACK_IMAGES.product)}
-                      className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
+                      className="w-20 h-20 object-contain bg-gray-50 rounded-lg flex-shrink-0"
                     />
                   )}
                   <div className="flex-1 min-w-0">

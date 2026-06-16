@@ -1226,7 +1226,7 @@ Dirección: ${purchaseData.deliveryAddress}
                               src={getImageUrl(country.country_flag_photo, 'country')}
                               alt={country.country_name}
                               onError={(e) => e.target.src = FALLBACK_IMAGES.country}
-                              className="w-6 h-4 object-cover rounded mr-2"
+                              className="w-6 h-4 object-contain rounded mr-2"
                             />
                             {country.country_name}
                           </span>
@@ -1301,7 +1301,7 @@ Dirección: ${purchaseData.deliveryAddress}
                   src={getImageUrl(product.product_photo, 'product')}
                   alt={product.product_name}
                   onError={(e) => (e.target.src = FALLBACK_IMAGES.product)}
-                  className="w-full h-48 object-cover"
+                  className="w-full h-48 object-contain bg-gray-50 p-2"
                 />
                 <div className="p-4">
                   <h3 className="text-xl font-bold text-bitel-blue mb-2">{product.product_name}</h3>

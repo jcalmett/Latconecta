@@ -223,7 +223,7 @@ const SelectView = () => {
                     src={getImageUrl(selectedCountry.country_flag_photo, 'country')}
                     alt={`Bandera ${selectedCountry.country_name}`}
                     onError={(e) => e.target.src = FALLBACK_IMAGES.country}
-                    className="w-12 h-8 object-cover rounded shadow"
+                    className="w-12 h-8 object-contain rounded shadow"
                   />
                   <span className="font-semibold text-bitel-blue">
                     {selectedCountry.country_name}
@@ -269,7 +269,7 @@ const SelectView = () => {
                     src={getImageUrl(selectedService.service_photo, 'service')}
                     alt={selectedService.service_name}
                     onError={(e) => e.target.src = FALLBACK_IMAGES.service}
-                    className="w-12 h-12 object-cover rounded shadow"
+                    className="w-12 h-12 object-contain rounded shadow"
                   />
                   <span className="font-semibold text-bitel-blue">
                     {selectedService.service_name}
