@@ -41,21 +41,26 @@ const Footer = ({ latconectaData }) => {
               </div>
               <div className="flex items-center text-gray-700 text-sm">
                 <MapPin className="w-4 h-4 mr-2 flex-shrink-0" />
-                <span>Miami, FL, USA</span>
+                <span>Calle Los Recuerdos 387, Urb. Chacarilla del Estanque, San Borja, Lima, Perú</span>
               </div>
             </div>
           </div>
 
           {/* Columna 3: Enlaces + Libro de Reclamaciones en la misma fila */}
           <div>
-            <h3 className="text-base font-semibold mb-3 text-bitel-blue">Enlaces</h3>
-            <div className="flex items-center gap-4 flex-wrap">
-              <Link to="/" className="text-gray-700 hover:text-bitel-blue transition-colors text-sm">
-                Sobre Nosotros
-              </Link>
-              <a href="#" className="text-gray-700 hover:text-bitel-blue transition-colors text-sm">
-                Términos
-              </a>
+            <h3 className="text-base font-semibold mb-3 text-bitel-blue">Legal</h3>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-4 flex-wrap">
+                <Link to="/terminos" className="text-gray-700 hover:text-bitel-blue transition-colors text-sm">
+                  Términos y Condiciones
+                </Link>
+                <Link to="/privacidad" className="text-gray-700 hover:text-bitel-blue transition-colors text-sm">
+                  Privacidad
+                </Link>
+                <Link to="/aviso-legal" className="text-gray-700 hover:text-bitel-blue transition-colors text-sm">
+                  Aviso Legal
+                </Link>
+              </div>
               {/* LIBRO DE RECLAMACIONES — Art. 4-B + Art. 9 DS 006-2014 */}
               <Link to="/reclamaciones" title="Libro de Reclamaciones Virtual">
                 <img
@@ -72,7 +77,7 @@ const Footer = ({ latconectaData }) => {
         <div className="border-t border-yellow-600 mt-4 pt-3">
           <div className="text-center">
             <p className="text-gray-700 text-sm">
-              © {currentYear} {latconectaData?.latconecta_name || 'Latconecta'}. Todos los derechos reservados.
+              © {currentYear} LATCOM HORIZONS PERU S.R.L. Todos los derechos reservados.
             </p>
           </div>
         </div>

@@ -14,6 +14,9 @@ import ShopView from './views/ShopView';
 import ProfileView from './views/ProfileView';
 import LibroReclamaciones from './components/complaints/LibroReclamaciones';
 import RespuestaOferta from './components/complaints/RespuestaOferta';
+import AvisoLegalView from './views/AvisoLegalView';
+import TerminosView from './views/TerminosView';
+import PrivacidadView from './views/PrivacidadView';
 
 
 function AppContent() {
@@ -162,6 +165,10 @@ function AppContent() {
         {/* Libro de Reclamaciones Virtual — LR-001 (público, sin auth) */}
         <Route path="/reclamaciones" element={<LibroReclamaciones showNotification={showNotification} />} />
         <Route path="/reclamaciones/oferta/:numero" element={<RespuestaOferta showNotification={showNotification} />} />
+        {/* Páginas legales — públicas, sin auth */}
+        <Route path="/aviso-legal" element={<AvisoLegalView />} />
+        <Route path="/terminos" element={<TerminosView />} />
+        <Route path="/privacidad" element={<PrivacidadView />} />
       </Routes>
 
       <OperationsPanel />
