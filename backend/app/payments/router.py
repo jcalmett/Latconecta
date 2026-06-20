@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from . import schemas, service
 from app.config import settings
+from app.services.operations_config_service import ops_config
 
 logger = logging.getLogger(__name__)
 
@@ -229,9 +230,13 @@ async def get_payment_config():
         "yape_available":      settings.PAYMENT_GATEWAY == "culqi",   # Solo Culqi tiene Yape
         "wallet_available":    settings.PAYMENT_GATEWAY == "culqi",   # Solo Culqi tiene billeteras
 
-        # Modo de operación (F1/F2 — controlado por OperationsPanel)
-        "card":                {"mode": "fase2"},
-        "barcode":             {"mode": "fase2"},
+        # Modo de operación (F1/F2 — desde OperationsConfigService, controlado por OperationsPanel)
+        # fase1 = pago simulado internamente (sin Culqi)
+        # fase2 = pago real (abre Culqi en el frontend)
+        "card":                {"mode": ops_config.get_mode("pago_tarjeta"),
+                                "fase1_response": ops_config.get_fase1_response("pago_tarjeta")},
+        "barcode":             {"mode": ops_config.get_mode("pago_barcode"),
+                                "fase1_response": ops_config.get_fase1_response("pago_barcode")},
     }
 
 
