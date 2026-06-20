@@ -10,13 +10,26 @@ Endpoints para:
 - Consultar config de pagos (para frontend)
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Header
 from typing import Literal, Any, Optional
 from pydantic import BaseModel
 
 from app.services.operations_config_service import ops_config
-from app.dependencies import get_current_admin_user
-from app.models.user import User
+from app.config import settings
+
+
+def verify_ops_pin(x_ops_pin: Optional[str] = Header(None)):
+    """Valida el PIN del OperationsPanel enviado en header X-Ops-Pin."""
+    if not settings.OPS_PANEL_PIN:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OperationsPanel no disponible en este ambiente"
+        )
+    if x_ops_pin != settings.OPS_PANEL_PIN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="PIN incorrecto"
+        )
 
 router = APIRouter()
 
@@ -40,7 +53,7 @@ class ValCuentaParams(BaseModel):
 # ==================== ENDPOINTS PRINCIPALES ====================
 
 @router.get("/config")
-async def get_config(current_user: User = Depends(get_current_admin_user)):
+async def get_config(_: None = Depends(verify_ops_pin)):
     """Obtener configuración completa — solo admin"""
     return {
         "config": ops_config.get_full_config(),
@@ -49,14 +62,14 @@ async def get_config(current_user: User = Depends(get_current_admin_user)):
 
 
 @router.get("/payment-config")
-async def get_payment_config(current_user: User = Depends(get_current_admin_user)):
+async def get_payment_config(_: None = Depends(verify_ops_pin)):
     """Config específico de pagos — solo admin"""
     return ops_config.get_payment_config()
 
 
 
 @router.post("/config/val-cuenta-params")
-async def update_val_cuenta_params(params: ValCuentaParams, current_user: User = Depends(get_current_admin_user)):
+async def update_val_cuenta_params(params: ValCuentaParams, _: None = Depends(verify_ops_pin)):
     """
     Configurar parámetros de simulación de validación de cuenta.
 
@@ -76,7 +89,7 @@ async def update_val_cuenta_params(params: ValCuentaParams, current_user: User =
 
 
 @router.post("/config/{operation}")
-async def update_operation(operation: str, update: OperationUpdate, current_user: User = Depends(get_current_admin_user)):
+async def update_operation(operation: str, update: OperationUpdate, _: None = Depends(verify_ops_pin)):
     """
     Actualizar una operación específica.
 
@@ -110,70 +123,70 @@ async def update_operation(operation: str, update: OperationUpdate, current_user
 # ==================== PRESETS (Escenarios) ====================
 
 @router.post("/presets/all-fase1-success")
-async def preset_all_fase1_success(current_user: User = Depends(get_current_admin_user)):
+async def preset_all_fase1_success(_: None = Depends(verify_ops_pin)):
     """Todo en Fase 1 / Success"""
     ops_config.preset_all_fase1_success()
     return {"success": True, "preset": "all-fase1-success", "description": "✅ Todo simulado exitoso"}
 
 
 @router.post("/presets/all-fase1-fail")
-async def preset_all_fase1_fail(current_user: User = Depends(get_current_admin_user)):
+async def preset_all_fase1_fail(_: None = Depends(verify_ops_pin)):
     """Todo en Fase 1 / Fail"""
     ops_config.preset_all_fase1_fail()
     return {"success": True, "preset": "all-fase1-fail", "description": "❌ Todo simulado fallido"}
 
 
 @router.post("/presets/all-fase2")
-async def preset_all_fase2(current_user: User = Depends(get_current_admin_user)):
+async def preset_all_fase2(_: None = Depends(verify_ops_pin)):
     """Todo en Fase 2 (real)"""
     ops_config.preset_all_fase2()
     return {"success": True, "preset": "all-fase2", "description": "🚀 Todo en modo real"}
 
 
 @router.post("/presets/happy-path")
-async def preset_happy_path(current_user: User = Depends(get_current_admin_user)):
+async def preset_happy_path(_: None = Depends(verify_ops_pin)):
     """Escenario: Todo simulado y exitoso"""
     ops_config.preset_happy_path()
     return {"success": True, "preset": "happy-path", "description": "Todo exitoso"}
 
 
 @router.post("/presets/payment-fail")
-async def preset_payment_fail(current_user: User = Depends(get_current_admin_user)):
+async def preset_payment_fail(_: None = Depends(verify_ops_pin)):
     """Escenario: Pago rechazado"""
     ops_config.preset_payment_fail()
     return {"success": True, "preset": "payment-fail", "description": "💳❌ Pago rechazado"}
 
 
 @router.post("/presets/provision-fail-reversal-ok")
-async def preset_provision_fail_reversal_ok(current_user: User = Depends(get_current_admin_user)):
+async def preset_provision_fail_reversal_ok(_: None = Depends(verify_ops_pin)):
     """Escenario: Provisión falla + Anulación OK"""
     ops_config.preset_provision_fail_reversal_ok()
     return {"success": True, "preset": "provision-fail-reversal-ok", "description": "⚠️ Provisión falla + Anulación OK"}
 
 
 @router.post("/presets/provision-fail-reversal-fail")
-async def preset_provision_fail_reversal_fail(current_user: User = Depends(get_current_admin_user)):
+async def preset_provision_fail_reversal_fail(_: None = Depends(verify_ops_pin)):
     """Escenario: CRÍTICO - Provisión y anulación fallan"""
     ops_config.preset_provision_fail_reversal_fail()
     return {"success": True, "preset": "provision-fail-reversal-fail", "description": "🚨 CRÍTICO: Provisión y anulación fallan"}
 
 
 @router.post("/presets/bill-payment-partial")
-async def preset_bill_payment_partial(current_user: User = Depends(get_current_admin_user)):
+async def preset_bill_payment_partial(_: None = Depends(verify_ops_pin)):
     """Escenario: Bill Payment con pago parcial"""
     ops_config.preset_bill_payment_partial()
     return {"success": True, "preset": "bill-payment-partial", "description": "📄 Bill Payment parcial"}
 
 
 @router.post("/presets/bill-payment-total")
-async def preset_bill_payment_total(current_user: User = Depends(get_current_admin_user)):
+async def preset_bill_payment_total(_: None = Depends(verify_ops_pin)):
     """Escenario: Bill Payment solo total"""
     ops_config.preset_bill_payment_total()
     return {"success": True, "preset": "bill-payment-total", "description": "📄 Bill Payment total"}
 
 
 @router.get("/presets")
-async def list_presets(current_user: User = Depends(get_current_admin_user)):
+async def list_presets(_: None = Depends(verify_ops_pin)):
     """Listar todos los presets disponibles"""
     return {
         "presets": [

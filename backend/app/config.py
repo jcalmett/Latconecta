@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     # =========================================================================
     CARD_AVAILABLE: bool = True
     BARCODE_AVAILABLE: bool = True
+    # PIN para acceso al OperationsPanel — requerido para cambiar F1/F2
+    # Vacío = panel deshabilitado (producción). Definir en .env para pruebas.
+    OPS_PANEL_PIN: str = ""
 
     # =========================================================================
     # CONFIGURACIÓN DE CULQI - PASARELA DE PAGOS (Perú)
