@@ -586,7 +586,8 @@ async def create_purchase(
 
 
 @router.post("/validate-phone")
-async def validate_phone(product_id: int, phone_number: str, db: AsyncSession = Depends(get_db)):
+@limiter.limit("20/minute")
+async def validate_phone(request: Request, product_id: int, phone_number: str, db: AsyncSession = Depends(get_db)):
     try:
         if ops_config.is_fase1('val_telefono'):
             sim = ops_config.simulate_response('val_telefono', {'phone_number': phone_number})
@@ -621,7 +622,8 @@ async def validate_phone(product_id: int, phone_number: str, db: AsyncSession = 
 
 
 @router.post("/validate-account")
-async def validate_account(product_id: int, account_number: str, db: AsyncSession = Depends(get_db)):
+@limiter.limit("20/minute")
+async def validate_account(request: Request, product_id: int, account_number: str, db: AsyncSession = Depends(get_db)):
     try:
         if ops_config.is_fase1('val_cuenta'):
             sim = ops_config.simulate_response('val_cuenta', {'account_number': account_number})
@@ -713,7 +715,7 @@ async def update_receip_url(
     purchase_id: int,
     data: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user_optional)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """Guarda la URL del recibo PDF generado por el frontend."""
     result = await db.execute(
@@ -722,7 +724,22 @@ async def update_receip_url(
     purchase = result.scalar_one_or_none()
     if not purchase:
         raise HTTPException(status_code=404, detail="Compra no encontrada")
-    purchase.purchase_receip_url = data.get("purchase_receip_url")
+
+    # Validar ownership: solo el dueño de la compra puede actualizar el recibo
+    if current_user and purchase.user_id and purchase.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    # Validar que la URL pertenece al propio servidor
+    receip_url = data.get("purchase_receip_url", "")
+    if receip_url and not (
+        receip_url.startswith("/uploads/") or
+        "latconecta.com" in receip_url or
+        "127.0.0.1" in receip_url or
+        "localhost" in receip_url
+    ):
+        raise HTTPException(status_code=400, detail="URL de recibo no válida")
+
+    purchase.purchase_receip_url = receip_url
     await db.commit()
     return {"success": True, "purchase_receip_url": purchase.purchase_receip_url}
 

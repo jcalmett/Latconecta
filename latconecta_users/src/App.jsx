@@ -171,7 +171,8 @@ function AppContent() {
         <Route path="/privacidad" element={<PrivacidadView />} />
       </Routes>
 
-      <OperationsPanel />
+      {/* OperationsPanel — solo en desarrollo/UAT, nunca en producción */}
+      {import.meta.env.VITE_SHOW_OPS_PANEL === 'true' && <OperationsPanel />}
 
       <Footer latconectaData={latconectaData} />
 

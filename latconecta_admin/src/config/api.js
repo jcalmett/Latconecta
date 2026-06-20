@@ -4,7 +4,7 @@
  * Correcciones:
  * - baseURL incluye /v1
  * - Búsqueda flexible de token (latconecta_token o token)
- * - Logs de debugging eliminados de request interceptor (seguridad)
+ * - Mejor logging
  */
 
 import axios from 'axios';
@@ -26,7 +26,10 @@ apiClient.interceptors.request.use(
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
     }
+
+    // Log en desarrollo (siempre activo para debugging)
 
     return config;
   },
@@ -38,6 +41,7 @@ apiClient.interceptors.request.use(
 // Interceptor para manejar respuestas y errores
 apiClient.interceptors.response.use(
   (response) => {
+    // Log en desarrollo
     return response;
   },
   (error) => {
@@ -50,6 +54,8 @@ apiClient.interceptors.response.use(
 
       switch (status) {
         case 401:
+          console.error('❌ 401 - No autenticado. Token:', localStorage.getItem('latconecta_token') || localStorage.getItem('token') ? 'EXISTE pero es inválido' : 'NO EXISTE');
+
           // Token expirado o inválido - limpiar todo
           localStorage.removeItem('latconecta_token');
           localStorage.removeItem('token');

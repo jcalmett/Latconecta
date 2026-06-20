@@ -1341,7 +1341,8 @@ Dirección: ${purchaseData.deliveryAddress}
         )}
       </div>
 
-      <OperationsPanel />
+      {/* OperationsPanel — solo en desarrollo/UAT, nunca en producción */}
+      {import.meta.env.VITE_SHOW_OPS_PANEL === 'true' && <OperationsPanel />}
       <PurchasePopup
         showPurchasePopup={showPurchasePopup}
         selectedProduct={selectedProduct}
