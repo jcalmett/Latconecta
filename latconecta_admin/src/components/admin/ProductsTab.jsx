@@ -591,7 +591,7 @@ const ProductsTab = ({
                           src={getImageUrl(product.product_photo, "product")}
                           alt={product.product_name}
                           onError={(e) => (e.target.src = FALLBACK_IMAGES.product)}
-                          className="w-12 h-12 object-cover rounded"
+                          className="w-12 h-12 object-contain rounded"
                         />
                         <div>
                           <div className="font-semibold">{product.product_name}</div>
@@ -782,7 +782,7 @@ const ProductsTab = ({
                                 src={getImageUrl(formData.product_photo, "product")}
                                 alt="Preview"
                                 onError={(e) => (e.target.src = FALLBACK_IMAGES.product)}
-                                className="w-full h-40 object-cover rounded"
+                                className="w-full h-40 object-contain bg-gray-50 rounded"
                               />
                               <button
                                 type="button"

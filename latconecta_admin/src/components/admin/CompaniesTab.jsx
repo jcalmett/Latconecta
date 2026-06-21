@@ -729,7 +729,7 @@ const CompaniesTab = ({
                             src={getImageUrl(formData.company_photo, "company")}
                             alt="Foto"
                             onError={(e) => (e.target.src = FALLBACK_IMAGES.company)}
-                            className="w-full h-32 object-cover rounded-lg"
+                            className="w-full h-32 object-contain bg-gray-50 rounded-lg"
                           />
                           <button
                             type="button"

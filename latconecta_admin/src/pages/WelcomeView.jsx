@@ -56,7 +56,7 @@ const WelcomeView = ({ latconectaData }) => {
 
   // FOOTER - Logo + Lema 1 + Contactos + Descripción
   const Footer = () => (
-    <div className="bg-[#FFE709] text-gray-900 py-6 mt-6">
+    <div className="bg-[#FFE709] text-gray-900 py-3 mt-2">
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* COLUMNA 1: Logo + Lema 1 */}
@@ -133,38 +133,34 @@ const WelcomeView = ({ latconectaData }) => {
       {/* CONTENIDO */}
       <div className="flex-1 flex flex-col">
 
-        {/* SECCIÓN 1: LOGO - 30vh */}
-        <div className="flex items-center justify-center" style={{ height: '30vh' }}>
+        {/* SECCIÓN 1: LOGO */}
+        <div className="flex items-center justify-center py-3 lg:py-5">
           <div className="w-full max-w-md px-4">
             <img
               src={getImageUrl(latconectaData?.latconecta_logo, 'companies')}
               alt="Latconecta Logo"
               onError={(e) => (e.target.src = FALLBACK_IMAGES.company)}
-              className="w-full h-auto object-contain"
-              style={{ maxHeight: '25vh' }}
+              className="w-full h-auto object-contain max-h-24 lg:max-h-32"
             />
           </div>
         </div>
 
         {/* ESPACIO REDUCIDO */}
-        <div className="-mt-12"></div>
 
-        {/* SECCIÓN 2: LEMA 1 - 20vh */}
-        <div className="flex items-center justify-center" style={{ height: '20vh' }}>
+        {/* SECCIÓN 2: LEMA 1 */}
+        <div className="flex items-center justify-center py-1 lg:py-3">
           <div className="text-center px-4">
-            <h1 className="text-3xl md:text-5xl font-bold text-[#008C96]">
+            <h1 className="text-xl md:text-3xl font-bold text-[#008C96]">
               {latconectaData?.latconecta_lema_1 || 'Conectando el futuro'}
             </h1>
           </div>
         </div>
 
         {/* ESPACIO REDUCIDO */}
-        <div className="-mt-10"></div>
-
-        {/* SECCIÓN 3: CARRUSEL DE FOTOS - 30vh */}
-        <div className="flex items-center justify-center" style={{ height: '30vh' }}>
-          <div className="relative w-full max-w-4xl px-4 h-full flex items-center">
-            <div className="relative w-full h-full max-h-80 overflow-hidden rounded-lg shadow-lg">
+        {/* SECCIÓN 3: CARRUSEL */}
+        <div className="flex items-center justify-center py-2 lg:py-4">
+          <div className="relative w-full max-w-4xl px-4">
+            <div className="relative w-full overflow-hidden rounded-lg shadow-lg" style={{ height: '180px' }}>
               {marketingPhotos.length > 0 ? (
                 marketingPhotos.map((photo, index) => (
                   <div
@@ -193,7 +189,7 @@ const WelcomeView = ({ latconectaData }) => {
             </div>
 
             {marketingPhotos.length > 1 && (
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
+              <div className="flex justify-center mt-2 space-x-2">
                 {marketingPhotos.map((_, index) => (
                   <button
                     key={index}
@@ -212,12 +208,10 @@ const WelcomeView = ({ latconectaData }) => {
         </div>
 
         {/* ESPACIO REDUCIDO */}
-        <div className="-mt-10"></div>
-
-        {/* SECCIÓN 4: LEMA 2 - 20vh */}
-        <div className="flex items-center justify-center" style={{ height: '20vh' }}>
+        {/* SECCIÓN 4: LEMA 2 */}
+        <div className="flex items-center justify-center py-1 lg:py-3">
           <div className="text-center px-4">
-            <h2 className="text-2xl md:text-4xl font-semibold text-gray-700">
+            <h2 className="text-lg md:text-3xl font-semibold text-gray-700">
               {latconectaData?.latconecta_lema_2 || 'Innovación sin fronteras'}
             </h2>
           </div>

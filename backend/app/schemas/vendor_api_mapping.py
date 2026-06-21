@@ -90,7 +90,7 @@ class VendorApiMappingBase(BaseModel):
     auth_config: Optional[Dict[str, Any]] = Field(None, description="Configuración de auth (JSONB)")
     request_mapping: Dict[str, Any] = Field(..., description="Mapeo de request (JSONB)")
     value_transformations: Optional[Dict[str, Any]] = Field(None, description="Transformaciones de valores")
-    response_mapping: Optional[Dict[str, str]] = Field(None, description="Mapeo de response (JSONB)")
+    response_mapping: Optional[Dict[str, Any]] = Field(None, description="Mapeo de response (JSONB)")
     success_indicators: Optional[Dict[str, Any]] = Field(None, description="Indicadores de éxito")
     timeout_seconds: int = Field(default=30, ge=1, le=300, description="Timeout en segundos")
     headers: Optional[Dict[str, str]] = Field(None, description="Headers adicionales")
@@ -131,7 +131,8 @@ class VendorApiMappingBase(BaseModel):
             'reversal',       # Revertir transacción
             'confirmation',   # Confirmar transacción
             'cancellation',   # Cancelar
-            'balance_check'   # Verificar saldo
+            'balance_check',  # Verificar saldo
+            'catalog_sync'    # Sincronización de catálogo
         ]
 
         if v.lower() not in valid_operations:
@@ -166,7 +167,7 @@ class VendorApiMappingUpdate(BaseModel):
     auth_config: Optional[Dict[str, Any]] = None
     request_mapping: Optional[Dict[str, Any]] = None
     value_transformations: Optional[Dict[str, Any]] = None
-    response_mapping: Optional[Dict[str, str]] = None
+    response_mapping: Optional[Dict[str, Any]] = None
     success_indicators: Optional[Dict[str, Any]] = None
     timeout_seconds: Optional[int] = Field(None, ge=1, le=300)
     headers: Optional[Dict[str, str]] = None

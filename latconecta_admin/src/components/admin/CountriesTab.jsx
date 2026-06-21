@@ -253,7 +253,7 @@ const CountriesTab = ({
                         src={getImageUrl(country.country_flag_photo, "country")}
                         alt={`Bandera ${country.country_name}`}
                         onError={(e) => (e.target.src = FALLBACK_IMAGES.country)}
-                        className="w-12 h-8 object-cover rounded border border-gray-200"
+                        className="w-12 h-8 object-contain rounded border border-gray-200"
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -432,7 +432,7 @@ const CountriesTab = ({
                             src={getImageUrl(formData.country_flag_photo, "country")}
                             alt="Bandera"
                             onError={(e) => (e.target.src = FALLBACK_IMAGES.country)}
-                            className="w-full h-32 object-cover rounded-lg"
+                            className="w-full h-32 object-contain bg-gray-50 rounded-lg"
                           />
                           <button
                             type="button"
@@ -482,7 +482,7 @@ const CountriesTab = ({
                             src={getImageUrl(formData.country_photo, "country")}
                             alt="Foto"
                             onError={(e) => (e.target.src = FALLBACK_IMAGES.country)}
-                            className="w-full h-48 object-cover rounded-lg"
+                            className="w-full h-48 object-contain bg-gray-50 rounded-lg"
                           />
                           <button
                             type="button"

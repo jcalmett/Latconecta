@@ -143,7 +143,7 @@ const ServicesTab = ({
                         src={getImageUrl(service.service_photo, "service")}
                         alt={service.service_name}
                         onError={(e) => (e.target.src = FALLBACK_IMAGES.service)}
-                        className="w-16 h-16 object-cover rounded border border-gray-200"
+                        className="w-16 h-16 object-contain rounded border border-gray-200"
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -151,7 +151,7 @@ const ServicesTab = ({
                         src={getImageUrl(service.service_photo_MKT, "service")}
                         alt={`${service.service_name} MKT`}
                         onError={(e) => (e.target.src = FALLBACK_IMAGES.service)}
-                        className="w-16 h-16 object-cover rounded border border-gray-200"
+                        className="w-16 h-16 object-contain rounded border border-gray-200"
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -275,7 +275,7 @@ const ServicesTab = ({
                             src={getImageUrl(formData.service_photo, "service")}
                             alt="Foto Principal"
                             onError={(e) => (e.target.src = FALLBACK_IMAGES.service)}
-                            className="w-full h-48 object-cover rounded-lg"
+                            className="w-full h-48 object-contain bg-gray-50 rounded-lg"
                           />
                           <button
                             type="button"
@@ -325,7 +325,7 @@ const ServicesTab = ({
                             src={getImageUrl(formData.service_photo_MKT, "service")}
                             alt="Foto Marketing"
                             onError={(e) => (e.target.src = FALLBACK_IMAGES.service)}
-                            className="w-full h-48 object-cover rounded-lg"
+                            className="w-full h-48 object-contain bg-gray-50 rounded-lg"
                           />
                           <button
                             type="button"

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { X, Plus, Edit2, Trash2, Eye, EyeOff, Save, Upload, LogOut, Mail, Phone, MapPin, Globe, AlertTriangle, User } from 'lucide-react';
+import { X, Plus, Edit2, Trash2, Eye, EyeOff, Save, Upload, LogOut, Mail, Phone, MapPin, AlertTriangle, User } from 'lucide-react';
 import productsService from '../services/productsService';
 import uploadService from '../services/uploadService';
 import servicesService from '../services/servicesService';
@@ -383,50 +383,52 @@ const LatconectaAdmin = () => {
 
     return (
       <div className="bg-[#FFE709] shadow-lg sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               <img
                 src={getImageUrl(latconecta?.latconecta_logo, 'companies')}
                 alt="Logo Latconecta"
                 onError={(e) => e.target.src = FALLBACK_IMAGES.company}
-                className="h-20 w-auto object-contain"
+                className="h-12 lg:h-16 w-auto object-contain"
               />
-              <span className="text-lg font-semibold text-gray-700">Panel Administración</span>
+              <span className="hidden sm:block text-base font-semibold text-gray-700">Panel Administración</span>
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
               <button
                 onClick={() => setCurrentView('admin')}
-                className={`px-4 py-2 rounded-lg transition-all font-semibold ${
+                className={`px-3 py-2 rounded-lg transition-all font-semibold text-sm ${
                   currentView === 'admin' ? 'bg-[#008C96] text-white' : 'bg-[#FFF34D] text-[#008C96] hover:bg-[#E6D008]'
                 }`}
               >
-                Admin
+                <span className="hidden sm:inline">Admin</span>
+                <span className="sm:hidden">⚙️</span>
               </button>
               <button
                 onClick={() => setCurrentView('profile')}
-                className={`px-4 py-2 rounded-lg transition-all font-semibold ${
+                className={`px-3 py-2 rounded-lg transition-all font-semibold text-sm ${
                   currentView === 'profile' ? 'bg-[#008C96] text-white' : 'bg-[#FFF34D] text-[#008C96] hover:bg-[#E6D008]'
                 }`}
               >
-                Profile
+                <span className="hidden sm:inline">Profile</span>
+                <span className="sm:hidden">👤</span>
               </button>
               <button
                 onClick={handleLogout}
-                className="flex items-center space-x-2 bg-red-500 px-4 py-2 rounded-lg hover:bg-red-600 transition-all text-white font-semibold"
+                className="flex items-center space-x-1 bg-red-500 px-3 py-2 rounded-lg hover:bg-red-600 transition-all text-white font-semibold text-sm"
               >
-                <LogOut size={18} />
-                <span>Logout</span>
+                <LogOut size={16} />
+                <span className="hidden sm:inline">Logout</span>
               </button>
-              <div className="flex items-center space-x-2 bg-[#008C96] text-white px-4 py-2 rounded-lg">
+              <div className="flex items-center space-x-2 bg-[#008C96] text-white px-3 py-2 rounded-lg">
                 <img
                   src={getImageUrl(user?.user_photo, 'user')}
                   alt={user?.name}
                   onError={(e) => e.target.src = FALLBACK_IMAGES.user}
-                  className="w-8 h-8 rounded-full object-cover"
+                  className="w-7 h-7 rounded-full object-cover"
                 />
-                <span className="font-semibold">{user?.name || 'Admin'}</span>
+                <span className="hidden sm:inline font-semibold text-sm">{user?.name || 'Admin'}</span>
               </div>
             </div>
           </div>
@@ -436,16 +438,16 @@ const LatconectaAdmin = () => {
   };
 
   const Footer = () => (
-    <div className="bg-[#FFE709] text-gray-900 py-6 mt-12">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* COLUMNA 1: Logo + Lema 1 */}
+    <div className="bg-[#FFE709] text-gray-900 py-4 mt-8">
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* COLUMNA 1: Logo + Lema */}
           <div>
             <img
               src={getImageUrl(latconecta?.latconecta_logo, 'companies')}
               alt="Logo Latconecta"
               onError={(e) => e.target.src = FALLBACK_IMAGES.company}
-              className="h-12 w-auto object-contain mb-3"
+              className="h-10 w-auto object-contain mb-2"
             />
             <p className="text-sm text-gray-800 font-medium">
               {latconecta?.latconecta_lema_1 || 'Conectando el futuro'}
@@ -454,53 +456,30 @@ const LatconectaAdmin = () => {
 
           {/* COLUMNA 2: Contacto */}
           <div>
-            <h4 className="font-semibold mb-3 text-[#008C96]">Contacto</h4>
-            <div className="space-y-2 text-sm">
+            <h4 className="font-semibold mb-2 text-[#008C96] text-sm">Contacto</h4>
+            <div className="space-y-1 text-sm">
               {latconecta?.latconecta_mail_comercial && (
                 <div className="flex items-center space-x-2">
-                  <Mail size={16} />
+                  <Mail size={14} />
                   <span>{latconecta.latconecta_mail_comercial}</span>
                 </div>
               )}
               {latconecta?.latconecta_mail_support && (
                 <div className="flex items-center space-x-2">
-                  <Mail size={16} />
+                  <Mail size={14} />
                   <span>{latconecta.latconecta_mail_support}</span>
                 </div>
               )}
               <div className="flex items-center space-x-2">
-                <MapPin size={16} />
-                <span>Miami, FL, USA</span>
-              </div>
-            </div>
-          </div>
-
-          {/* COLUMNA 3: Historia */}
-          <div>
-            <h4 className="font-semibold mb-3 text-[#008C96]">Historia</h4>
-            <p className="text-sm text-gray-800">
-              {latconecta?.latconecta_description || 'Plataforma de servicios digitales innovadora'}
-            </p>
-          </div>
-
-          {/* COLUMNA 4: Enlaces */}
-          <div>
-            <h4 className="font-semibold mb-3 text-[#008C96]">Enlaces</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center space-x-2 hover:text-[#008C96] cursor-pointer">
-                <Globe size={16} />
-                <span>Sobre Nosotros</span>
-              </div>
-              <div className="flex items-center space-x-2 hover:text-[#008C96] cursor-pointer">
-                <Globe size={16} />
-                <span>Términos</span>
+                <MapPin size={14} />
+                <span>Calle Los Recuerdos 387, Urb. Chacarilla del Estanque, San Borja, Lima, Perú</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="border-t border-gray-300 mt-6 pt-4 text-center text-sm text-gray-700">
-          © 2025 {latconecta?.latconecta_name || 'Latconecta'}. Todos los derechos reservados.
+        <div className="border-t border-gray-300 mt-4 pt-3 text-center text-sm text-gray-700">
+          © {new Date().getFullYear()} LATCOM HORIZONS PERU S.R.L. Todos los derechos reservados.
         </div>
       </div>
     </div>
@@ -685,14 +664,14 @@ const LatconectaAdmin = () => {
 
       <div className="flex-grow">
         {currentView === 'admin' ? (
-          <div className="max-w-7xl mx-auto p-6">
-            <div className="bg-white rounded-lg shadow-md mb-6">
+          <div className="max-w-7xl mx-auto p-3 md:p-6">
+            <div className="bg-white rounded-lg shadow-md mb-4">
               <div className="flex border-b overflow-x-auto">
                 {tabs.map(tab => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`px-6 py-3 font-semibold capitalize whitespace-nowrap ${
+                    className={`px-3 md:px-5 py-2 md:py-3 font-semibold capitalize whitespace-nowrap text-sm ${
                       activeTab === tab.id
                         ? 'text-[#008C96] border-b-4 border-[#FFE709] bg-yellow-50'
                         : 'text-gray-600 hover:bg-gray-50'
@@ -703,7 +682,7 @@ const LatconectaAdmin = () => {
                 ))}
               </div>
             </div>
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="bg-white rounded-lg shadow-md p-3 md:p-6">
               {renderTabContent()}
             </div>
           </div>

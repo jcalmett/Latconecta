@@ -393,7 +393,7 @@ const LatconectaTab = ({ showNotification, handleImageUpload }) => {
                       src={getImageUrl(formData.latconecta_photo, 'companies')}
                       alt="Principal"
                       onError={(e) => (e.target.src = FALLBACK_IMAGES.company)}
-                      className="w-full h-32 object-cover rounded-lg"
+                      className="w-full h-32 object-contain bg-gray-50 rounded-lg"
                     />
                     <button
                       type="button"
@@ -435,7 +435,7 @@ const LatconectaTab = ({ showNotification, handleImageUpload }) => {
                       src={getImageUrl(formData.latconecta_photo_mkt1, 'companies')}
                       alt="MKT1"
                       onError={(e) => (e.target.src = FALLBACK_IMAGES.company)}
-                      className="w-full h-32 object-cover rounded-lg"
+                      className="w-full h-32 object-contain bg-gray-50 rounded-lg"
                     />
                     <button
                       type="button"
@@ -477,7 +477,7 @@ const LatconectaTab = ({ showNotification, handleImageUpload }) => {
                       src={getImageUrl(formData.latconecta_photo_mkt2, 'companies')}
                       alt="MKT2"
                       onError={(e) => (e.target.src = FALLBACK_IMAGES.company)}
-                      className="w-full h-32 object-cover rounded-lg"
+                      className="w-full h-32 object-contain bg-gray-50 rounded-lg"
                     />
                     <button
                       type="button"
@@ -519,7 +519,7 @@ const LatconectaTab = ({ showNotification, handleImageUpload }) => {
                       src={getImageUrl(formData.latconecta_photo_mkt3, 'companies')}
                       alt="MKT3"
                       onError={(e) => (e.target.src = FALLBACK_IMAGES.company)}
-                      className="w-full h-32 object-cover rounded-lg"
+                      className="w-full h-32 object-contain bg-gray-50 rounded-lg"
                     />
                     <button
                       type="button"
@@ -561,7 +561,7 @@ const LatconectaTab = ({ showNotification, handleImageUpload }) => {
                       src={getImageUrl(formData.latconecta_photo_mkt4, 'companies')}
                       alt="MKT4"
                       onError={(e) => (e.target.src = FALLBACK_IMAGES.company)}
-                      className="w-full h-32 object-cover rounded-lg"
+                      className="w-full h-32 object-contain bg-gray-50 rounded-lg"
                     />
                     <button
                       type="button"
