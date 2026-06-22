@@ -1,6 +1,6 @@
 // src/components/payment/CulqiCheckout.jsx
 /**
- * Culqi Checkout V4 Component
+ * Culqi Custom Checkout Component
  *
  * Comportamiento:
  *   - Pago exitoso (tarjeta o Yape): cierra → onResult(success:true)
