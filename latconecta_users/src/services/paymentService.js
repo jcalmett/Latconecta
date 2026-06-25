@@ -5,7 +5,7 @@
 // Endpoints del backend que consume:
 //   GET  /api/v1/payments/config   → Configuración pública (public_key, gateway, etc.)
 //   POST /api/v1/payments/order    → Crea Order para Yape / billeteras / PagoEfectivo
-//   POST /api/v1/payments/charge   → Crea cargo con token del Checkout V4
+//   POST /api/v1/payments/charge   → Crea cargo con token del Custom Checkout
 //   POST /api/v1/payments/refund   → Devuelve un cargo (parcial o total)
 //   POST /api/v1/payments/cancel   → Cancela/revierte un cargo (usado por purchases.py)
 // =============================================================================
@@ -36,7 +36,7 @@ const paymentService = {
 
   /**
    * Crea una Order en Culqi.
-   * Necesaria para habilitar Yape, billeteras y PagoEfectivo en el Checkout V4.
+   * Necesaria para habilitar Yape, billeteras y PagoEfectivo en el Custom Checkout.
    * El order_id retornado (ord_live_XXX) se pasa a settings.order del CulqiCheckout.
    *
    * @param {object} orderData - {
@@ -70,10 +70,10 @@ const paymentService = {
   },
 
   /**
-   * Crea un cargo en Culqi usando el token generado por el Checkout V4.
+   * Crea un cargo en Culqi usando el token generado por el Custom Checkout.
    *
    * @param {object} chargeData - {
-   *   token_id: string,       // tkn_live_XXX — del Checkout V4
+   *   token_id: string,       // tkn_live_XXX — del Custom Checkout
    *   amount: number,         // en céntimos: S/15.00 = 1500
    *   currency_code: string,  // 'PEN'
    *   email: string,

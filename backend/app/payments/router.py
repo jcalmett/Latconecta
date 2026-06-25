@@ -2,7 +2,7 @@
 """
 Payments Router — Culqi Integration
 Endpoints:
-  POST /payments/charge   → Crea cargo con token del Checkout V4
+  POST /payments/charge   → Crea cargo con token del Custom Checkout
   POST /payments/order    → Crea Order ID para Yape / billeteras / PagoEfectivo
   POST /payments/refund   → Devuelve un cargo (parcial o total)
   POST /payments/cancel   → Cancela/revierte un cargo (alias de refund, usado por purchases.py)
@@ -26,16 +26,16 @@ router = APIRouter(
 
 
 # ================================================================
-# POST /payments/charge — Crear cargo con token Checkout V4
+# POST /payments/charge — Crear cargo con token Custom Checkout
 # ================================================================
 
 @router.post("/charge", response_model=schemas.PaymentChargeResponse)
 async def create_charge(payload: schemas.PaymentChargeRequest):
     """
-    Crea un cargo en Culqi usando el token generado por el Checkout V4.
+    Crea un cargo en Culqi usando el token generado por el Custom Checkout.
 
     Flujo:
-      1. Frontend abre Culqi Checkout V4 → usuario ingresa tarjeta
+      1. Frontend abre Culqi Custom Checkout → usuario ingresa tarjeta
       2. Culqi SDK genera token (tkn_live_XXX) y lo envía al frontend
       3. Frontend llama este endpoint con el token_id
       4. Backend crea el cargo real en Culqi
@@ -82,13 +82,13 @@ async def create_order(payload: schemas.PaymentOrderRequest):
     Crea una orden de pago en Culqi.
 
     Necesaria para habilitar Yape, billeteras digitales y PagoEfectivo
-    en el Checkout V4. El order_id retornado (ord_live_XXX) debe pasarse
+    en el Custom Checkout. El order_id retornado (ord_live_XXX) debe pasarse
     al frontend en settings.order del CulqiCheckout.
 
     Flujo:
-      1. Frontend llama este endpoint ANTES de abrir el Checkout V4
+      1. Frontend llama este endpoint ANTES de abrir el Custom Checkout
       2. Backend crea la orden en Culqi → retorna order_id
-      3. Frontend pasa order_id al settings.order del Checkout V4
+      3. Frontend pasa order_id al settings.order del Custom Checkout
       4. El Checkout habilita Yape / billeteras / PagoEfectivo
     """
     logger.info(

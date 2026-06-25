@@ -1,6 +1,8 @@
 // src/components/payment/CulqiCheckout.jsx
 /**
  * Culqi Custom Checkout Component
+ * Versión: Custom Checkout multipago v1.0
+ * SDK: window.CulqiCheckout (new CulqiCheckout(publicKey, config))
  *
  * Comportamiento:
  *   - Pago exitoso (tarjeta o Yape): cierra → onResult(success:true)
@@ -13,16 +15,11 @@
  *   amount      {number}    Monto en moneda del producto (ej: 15.00)
  *   currency    {string}    Código de moneda ('PEN')
  *   orderNumber {string}    Número de orden único
- *   user        {object}    Usuario autenticado (null si anónimo)
+ *   user        {object}    Usuario autenticado
  *   onResult    {function}  Callback SOLO cuando el pago es exitoso
  *   onRetry     {function}  Callback con (message, retryFn) cuando cargo rechazado y quedan intentos
  *   onAbort     {function}  Callback sin pago: reason = 'user_cancel' | 'max_retries' | 'technical_error'
  *   autoStart   {boolean}   Si true, abre al montarse (default: true)
- *
- * Email:
- *   - Usuario registrado: se prefija su email en el checkout de Culqi
- *   - Usuario anónimo:    campo email vacío — Culqi lo solicita obligatoriamente;
- *                         si el usuario no lo ingresa y cierra, cancela la transacción
  */
 import { useCallback, useEffect, useRef } from "react";
 import paymentService from "../../services/paymentService";
@@ -71,9 +68,7 @@ export default function CulqiCheckout({
       const culqiConfig = {
         settings: culqiSettings,
         client: {
-          // Usuario registrado: se prefija su email
-          // Usuario anónimo: campo vacío — Culqi lo solicita obligatoriamente
-          ...(user?.user_email && { email: user.user_email }),
+          email: user?.user_email || "cliente@latconecta.com",
         },
         options: {
           lang:               "auto",
@@ -115,8 +110,7 @@ export default function CulqiCheckout({
               token_id:      token.id,
               amount:        ac,
               currency_code: currency,
-              // Registrado: email del perfil; anónimo: email ingresado en el checkout de Culqi
-              email:         user?.user_email || token.email,
+              email:         user?.user_email || token.email || "cliente@latconecta.com",
               description:   `Latconecta — ${orderNumber}`,
               order_number:  orderNumber,
             });
