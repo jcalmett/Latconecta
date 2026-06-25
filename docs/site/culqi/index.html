@@ -1,0 +1,1610 @@
+
+<!doctype html>
+<html lang="es" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentación interna del sistema Latconecta">
+      
+      
+        <meta name="author" content="Latcom Horizons II, LLC">
+      
+      
+      
+        <link rel="prev" href="../api/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Integración Culqi - Latconecta v2.0.0 — Documentación Técnica</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#integracion-culqi-latconecta-v200" class="md-skip">
+          Saltar a contenido
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Cabecera">
+    <a href=".." title="Latconecta v2.0.0 — Documentación Técnica" class="md-header__button md-logo" aria-label="Latconecta v2.0.0 — Documentación Técnica" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Latconecta v2.0.0 — Documentación Técnica
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Integración Culqi
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Búsqueda" placeholder="Búsqueda" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Buscar">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Limpiar" aria-label="Limpiar" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Inicializando búsqueda
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Pestañas" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Inicio
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../latconecta/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Sistema
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../api/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  APIs Externas
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Integración Culqi
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navegación" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Latconecta v2.0.0 — Documentación Técnica" class="md-nav__button md-logo" aria-label="Latconecta v2.0.0 — Documentación Técnica" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Latconecta v2.0.0 — Documentación Técnica
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inicio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../latconecta/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sistema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    APIs Externas
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integración Culqi
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integración Culqi
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Tabla de contenidos">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Tabla de contenidos
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tabla-de-contenidos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tabla de Contenidos
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-alcance-y-referencias" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Alcance y Referencias
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-arquitectura-de-la-integracion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Arquitectura de la Integración
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-integracion-del-sdk-frontend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Integración del SDK — Frontend
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Integración del SDK — Frontend">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-carga-del-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 Carga del SDK
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-configuracion-del-checkout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Configuración del Checkout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-medios-de-pago-habilitados" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Medios de pago habilitados
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-callback-y-resultado-del-checkout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Callback y resultado del checkout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-manejo-de-reintentos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 Manejo de reintentos
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-backend-modulo-de-pagos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Backend — Módulo de Pagos
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Backend — Módulo de Pagos">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-endpoints-disponibles-paymentsrouterpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Endpoints disponibles (payments/router.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-creacion-de-cargo-culqi_adaptercreate_charge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Creación de cargo — culqi_adapter.create_charge()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-creacion-de-orden-culqi_adaptercreate_order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 Creación de orden — culqi_adapter.create_order()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-flujo-completo-de-pago" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Flujo Completo de Pago
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Flujo Completo de Pago">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-pago-con-tarjeta" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Pago con tarjeta
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-pago-con-yape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 Pago con Yape
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-reversion-automatica" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 Reversión automática
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-devoluciones-refund" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Devoluciones (Refund)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-email-del-cliente-tarjeta-vs-yape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Email del Cliente — Tarjeta vs Yape
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Email del Cliente — Tarjeta vs Yape">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-contexto" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 Contexto
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-lo-que-dice-la-documentacion-de-culqi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 Lo que dice la documentación de Culqi
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73-por-que-el-checkout-no-pide-email-en-yape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 Por qué el Checkout no pide email en Yape
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74-como-lo-manejamos-en-latconecta" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 Cómo lo manejamos en Latconecta
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#75-por-que-las-pruebas-de-sandbox-sin-email-no-dieron-problemas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.5 Por qué las pruebas de sandbox sin email no dieron problemas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-visibilidad-de-requests-y-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Visibilidad de Requests y Responses
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-configuracion-de-ambiente" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Configuración de Ambiente
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Configuración de Ambiente">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#llaves-sandbox-actuales" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Llaves sandbox actuales
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-pendientes-identificados" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Pendientes Identificados
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-referencia-oficial-custom-culqi-checkout-multipago-v10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Referencia Oficial — Custom Culqi Checkout multipago v1.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="11. Referencia Oficial — Custom Culqi Checkout multipago v1.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#descripcion-general" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Descripción general
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#paso-1-incluir-el-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Paso 1 — Incluir el SDK
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#paso-2-configurar-settings-y-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Paso 2 — Configurar settings y client
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#paso-3-configurar-options-medios-de-pago" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Paso 3 — Configurar options (medios de pago)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#paso-3-configurar-appearance-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Paso 3 — Configurar appearance (UI)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#paso-4-crear-instancia-y-abrir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Paso 4 — Crear instancia y abrir
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#paso-5-callback-con-resultado" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Paso 5 — Callback con resultado
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#campos-adicionales-opcionales-customfields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Campos adicionales opcionales (customFields)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parametros-de-appearance-referencia-rapida" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parámetros de appearance — referencia rápida
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="integracion-culqi-latconecta-v200">Integración Culqi — Latconecta v2.0.0<a class="headerlink" href="#integracion-culqi-latconecta-v200" title="Permanent link">&para;</a></h1>
+<p><strong>Documento técnico interno | Latcom Horizons II, LLC | Junio 2026</strong></p>
+<hr />
+<h2 id="tabla-de-contenidos">Tabla de Contenidos<a class="headerlink" href="#tabla-de-contenidos" title="Permanent link">&para;</a></h2>
+<ol>
+<li><a href="#1-alcance-y-referencias">Alcance y Referencias</a></li>
+<li><a href="#2-arquitectura-de-la-integracion">Arquitectura de la Integración</a></li>
+<li><a href="#3-integracion-del-sdk--frontend">Integración del SDK — Frontend</a></li>
+<li><a href="#4-backend--modulo-de-pagos">Backend — Módulo de Pagos</a></li>
+<li><a href="#5-flujo-completo-de-pago">Flujo Completo de Pago</a></li>
+<li><a href="#6-devoluciones-refund">Devoluciones (Refund)</a></li>
+<li><a href="#7-email-del-cliente--tarjeta-vs-yape">Email del Cliente — Tarjeta vs Yape</a></li>
+<li><a href="#8-visibilidad-de-requests-y-responses">Visibilidad de Requests y Responses</a></li>
+<li><a href="#9-configuracion-de-ambiente">Configuración de Ambiente</a></li>
+<li><a href="#10-pendientes-identificados">Pendientes Identificados</a></li>
+<li><a href="#11-referencia-oficial--custom-culqi-checkout-multipago-v10">Referencia Oficial — Custom Culqi Checkout multipago v1.0</a></li>
+</ol>
+<hr />
+<h2 id="1-alcance-y-referencias">1. Alcance y Referencias<a class="headerlink" href="#1-alcance-y-referencias" title="Permanent link">&para;</a></h2>
+<p>Este documento describe la implementación técnica completa de Culqi como pasarela de pagos en Latconecta v2.0.0, cubriendo: integración del Custom Checkout multipago v1.0, tokenización, creación de cargos, devoluciones y el manejo del email del cliente en pagos con Yape.</p>
+<table>
+<thead>
+<tr>
+<th>Documento</th>
+<th>URL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Checkout Custom — Documentación oficial</td>
+<td>https://docs.culqi.com/es/documentacion/checkout/checkout-custom</td>
+</tr>
+<tr>
+<td>API de Cargos — Documentación oficial</td>
+<td>https://apidocs.culqi.com/#tag/Cargos</td>
+</tr>
+<tr>
+<td>API de Devoluciones — Documentación oficial</td>
+<td>https://apidocs.culqi.com/#tag/Devoluciones</td>
+</tr>
+<tr>
+<td>API de Órdenes — Documentación oficial</td>
+<td>https://apidocs.culqi.com/#tag/Ordenes</td>
+</tr>
+<tr>
+<td>SDK Python oficial</td>
+<td>https://github.com/culqi/culqi-python</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-arquitectura-de-la-integracion">2. Arquitectura de la Integración<a class="headerlink" href="#2-arquitectura-de-la-integracion" title="Permanent link">&para;</a></h2>
+<p>La integración sigue el patrón recomendado por Culqi: el SDK opera en el frontend para tokenizar datos de pago; el backend usa la <code>secret_key</code> para crear cargos y devoluciones. La <code>secret_key</code> nunca se expone al frontend.</p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Responsabilidad</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CulqiCheckout.jsx</code></td>
+<td>Carga el SDK, abre el modal, recibe token/order en callback, llama al backend</td>
+</tr>
+<tr>
+<td><code>paymentService.js</code></td>
+<td>Comunicación HTTP con el backend (<code>/payments/*</code>)</td>
+</tr>
+<tr>
+<td><code>payments/router.py</code></td>
+<td>Endpoints REST: <code>/charge</code>, <code>/order</code>, <code>/refund</code>, <code>/cancel</code>, <code>/config</code></td>
+</tr>
+<tr>
+<td><code>culqi_adapter.py</code></td>
+<td>Wrapper del SDK Python oficial. Crea cargos, órdenes y devoluciones</td>
+</tr>
+<tr>
+<td><code>purchases.py</code></td>
+<td>Orquesta el flujo: precio → pago → provisión → registro en BD</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>El único intercambio no visible para el equipo es la tokenización entre el SDK de Culqi y los servidores de Culqi. Todo lo demás (charge, refund, order) pasa por <code>culqi_adapter.py</code> y queda en los logs del backend.</p>
+</blockquote>
+<hr />
+<h2 id="3-integracion-del-sdk-frontend">3. Integración del SDK — Frontend<a class="headerlink" href="#3-integracion-del-sdk-frontend" title="Permanent link">&para;</a></h2>
+<h3 id="31-carga-del-sdk">3.1 Carga del SDK<a class="headerlink" href="#31-carga-del-sdk" title="Permanent link">&para;</a></h3>
+<p>El SDK se carga en <code>index.html</code> antes del cierre del tag body, según la documentación oficial (Paso 1):</p>
+<pre><code class="language-html">&lt;body&gt;
+  &lt;script src=&quot;https://js.culqi.com/checkout-js&quot;&gt;&lt;/script&gt;
+&lt;/body&gt;
+</code></pre>
+<h3 id="32-configuracion-del-checkout">3.2 Configuración del Checkout<a class="headerlink" href="#32-configuracion-del-checkout" title="Permanent link">&para;</a></h3>
+<p>La instancia del checkout se crea en <code>CulqiCheckout.jsx</code> con los parámetros que establece la documentación oficial (Pasos 2, 3 y 4):</p>
+<pre><code class="language-javascript">const culqiSettings = {
+  title:    'Latconecta',
+  currency: currency,    // 'PEN' — REQUERIDO para Yape
+  amount:   amountCents, // céntimos — REQUERIDO para Yape
+  // SIN 'order' — no se usa PagoEfectivo/billeteras (decisión de diseño)
+};
+
+const culqiConfig = {
+  settings: culqiSettings,
+  client: {
+    email: user?.user_email || 'cliente@latconecta.com', // pre-llena el campo
+  },
+  options: {
+    lang:               'auto',
+    installments:       false,
+    modal:              true,
+    paymentMethods:     { yape: true, tarjeta: true,
+                          billetera: false, bancaMovil: false,
+                          agente: false, cuotealo: false },
+    paymentMethodsSort: ['yape', 'tarjeta'],
+  },
+  appearance: {
+    theme:             'default',
+    menuType:          'sidebar',
+    buttonCardPayText: 'Pagar',
+    defaultStyle: {
+      bannerColor:      '#1e3a5f',
+      buttonBackground: '#2563eb',
+      menuColor:        '#2563eb',
+      buttonTextColor:  '#ffffff',
+      priceColor:       '#1e3a5f',
+    },
+  },
+};
+
+culqiRef.current = new window.CulqiCheckout(publicKey, culqiConfig);
+culqiRef.current.open();
+</code></pre>
+<h3 id="33-medios-de-pago-habilitados">3.3 Medios de pago habilitados<a class="headerlink" href="#33-medios-de-pago-habilitados" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Medio de pago</th>
+<th>Estado y motivo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tarjeta débito/crédito</td>
+<td>✅ Habilitado — medio de pago principal</td>
+</tr>
+<tr>
+<td>Yape</td>
+<td>✅ Habilitado — medio de pago local Perú</td>
+</tr>
+<tr>
+<td>Billeteras móviles</td>
+<td>❌ Deshabilitado — requiere Order + contrato PagoEfectivo</td>
+</tr>
+<tr>
+<td>Banca móvil / Agentes / Bodegas</td>
+<td>❌ Deshabilitado — requiere Order + contrato PagoEfectivo</td>
+</tr>
+<tr>
+<td>Cuotéalo BCP</td>
+<td>❌ Deshabilitado — requiere Order + contrato BCP</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>La omisión del parámetro <code>order</code> en settings es intencional: sin order, solo se muestran tarjeta y Yape. Latconecta no está afiliada a PagoEfectivo (Medios de Pago S.A.C.).</p>
+</blockquote>
+<h3 id="34-callback-y-resultado-del-checkout">3.4 Callback y resultado del checkout<a class="headerlink" href="#34-callback-y-resultado-del-checkout" title="Permanent link">&para;</a></h3>
+<p>El resultado llega en el callback <code>culqiRef.current.culqi</code> (Ref: Paso 5). Hay tres casos:</p>
+<pre><code class="language-javascript">culqiRef.current.culqi = async () =&gt; {
+  if (culqi.token) {
+    // TARJETA: token (tkn_live_XXX) → llamar createCharge() en backend
+  } else if (culqi.order) {
+    // YAPE: order confirmado — cargo YA procesado por Culqi
+    // NO se llama createCharge() — usar order.id como referencia
+  } else {
+    // ERROR o cierre manual → culqi.error contiene el detalle
+  }
+};
+</code></pre>
+<h3 id="35-manejo-de-reintentos">3.5 Manejo de reintentos<a class="headerlink" href="#35-manejo-de-reintentos" title="Permanent link">&para;</a></h3>
+<p>Latconecta implementa hasta 3 reintentos ante rechazo de tarjeta:</p>
+<pre><code class="language-javascript">const MAX_RETRIES = 3;
+
+// Cargo rechazado:
+retryCount.current += 1;
+if (retryCount.current &gt;= MAX_RETRIES) {
+  culqi.close();
+  onAbort?.('max_retries');
+} else {
+  culqi.close();
+  onRetry?.(errorMessage, openCulqi); // notifica con mensaje + función para reabrir
+}
+</code></pre>
+<hr />
+<h2 id="4-backend-modulo-de-pagos">4. Backend — Módulo de Pagos<a class="headerlink" href="#4-backend-modulo-de-pagos" title="Permanent link">&para;</a></h2>
+<h3 id="41-endpoints-disponibles-paymentsrouterpy">4.1 Endpoints disponibles (<code>payments/router.py</code>)<a class="headerlink" href="#41-endpoints-disponibles-paymentsrouterpy" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /payments/config</code></td>
+<td>Retorna <code>public_key</code>, gateway, métodos disponibles, modos F1/F2. NUNCA expone <code>secret_key</code></td>
+</tr>
+<tr>
+<td><code>POST /payments/charge</code></td>
+<td>Crea cargo con token del Checkout. Params: <code>token_id</code>, <code>amount</code> (céntimos), <code>currency_code</code>, <code>email</code></td>
+</tr>
+<tr>
+<td><code>POST /payments/order</code></td>
+<td>Crea Order ID para Yape/billeteras. Retorna <code>order_id</code> (<code>ord_live_XXX</code>). Actualmente no usado</td>
+</tr>
+<tr>
+<td><code>POST /payments/refund</code></td>
+<td>Devuelve cargo (parcial o total). Params: <code>charge_id</code>, <code>amount</code>, <code>reason</code></td>
+</tr>
+<tr>
+<td><code>POST /payments/cancel</code></td>
+<td>Alias de refund total. Usado por <code>purchases.py</code> para reversión automática</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-creacion-de-cargo-culqi_adaptercreate_charge">4.2 Creación de cargo — <code>culqi_adapter.create_charge()</code><a class="headerlink" href="#42-creacion-de-cargo-culqi_adaptercreate_charge" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python"># Body enviado a POST https://api.culqi.com/v2/charges
+body = {
+    'amount':        charge_data['amount'],    # céntimos — REQUERIDO
+    'currency_code': 'PEN',                   # REQUERIDO
+    'email':         charge_data['email'],     # REQUERIDO (ver sección 7)
+    'source_id':     charge_data['token_id'], # tkn_live_XXX — REQUERIDO
+    'capture':       True,
+    'installments':  0,
+    'description':   'Latconecta',
+    'metadata':      { 'order_number': order_number }
+}
+# Respuesta exitosa: HTTP 201, data.object == 'charge', data.id == chr_live_XXX
+</code></pre>
+<h3 id="43-creacion-de-orden-culqi_adaptercreate_order">4.3 Creación de orden — <code>culqi_adapter.create_order()</code><a class="headerlink" href="#43-creacion-de-orden-culqi_adaptercreate_order" title="Permanent link">&para;</a></h3>
+<p>Implementado para uso futuro (si se habilitan billeteras). Actualmente no se usa en el flujo normal:</p>
+<pre><code class="language-python"># Body enviado a POST https://api.culqi.com/v2/orders
+body = {
+    'amount':          order_data['amount'],        # REQUERIDO
+    'currency_code':   'PEN',                       # REQUERIDO
+    'description':     'Latconecta',                # REQUERIDO
+    'order_number':    order_data['order_number'],   # REQUERIDO — único
+    'client_details':  { 'first_name', 'last_name', 'email', 'phone_number' },
+    'expiration_date': expiration,                  # Unix timestamp — default: +1h
+}
+# Respuesta exitosa: HTTP 201, data.id == ord_live_XXX
+</code></pre>
+<hr />
+<h2 id="5-flujo-completo-de-pago">5. Flujo Completo de Pago<a class="headerlink" href="#5-flujo-completo-de-pago" title="Permanent link">&para;</a></h2>
+<h3 id="51-pago-con-tarjeta">5.1 Pago con tarjeta<a class="headerlink" href="#51-pago-con-tarjeta" title="Permanent link">&para;</a></h3>
+<pre><code>1.  Usuario clic 'Pagar' → ShopView monta CulqiCheckout
+2.  CulqiCheckout → GET /payments/config → obtiene public_key
+3.  new window.CulqiCheckout(publicKey, config) → Culqi abre modal
+4.  Usuario ingresa datos de tarjeta → SDK tokeniza (opaco para nosotros)
+5.  Callback → culqi.token disponible (tkn_live_XXX)
+6.  paymentService.createCharge() → POST /payments/charge
+7.  culqi_adapter → POST https://api.culqi.com/v2/charges
+8.  Culqi retorna HTTP 201 → charge_id (chr_live_XXX)
+9.  Frontend llama handlePaymentAndProvision() → POST /purchases/create
+10. purchases.py registra compra + provisiona el servicio (TISI/MEGAPUNTO)
+11. Si provisión falla → cancel_transaction() → refund total automático
+12. Response → PurchasePopup muestra resultado final
+</code></pre>
+<h3 id="52-pago-con-yape">5.2 Pago con Yape<a class="headerlink" href="#52-pago-con-yape" title="Permanent link">&para;</a></h3>
+<pre><code>1-3. Igual que tarjeta
+4.   Usuario ingresa código Yape de 6 dígitos → SDK procesa Yape internamente
+5.   Callback → culqi.ORDER disponible (ord_live_XXX)
+     ⚠️ Con Yape el cargo YA fue ejecutado por Culqi — NO se llama createCharge()
+6.   Frontend llama handlePaymentAndProvision() → POST /purchases/create
+     con payment_transaction_id = order.id
+7.   purchases.py registra compra + provisiona el servicio
+8.   Response → PurchasePopup muestra resultado final
+</code></pre>
+<blockquote>
+<p><strong>Diferencia crítica:</strong> con tarjeta nuestro backend crea el cargo (paso 7). Con Yape el cargo ya existe cuando recibimos el callback — <code>order.id</code> es la referencia del cargo ya ejecutado por Culqi.</p>
+</blockquote>
+<h3 id="53-reversion-automatica">5.3 Reversión automática<a class="headerlink" href="#53-reversion-automatica" title="Permanent link">&para;</a></h3>
+<p>Si el pago fue exitoso pero la provisión del servicio falla, <code>purchases.py</code> ejecuta reversión automática:</p>
+<pre><code class="language-python">cancel_result = await payment_gateway_service.cancel_transaction({
+    'gateway':   'culqi',
+    'charge_id': payment_ref,  # chr_live_XXX
+    'amount':    amount_cents,
+    'currency':  'PEN',
+    'reason':    'solicitud_comprador'
+})
+# → culqi_adapter.cancel_transaction()
+# → culqi_adapter.create_refund()
+# → POST https://api.culqi.com/v2/refunds
+# Respuesta exitosa: HTTP 201, data.id == ref_live_XXX
+</code></pre>
+<hr />
+<h2 id="6-devoluciones-refund">6. Devoluciones (Refund)<a class="headerlink" href="#6-devoluciones-refund" title="Permanent link">&para;</a></h2>
+<p>Referencia: https://apidocs.culqi.com/#tag/Devoluciones</p>
+<table>
+<thead>
+<tr>
+<th>Parámetro</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>charge_id</code> (requerido)</td>
+<td>ID del cargo a devolver (<code>chr_live_XXX</code>)</td>
+</tr>
+<tr>
+<td><code>amount</code> (requerido)</td>
+<td>Monto en céntimos — puede ser parcial o total</td>
+</tr>
+<tr>
+<td><code>reason</code> (requerido)</td>
+<td><code>solicitud_comprador</code> | <code>duplicado</code> | <code>fraude</code></td>
+</tr>
+</tbody>
+</table>
+<p>Latconecta implementa tres casos de uso:</p>
+<ul>
+<li><strong>Reversión automática:</strong> provisión falla después de pago exitoso — ejecutada automáticamente por <code>purchases.py</code></li>
+<li><strong>Devolución manual:</strong> via <code>POST /payments/refund</code> para operaciones administrativas</li>
+<li><strong>Refund parcial:</strong> el adapter soporta <code>amount</code> menor al cargo original — disponible para uso futuro</li>
+</ul>
+<hr />
+<h2 id="7-email-del-cliente-tarjeta-vs-yape">7. Email del Cliente — Tarjeta vs Yape<a class="headerlink" href="#7-email-del-cliente-tarjeta-vs-yape" title="Permanent link">&para;</a></h2>
+<h3 id="71-contexto">7.1 Contexto<a class="headerlink" href="#71-contexto" title="Permanent link">&para;</a></h3>
+<p>Durante pruebas se observó que el Checkout no solicita visualmente el email al usuario cuando paga con Yape, a diferencia del pago con tarjeta. Esto generó la pregunta: ¿el email es obligatorio para Culqi?</p>
+<h3 id="72-lo-que-dice-la-documentacion-de-culqi">7.2 Lo que dice la documentación de Culqi<a class="headerlink" href="#72-lo-que-dice-la-documentacion-de-culqi" title="Permanent link">&para;</a></h3>
+<p>La API de Cargos establece los mismos campos requeridos para tarjeta y para Yape:</p>
+<pre><code class="language-python"># Para tarjeta (source_id: tkn_live_XXX) Y para Yape (source_id: ype_live_XXX):
+{
+    'amount':        '10000',               # REQUERIDO
+    'currency_code': 'PEN',                # REQUERIDO
+    'email':         'cliente@ejemplo.com', # REQUERIDO en ambos casos
+    'source_id':     'tkn_live_XXX'         # REQUERIDO
+}
+</code></pre>
+<p><strong>El email es requerido por la API de Culqi tanto para tarjeta como para Yape.</strong> Culqi lo usa para enviar al cliente el comprobante de la transacción.</p>
+<h3 id="73-por-que-el-checkout-no-pide-email-en-yape">7.3 Por qué el Checkout no pide email en Yape<a class="headerlink" href="#73-por-que-el-checkout-no-pide-email-en-yape" title="Permanent link">&para;</a></h3>
+<ul>
+<li>El email se pre-llena desde el frontend via <code>client.email</code> — el Checkout lo tiene sin necesidad de pedírselo al usuario</li>
+<li>El flujo de Yape muestra directamente el campo de código de aprobación de 6 dígitos; el formulario de datos personales (donde aparece el email) es propio del flujo de tarjeta</li>
+<li>Culqi asume el email del <code>client.email</code> para el cobro Yape aunque no lo muestre al usuario</li>
+</ul>
+<blockquote>
+<p>Ref: Checkout Custom — Paso 2: <em>"Evita que el cliente vuelva a ingresar su email, para esto debes enviarlo como parámetro"</em> (<code>client.email</code>)</p>
+</blockquote>
+<h3 id="74-como-lo-manejamos-en-latconecta">7.4 Cómo lo manejamos en Latconecta<a class="headerlink" href="#74-como-lo-manejamos-en-latconecta" title="Permanent link">&para;</a></h3>
+<pre><code class="language-javascript">// En client.email (pre-llenado del Checkout):
+email: user?.user_email || 'cliente@latconecta.com'
+
+// En createCharge (pago con tarjeta):
+email: user?.user_email || token.email || 'cliente@latconecta.com'
+//     ^^ usuario auth   ^^ del token   ^^ fallback
+</code></pre>
+<blockquote>
+<p>⚠️ <strong>Pendiente:</strong> cuando el usuario no está autenticado (guest) y paga con Yape, el email enviado a Culqi es el fallback <code>'cliente@latconecta.com'</code>. En producción se recomienda capturar el email del usuario guest antes de abrir el checkout. <strong>Este punto es tema de la reunión con Culqi.</strong></p>
+</blockquote>
+<h3 id="75-por-que-las-pruebas-de-sandbox-sin-email-no-dieron-problemas">7.5 Por qué las pruebas de sandbox sin email no dieron problemas<a class="headerlink" href="#75-por-que-las-pruebas-de-sandbox-sin-email-no-dieron-problemas" title="Permanent link">&para;</a></h3>
+<p>En las pruebas de sandbox el pago con Yape funcionó aunque aparentemente 'sin email'. La razón es que el email sí se enviaba — era el fallback <code>'cliente@latconecta.com'</code> configurado en <code>client.email</code>. Culqi en sandbox acepta cualquier email con formato válido sin verificar que sea el correo real del cliente.</p>
+<hr />
+<h2 id="8-visibilidad-de-requests-y-responses">8. Visibilidad de Requests y Responses<a class="headerlink" href="#8-visibilidad-de-requests-y-responses" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Intercambio</th>
+<th>Visible</th>
+<th>Ubicación</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SDK Culqi → Servidores Culqi (tokenización)</td>
+<td>❌ NO — opaco</td>
+<td>Manejado por <code>window.CulqiCheckout</code></td>
+</tr>
+<tr>
+<td>Frontend → <code>GET /payments/config</code></td>
+<td>✅ SI</td>
+<td>Logs FastAPI + <code>paymentService.js</code></td>
+</tr>
+<tr>
+<td>Frontend → <code>POST /payments/charge</code></td>
+<td>✅ SI</td>
+<td>Logs FastAPI + <code>paymentService.js</code></td>
+</tr>
+<tr>
+<td><code>culqi_adapter</code> → <code>api.culqi.com/v2/charges</code></td>
+<td>✅ SI</td>
+<td><code>logger.info/debug</code> en <code>culqi_adapter.py</code></td>
+</tr>
+<tr>
+<td><code>culqi_adapter</code> → <code>api.culqi.com/v2/refunds</code></td>
+<td>✅ SI</td>
+<td><code>logger.info/debug</code> en <code>culqi_adapter.py</code></td>
+</tr>
+<tr>
+<td><code>culqi_adapter</code> → <code>api.culqi.com/v2/orders</code></td>
+<td>✅ SI</td>
+<td><code>logger.info/debug</code> en <code>culqi_adapter.py</code></td>
+</tr>
+<tr>
+<td>Callback resultado (token/order/error)</td>
+<td>✅ SI — parcial</td>
+<td><code>culqiRef.current.culqi()</code> en <code>CulqiCheckout.jsx</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Para depurar la tokenización (el segmento opaco), usar las herramientas de desarrollo del browser (Network tab) filtrando por <code>culqi.com</code>.</p>
+</blockquote>
+<hr />
+<h2 id="9-configuracion-de-ambiente">9. Configuración de Ambiente<a class="headerlink" href="#9-configuracion-de-ambiente" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Variable <code>.env</code></th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CULQI_PUBLIC_KEY</code></td>
+<td>Llave pública — expuesta al frontend via <code>/payments/config</code>. Prefijo <code>pk_test_</code> o <code>pk_live_</code></td>
+</tr>
+<tr>
+<td><code>CULQI_SECRET_KEY</code></td>
+<td>Llave secreta — <strong>NUNCA sale del backend</strong>. Prefijo <code>sk_test_</code> o <code>sk_live_</code></td>
+</tr>
+<tr>
+<td><code>CULQI_RSA_ID</code></td>
+<td>ID de llave RSA para encriptación adicional (opcional en sandbox, recomendado en producción)</td>
+</tr>
+<tr>
+<td><code>CULQI_RSA_PUBLIC_KEY</code></td>
+<td>Llave pública RSA para encriptación del payload</td>
+</tr>
+<tr>
+<td><code>PAYMENT_GATEWAY</code></td>
+<td>Valor: <code>'culqi'</code>. Controla qué adaptador usa el sistema</td>
+</tr>
+<tr>
+<td><code>CARD_AVAILABLE</code></td>
+<td><code>True</code>/<code>False</code> — habilita pago con tarjeta en el frontend</td>
+</tr>
+</tbody>
+</table>
+<h3 id="llaves-sandbox-actuales">Llaves sandbox actuales<a class="headerlink" href="#llaves-sandbox-actuales" title="Permanent link">&para;</a></h3>
+<pre><code>CULQI_PUBLIC_KEY=pk_test_7jTfx9nRR69ACCpu
+CULQI_SECRET_KEY=sk_test_sG8xgqCq1r1xq7fc
+</code></pre>
+<hr />
+<h2 id="10-pendientes-identificados">10. Pendientes Identificados<a class="headerlink" href="#10-pendientes-identificados" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Pendiente</th>
+<th>Detalle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Email del usuario guest</strong></td>
+<td>Cuando no está autenticado, el email enviado a Culqi es el fallback. Agregar captura de email en el flujo guest antes de abrir el checkout. <strong>Tema reunión con Culqi.</strong></td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Pruebas en producción</strong></td>
+<td>Validar flujo completo con llaves <code>pk_live_</code> / <code>sk_live_</code> y RSA habilitado.</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Merchant account Latconecta</strong></td>
+<td>Crear cuenta de comercio separada en CulqiPanel para Latconecta (actualmente comparte cuenta con MITOPUPCOM).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="11-referencia-oficial-custom-culqi-checkout-multipago-v10">11. Referencia Oficial — Custom Culqi Checkout multipago v1.0<a class="headerlink" href="#11-referencia-oficial-custom-culqi-checkout-multipago-v10" title="Permanent link">&para;</a></h2>
+<p>Fuente: https://docs.culqi.com/es/documentacion/checkout/checkout-custom</p>
+<h3 id="descripcion-general">Descripción general<a class="headerlink" href="#descripcion-general" title="Permanent link">&para;</a></h3>
+<p>Culqi Custom Checkout multipago es la manera más simple de empezar la integración con Culqi. Es un formulario embebido que facilita la integración en web y móvil (tablets y smartphones), con opción de personalizar tipografía, colores y CSS según la marca del comercio.</p>
+<h3 id="paso-1-incluir-el-sdk">Paso 1 — Incluir el SDK<a class="headerlink" href="#paso-1-incluir-el-sdk" title="Permanent link">&para;</a></h3>
+<pre><code class="language-html">&lt;body&gt;
+  &lt;script src=&quot;https://js.culqi.com/checkout-js&quot;&gt;&lt;/script&gt;
+&lt;/body&gt;
+</code></pre>
+<h3 id="paso-2-configurar-settings-y-client">Paso 2 — Configurar settings y client<a class="headerlink" href="#paso-2-configurar-settings-y-client" title="Permanent link">&para;</a></h3>
+<pre><code class="language-javascript">const settings = {
+  title:    &quot;Nombre del comercio&quot;,
+  currency: &quot;PEN&quot;,          // REQUERIDO para Yape
+  amount:   8000,           // REQUERIDO para Yape (céntimos)
+  order:    &quot;ord_live_XXX&quot;, // Solo si se usan billeteras/PagoEfectivo
+  xculqirsaid:  &quot;id_rsa&quot;,   // Para encriptación RSA (recomendado producción)
+  rsapublickey: &quot;llave_rsa&quot;,
+};
+
+const client = {
+  email: &quot;cliente@ejemplo.com&quot;, // Pre-llena el campo — evita que el usuario lo ingrese
+};
+</code></pre>
+<blockquote>
+<p><strong>Nota:</strong> <code>currency</code> y <code>amount</code> son requeridos para realizar pagos con Yape. Si <code>order</code> está vacío, solo se muestra pago con tarjeta.</p>
+</blockquote>
+<h3 id="paso-3-configurar-options-medios-de-pago">Paso 3 — Configurar options (medios de pago)<a class="headerlink" href="#paso-3-configurar-options-medios-de-pago" title="Permanent link">&para;</a></h3>
+<pre><code class="language-javascript">const paymentMethods = {
+  tarjeta:    true,
+  yape:       true,
+  billetera:  true,  // Requiere order + contrato PagoEfectivo
+  bancaMovil: true,  // Requiere order + contrato PagoEfectivo
+  agente:     true,  // Requiere order + contrato PagoEfectivo
+  cuotealo:   true,  // Requiere order + contrato BCP
+};
+
+const options = {
+  lang:               &quot;auto&quot;,   // &quot;auto&quot; | &quot;en&quot; | &quot;es&quot;
+  installments:       false,    // cuotas
+  modal:              true,     // true = popup | false = embebido
+  paymentMethods:     paymentMethods,
+  paymentMethodsSort: [&quot;yape&quot;, &quot;tarjeta&quot;], // orden de display
+};
+</code></pre>
+<h3 id="paso-3-configurar-appearance-ui">Paso 3 — Configurar appearance (UI)<a class="headerlink" href="#paso-3-configurar-appearance-ui" title="Permanent link">&para;</a></h3>
+<pre><code class="language-javascript">const appearance = {
+  theme:               &quot;default&quot;,
+  hiddenCulqiLogo:     false,
+  hiddenBanner:        false,
+  hiddenToolBarAmount: false,
+  hiddenEmail:         false,   // true = oculta campo email
+  menuType:            &quot;sidebar&quot;, // &quot;sidebar&quot; | &quot;sliderTop&quot; | &quot;select&quot;
+  buttonCardPayText:   &quot;Pagar&quot;,
+  defaultStyle: {
+    bannerColor:      &quot;#1e3a5f&quot;,
+    buttonBackground: &quot;#2563eb&quot;,
+    menuColor:        &quot;#2563eb&quot;,
+    linksColor:       &quot;#2563eb&quot;,
+    buttonTextColor:  &quot;#ffffff&quot;,
+    priceColor:       &quot;#1e3a5f&quot;,
+  },
+};
+</code></pre>
+<h3 id="paso-4-crear-instancia-y-abrir">Paso 4 — Crear instancia y abrir<a class="headerlink" href="#paso-4-crear-instancia-y-abrir" title="Permanent link">&para;</a></h3>
+<pre><code class="language-javascript">const config    = { settings, client, options, appearance };
+const publicKey = &quot;pk_test_XXX&quot;;
+const Culqi     = new CulqiCheckout(publicKey, config);
+
+Culqi.open(); // Abre el modal
+</code></pre>
+<h3 id="paso-5-callback-con-resultado">Paso 5 — Callback con resultado<a class="headerlink" href="#paso-5-callback-con-resultado" title="Permanent link">&para;</a></h3>
+<pre><code class="language-javascript">Culqi.culqi = () =&gt; {
+  if (Culqi.token) {
+    // Tarjeta tokenizada — Culqi.token.id = tkn_live_XXX
+    // Enviar token.id al backend para crear el cargo
+  } else if (Culqi.order) {
+    // Yape/billetera confirmado — cargo YA ejecutado
+    // Usar Culqi.order.id como referencia
+  } else {
+    // Error o cierre manual — Culqi.error contiene el detalle
+  }
+};
+</code></pre>
+<h3 id="campos-adicionales-opcionales-customfields">Campos adicionales opcionales (customFields)<a class="headerlink" href="#campos-adicionales-opcionales-customfields" title="Permanent link">&para;</a></h3>
+<p>El SDK permite agregar hasta 3 campos adicionales antes o dentro del formulario:</p>
+<pre><code class="language-javascript">const customFields = {
+  customInput: [ // antes del checkout (modal)
+    { id: &quot;dni&quot;, label: &quot;DNI&quot;, typeValidate: &quot;DNI&quot;,
+      placeholder: &quot;Ingrese su DNI&quot;, minLength: 7, maxLength: 20 }
+  ],
+  card: [ // dentro del formulario de tarjeta
+    { id: &quot;confirmar&quot;, type: &quot;checkbox&quot;, label: &quot;Acepto términos y condiciones&quot; }
+  ]
+};
+</code></pre>
+<h3 id="parametros-de-appearance-referencia-rapida">Parámetros de appearance — referencia rápida<a class="headerlink" href="#parametros-de-appearance-referencia-rapida" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Parámetro</th>
+<th>Tipo</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>theme</code></td>
+<td>string</td>
+<td>Tema del checkout. Valor: <code>"default"</code></td>
+</tr>
+<tr>
+<td><code>hiddenCulqiLogo</code></td>
+<td>boolean</td>
+<td>Oculta el logo de Culqi</td>
+</tr>
+<tr>
+<td><code>hiddenBanner</code></td>
+<td>boolean</td>
+<td>Oculta el banner/cabecera</td>
+</tr>
+<tr>
+<td><code>hiddenToolBarAmount</code></td>
+<td>boolean</td>
+<td>Oculta el monto en la barra superior</td>
+</tr>
+<tr>
+<td><code>hiddenEmail</code></td>
+<td>boolean</td>
+<td>Oculta el campo de email</td>
+</tr>
+<tr>
+<td><code>menuType</code></td>
+<td>string</td>
+<td><code>"sidebar"</code> | <code>"sliderTop"</code> | <code>"select"</code></td>
+</tr>
+<tr>
+<td><code>buttonCardPayText</code></td>
+<td>string</td>
+<td>Texto del botón de pago</td>
+</tr>
+<tr>
+<td><code>logo</code></td>
+<td>string</td>
+<td>URL del logo del comercio</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Documento técnico interno — Latcom Horizons Horizons II, LLC — Latconecta v2.0.0 — Junio 2026</em></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "toc.integrate", "search.suggest"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copiado al portapapeles", "clipboard.copy": "Copiar al portapapeles", "search.result.more.one": "1 m\u00e1s en esta p\u00e1gina", "search.result.more.other": "# m\u00e1s en esta p\u00e1gina", "search.result.none": "No se encontraron documentos", "search.result.one": "1 documento encontrado", "search.result.other": "# documentos encontrados", "search.result.placeholder": "Teclee para comenzar b\u00fasqueda", "search.result.term.missing": "Falta", "select.version": "Seleccionar versi\u00f3n"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,28 @@
+site_name: Latconecta v2.0.0 — Documentación Técnica
+site_description: Documentación interna del sistema Latconecta
+site_author: Latcom Horizons II, LLC
+docs_dir: docs
+site_dir: site
+theme:
+  name: material
+  language: es
+  palette:
+    primary: indigo
+    accent: blue
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - search.suggest
+
+nav:
+  - Inicio: index.md
+  - Sistema: latconecta.md
+  - APIs Externas: api.md
+  - Integración Culqi: culqi.md
+
+markdown_extensions:
+  - tables
+  - fenced_code
+  - toc:
+      permalink: true
