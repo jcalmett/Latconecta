@@ -149,7 +149,7 @@ const PurchasePopup = React.memo(({
 
   // El popup se oculta visualmente (pero no se desmonta) cuando Culqi está activo
   // para evitar el flash del header "Compra - Método de Pago" mientras Culqi está visible
-  const hiddenByculqi = (purchaseStep === 4 && ['idle', 'launching', 'open', 'done'].includes(paymentPhase))
+  const hiddenByculqi = (purchaseStep === 4 && ['idle', 'launching', 'open'].includes(paymentPhase))
                      || (purchaseStep === 4 && processing);
 
   return (
@@ -789,6 +789,7 @@ const PurchasePopup = React.memo(({
                   onResult={(result) => {
                     setPaymentPhase('done');
                     setGatewayResult(result);
+                    setPurchaseStep(5);
                     handlePaymentAndProvision();
                   }}
                   onRetry={(message, retryFn) => {
@@ -974,7 +975,7 @@ const PurchasePopup = React.memo(({
           {purchaseStep === 5 && !error && !purchaseResult && (
             <div className="text-center py-12">
               <Loader2 size={64} className="animate-spin text-bitel-blue mx-auto mb-4" />
-              <p className="text-xl font-semibold text-gray-700">Procesando tu compra...</p>
+              <p className="text-xl font-semibold text-gray-700">Pago realizado, procesando provisión...</p>
               <p className="text-sm text-gray-500 mt-2">Por favor espera un momento</p>
             </div>
           )}

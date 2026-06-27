@@ -33,7 +33,7 @@ const vendorProductsService = {
   getAll: async () => {
     try {
       const response = await apiClient.get('/vendor-products');
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Error obteniendo vendor products:', error);
       throw error;
@@ -50,7 +50,7 @@ const vendorProductsService = {
           vendor_code: vendorCode
         }
       });
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Error obteniendo vendor products por vendor:', error);
       throw error;

@@ -257,7 +257,7 @@ class ExchangeRateService:
         """
         Obtiene tasa de base de datos (fallback)
         
-        Actualmente solo soporta USD → PEN desde countries.country_er_usd_pen
+        Actualmente solo soporta USD → PEN desde countries.country_er_usd
         """
         
         # Solo soporta USD → PEN por ahora
@@ -268,11 +268,11 @@ class ExchangeRateService:
             )
             country = result.scalar_one_or_none()
             
-            if country and country.country_er_usd_pen:
-                rate = float(country.country_er_usd_pen)
+            if country and country.country_er_usd:
+                rate = float(country.country_er_usd)
                 logger.info(
                     f"Database: {from_currency}/{to_currency} = {rate} "
-                    f"(from countries.country_er_usd_pen)"
+                    f"(from countries.country_er_usd)"
                 )
                 return rate
         
@@ -283,8 +283,8 @@ class ExchangeRateService:
             )
             country = result.scalar_one_or_none()
             
-            if country and country.country_er_usd_pen:
-                rate = 1.0 / float(country.country_er_usd_pen)
+            if country and country.country_er_usd:
+                rate = 1.0 / float(country.country_er_usd)
                 logger.info(
                     f"Database: {from_currency}/{to_currency} = {rate} (inverse)"
                 )

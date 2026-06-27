@@ -36,6 +36,7 @@ class SchedulerService:
         self._running = False
         self._task = None
         self._interval_seconds = 300  # 5 minutos
+        self._lr_last_run = None       # Control ejecución diaria LR-001
 
     async def start(self):
         """Inicia el scheduler"""
@@ -74,6 +75,9 @@ class SchedulerService:
 
                 # Tarea 2: sincronización de catálogos de productos
                 await self._sync_catalogs_task()
+
+                # Tarea 3: alertas de vencimiento de reclamaciones (08:00 Lima)
+                await self._check_lr_deadlines_task()
 
                 # Esperar intervalo antes del próximo ciclo
                 await asyncio.sleep(self._interval_seconds)
@@ -375,6 +379,53 @@ class SchedulerService:
                 f"❌ Error guardando sync_log para {vendor_code}: {e}",
                 exc_info=True
             )
+
+    # =========================================================================
+    # TAREA 3: ALERTAS DE VENCIMIENTO DE RECLAMACIONES
+    # =========================================================================
+
+    async def _check_lr_deadlines_task(self):
+        """
+        Tarea diaria: envía alertas por reclamaciones próximas a vencer.
+
+        Corre a las 08:00 hora Lima (America/Lima).
+        Si ya se ejecutó hoy después de las 08:00, no vuelve a correr.
+        Usa la misma lógica de hora programada que _sync_catalogs_task.
+        """
+        try:
+            import pytz
+            from datetime import timezone as _tz
+
+            lima_tz = pytz.timezone("America/Lima")
+            now_lima = datetime.now(lima_tz)
+
+            scheduled_today = now_lima.replace(
+                hour=8, minute=0, second=0, microsecond=0
+            )
+
+            # Aún no son las 08:00 Lima
+            if now_lima < scheduled_today:
+                return
+
+            # Ya corrió hoy
+            if (
+                self._lr_last_run is not None
+                and self._lr_last_run.date() == now_lima.date()
+                and self._lr_last_run >= scheduled_today
+            ):
+                return
+
+            logger.info("🔔 Ejecutando check de vencimiento de reclamaciones LR-001...")
+
+            async with AsyncSessionLocal() as db:
+                from app.complaints.service import check_complaint_deadlines
+                await check_complaint_deadlines(db)
+
+            self._lr_last_run = now_lima
+            logger.info("✅ Check LR-001 completado")
+
+        except Exception as e:
+            logger.error(f"❌ Error en _check_lr_deadlines_task: {e}", exc_info=True)
 
 
 # Instancia global singleton

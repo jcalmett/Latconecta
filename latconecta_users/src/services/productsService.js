@@ -7,7 +7,7 @@ const productsService = {
   getAll: async (params = {}) => {
     try {
       const response = await apiClient.get('/products', { params });
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Error al obtener productos:', error);
       throw error;
@@ -20,7 +20,7 @@ const productsService = {
   getById: async (id) => {
     try {
       const response = await apiClient.get(`/products/${id}`);
-      return response.data;
+      return response;
     } catch (error) {
       console.error(`Error al obtener producto ${id}:`, error);
       throw error;
@@ -34,7 +34,7 @@ const productsService = {
   try {
     console.log(`🔵 Obteniendo productos del servicio ${serviceId}...`);
     const response = await apiClient.get('/products', { params: { service_id: serviceId } });
-    const products = Array.isArray(response.data) ? response.data : response;
+    const products = Array.isArray(response) ? response : [];
     console.log(`✅ Productos del servicio ${serviceId}:`, products);
     return products;
   } catch (error) {
@@ -49,7 +49,7 @@ const productsService = {
   getByVendor: async (vendorCode) => {
     try {
       const response = await apiClient.get(`/products/vendor/${vendorCode}`);
-      return response.data;
+      return response;
     } catch (error) {
       console.error(`Error al obtener productos del vendor ${vendorCode}:`, error);
       throw error;
