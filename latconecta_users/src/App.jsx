@@ -14,9 +14,6 @@ import ShopView from './views/ShopView';
 import ProfileView from './views/ProfileView';
 import LibroReclamaciones from './components/complaints/LibroReclamaciones';
 import RespuestaOferta from './components/complaints/RespuestaOferta';
-import AvisoLegalView from './views/AvisoLegalView';
-import TerminosView from './views/TerminosView';
-import PrivacidadView from './views/PrivacidadView';
 
 
 function AppContent() {
@@ -59,14 +56,34 @@ function AppContent() {
   };
 
   const handleRegister = async (userData) => {
-    const result = await register(userData);
+    // Si el SignUpModal ya completó el OTP y nos pasa el token directamente
+    if (userData?._tokenResponse) {
+      const tokenData = userData._tokenResponse;
+      // Guardar token y autenticar
+      localStorage.setItem('token', tokenData.access_token);
+      const newUser = {
+        user_id:                 tokenData.user_id,
+        user_name:               tokenData.user_name,
+        user_email:              tokenData.user_email,
+        user_role:               tokenData.user_role,
+        user_photo:              tokenData.user_photo,
+        user_phone_country_code: tokenData.user_phone_country_code,
+        user_phone_number:       tokenData.user_phone_number,
+      };
+      localStorage.setItem('user', JSON.stringify(newUser));
+      showNotification('¡Cuenta creada y verificada! Bienvenido a Latconecta', 'success');
+      setShowSignUpModal(false);
+      navigate('/select');
+      return { success: true };
+    }
 
+    // Flujo normal (no debería llegar aquí con el nuevo SignUpModal)
+    const result = await register(userData);
     if (result.success) {
       showNotification('¡Cuenta creada! Bienvenido a Latconecta', 'success');
       setShowSignUpModal(false);
       navigate('/select');
     }
-
     return result;
   };
 
@@ -165,14 +182,9 @@ function AppContent() {
         {/* Libro de Reclamaciones Virtual — LR-001 (público, sin auth) */}
         <Route path="/reclamaciones" element={<LibroReclamaciones showNotification={showNotification} />} />
         <Route path="/reclamaciones/oferta/:numero" element={<RespuestaOferta showNotification={showNotification} />} />
-        {/* Páginas legales — públicas, sin auth */}
-        <Route path="/aviso-legal" element={<AvisoLegalView />} />
-        <Route path="/terminos" element={<TerminosView />} />
-        <Route path="/privacidad" element={<PrivacidadView />} />
       </Routes>
 
-      {/* OperationsPanel — solo en desarrollo/UAT, nunca en producción */}
-      {import.meta.env.VITE_SHOW_OPS_PANEL === 'true' && <OperationsPanel />}
+      <OperationsPanel />
 
       <Footer latconectaData={latconectaData} />
 

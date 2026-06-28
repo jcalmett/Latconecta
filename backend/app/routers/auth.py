@@ -29,6 +29,63 @@ from app.services.refresh_token_manager import refresh_token_manager
 router = APIRouter()
 
 
+import redis
+import random
+import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+# ── Schemas para OTP de registro ─────────────────────────────────────────────
+
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    code: str
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+# ── Redis para OTP de registro ────────────────────────────────────────────────
+_redis_client = None
+
+def get_redis():
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis.Redis(host='127.0.0.1', port=6379, db=1, decode_responses=True)
+    return _redis_client
+
+OTP_TTL_SECONDS = 900   # 15 minutos
+OTP_PREFIX      = "reg_otp:"
+MAX_OTP_ATTEMPTS = 5
+
+def _generate_otp() -> str:
+    return str(random.randint(100000, 999999))
+
+def _save_otp(email: str, otp: str, user_data: dict) -> None:
+    r = get_redis()
+    key = f"{OTP_PREFIX}{email.lower()}"
+    payload = {"otp_hash": get_password_hash(otp), "user_data": user_data, "attempts": 0}
+    r.setex(key, OTP_TTL_SECONDS, json.dumps(payload))
+
+def _get_otp_payload(email: str):
+    r = get_redis()
+    raw = r.get(f"{OTP_PREFIX}{email.lower()}")
+    return json.loads(raw) if raw else None
+
+def _delete_otp(email: str) -> None:
+    get_redis().delete(f"{OTP_PREFIX}{email.lower()}")
+
+def _increment_attempts(email: str, payload: dict) -> int:
+    r = get_redis()
+    key = f"{OTP_PREFIX}{email.lower()}"
+    payload["attempts"] += 1
+    ttl = r.ttl(key)
+    if ttl > 0:
+        r.setex(key, ttl, json.dumps(payload))
+    return payload["attempts"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
@@ -93,25 +150,100 @@ async def login(
     )
 
 
-@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_200_OK)
 @limiter.limit("3/minute")
 async def register(
     request: Request,
     user_data: UserRegister,
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(User).where(User.user_email == user_data.user_email)
-    )
+    """
+    PASO 1 del registro: valida datos y envía OTP al email.
+    El usuario NO se crea en BD hasta confirmar el OTP via POST /auth/verify-email.
+    """
+    # 1. Email no duplicado
+    result = await db.execute(select(User).where(User.user_email == user_data.user_email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email ya registrado")
 
+    # 2. Validar contraseña
+    if len(user_data.user_password) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
+    if not user_data.user_password[0].isupper():
+        raise HTTPException(status_code=400, detail="La contraseña debe comenzar con mayúscula")
+
+    # 3. Guardar datos + OTP en Redis (NO en BD aún)
+    otp = _generate_otp()
+    _save_otp(
+        email=user_data.user_email,
+        otp=otp,
+        user_data={
+            "user_name":               user_data.user_name,
+            "user_email":              user_data.user_email,
+            "user_password_hash":      get_password_hash(user_data.user_password),
+            "user_phone_country_code": user_data.user_phone_country_code or "+51",
+            "user_phone_number":       user_data.user_phone_number or "",
+        }
+    )
+
+    # 4. Enviar email con OTP
+    try:
+        from app.services.email_service import send_verification_code
+        await send_verification_code(
+            to_email=user_data.user_email,
+            user_name=user_data.user_name,
+            code=otp
+        )
+    except Exception as e:
+        _delete_otp(user_data.user_email)
+        raise HTTPException(status_code=500, detail="Error al enviar el código. Intenta nuevamente.")
+
+    return {
+        "success": True,
+        "message": f"Hemos enviado un código de verificación a {user_data.user_email}. Válido por 15 minutos.",
+        "email":   user_data.user_email,
+    }
+
+
+@router.post("/verify-email", response_model=Token, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
+async def verify_email(
+    request: Request,
+    verify_data: VerifyEmailRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    PASO 2 del registro: verifica OTP y crea el usuario en BD.
+    Máximo 5 intentos. OTP se invalida tras verificación exitosa.
+    """
+    INVALID_MSG = "El código ingresado no es válido o ha expirado"
+
+    payload = _get_otp_payload(verify_data.email)
+    if not payload:
+        raise HTTPException(status_code=400, detail=INVALID_MSG)
+
+    if payload.get("attempts", 0) >= MAX_OTP_ATTEMPTS:
+        _delete_otp(verify_data.email)
+        raise HTTPException(status_code=400, detail="Demasiados intentos. Solicita un nuevo código.")
+
+    if not verify_password(verify_data.code, payload["otp_hash"]):
+        attempts  = _increment_attempts(verify_data.email, payload)
+        remaining = MAX_OTP_ATTEMPTS - attempts
+        raise HTTPException(status_code=400, detail=f"Código incorrecto. {remaining} intento(s) restante(s).")
+
+    # OTP correcto — crear usuario
+    ud = payload["user_data"]
+    result = await db.execute(select(User).where(User.user_email == ud["user_email"]))
+    if result.scalar_one_or_none():
+        _delete_otp(verify_data.email)
+        raise HTTPException(status_code=400, detail="Email ya registrado")
+
     db_user = User(
-        user_name=user_data.user_name,
-        user_email=user_data.user_email,
-        user_password=get_password_hash(user_data.user_password),
-        user_phone_country_code=user_data.user_phone_country_code or '+51',
-        user_phone_number=user_data.user_phone_number,
+        user_name=ud["user_name"],
+        user_email=ud["user_email"],
+        user_password=ud["user_password_hash"],
+        user_phone_country_code=ud["user_phone_country_code"],
+        user_phone_number=ud["user_phone_number"],
         user_role="user",
         user_status="active",
         created_by="self-registration"
@@ -119,12 +251,13 @@ async def register(
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
+    _delete_otp(verify_data.email)
 
-    access_token = create_access_token(data={
+    access_token  = create_access_token(data={
         "user_id": db_user.user_id,
-        "email": db_user.user_email,
-        "role": db_user.user_role,
-        "type": "access"
+        "email":   db_user.user_email,
+        "role":    db_user.user_role,
+        "type":    "access"
     })
     refresh_token = refresh_token_manager.generate_refresh_token(db_user.user_id)
 
@@ -140,6 +273,27 @@ async def register(
         user_phone_number=db_user.user_phone_number,
         refresh_token=refresh_token
     )
+
+
+@router.post("/resend-verification")
+@limiter.limit("2/minute")
+async def resend_verification(
+    request: Request,
+    body: ResendVerificationRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Reenvía el OTP de verificación de registro si hay un registro pendiente."""
+    payload = _get_otp_payload(body.email)
+    if payload:
+        ud      = payload["user_data"]
+        new_otp = _generate_otp()
+        _save_otp(email=body.email, otp=new_otp, user_data=ud)
+        try:
+            from app.services.email_service import send_verification_code
+            await send_verification_code(to_email=body.email, user_name=ud["user_name"], code=new_otp)
+        except Exception:
+            pass
+    return {"success": True, "message": "Si hay un registro pendiente, recibirás un nuevo código."}
 
 
 @router.post("/refresh", response_model=RefreshTokenResponse)

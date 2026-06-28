@@ -218,6 +218,8 @@ from app.routers.upload_reclamaciones import router as upload_reclamaciones_rout
 app.include_router(upload_reclamaciones_router, prefix="/api/v1")
 from app.routers.upload_receipts import router as upload_receipts_router
 app.include_router(upload_receipts_router, prefix="/api/v1")
+from app.routers.upload_photo_public import router as upload_photo_public_router
+app.include_router(upload_photo_public_router, prefix="/api/v1")
 app.include_router(upload.router, prefix="/api/v1")
 
 # Payments router
@@ -233,19 +235,14 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 # Exception handlers
-from starlette.exceptions import HTTPException as StarletteHTTPException
-
-@app.exception_handler(StarletteHTTPException)
-async def not_found_handler(request: Request, exc: StarletteHTTPException):
-    if exc.status_code == 404:
-        detail = exc.detail if exc.detail != "Not Found" else "Endpoint no encontrado"
-        return JSONResponse(
-            status_code=404,
-            content={"detail": detail, "path": str(request.url)}
-        )
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc):
     return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail}
+        status_code=404,
+        content={
+            "detail": "Endpoint no encontrado",
+            "path": str(request.url)
+        }
     )
 
 
