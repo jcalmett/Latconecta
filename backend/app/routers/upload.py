@@ -49,11 +49,28 @@ MAGIC_SIGNATURES = {
     b'%PDF': '.pdf',
 }
 
+# FIX (bug confirmado): la firma binaria de JPEG (FF D8 FF) solo estaba
+# mapeada a la extensión '.jpg'. Los celulares (Android/iOS) y navegadores
+# móviles generan mayoritariamente archivos con extensión '.jpeg' — un JPEG
+# perfectamente válido con esa extensión siempre fallaba esta validación
+# porque verify_magic_bytes() exige coincidencia EXACTA de extensión
+# (ext == expected_extension). Confirmado con evidencia: firma binaria real
+# leída en el dispositivo (FF D8 FF E1, válida) rechazada por el backend
+# únicamente por la extensión '.jpeg'. Afecta: reemplazo de foto de perfil
+# en Users web y Mobile (ambos generan .jpeg); no afectaba a Admin porque
+# los archivos seleccionados desde PC suelen nombrarse .jpg.
+JPEG_EXTENSION_ALIASES = {'.jpg', '.jpeg'}
+
 
 def verify_magic_bytes(content: bytes, expected_extension: str) -> bool:
     for signature, ext in MAGIC_SIGNATURES.items():
-        if content.startswith(signature) and ext == expected_extension:
-            return True
+        if content.startswith(signature):
+            # JPEG: aceptar tanto .jpg como .jpeg como válidos para la
+            # misma firma binaria (ver nota FIX arriba).
+            if ext == '.jpg' and expected_extension in JPEG_EXTENSION_ALIASES:
+                return True
+            if ext == expected_extension:
+                return True
     if expected_extension == '.webp' and content.startswith(b'RIFF'):
         if b'WEBP' in content[:12]:
             return True
@@ -148,7 +165,7 @@ async def upload_file(
             temp_path = category_dir / f"temp_{uuid.uuid4().hex}{file_ext}"
             with temp_path.open("wb") as buffer:
                 buffer.write(content)
-            
+
             if not validate_image_integrity(temp_path):
                 logger.error(f"Imagen corrupta: {file.filename} por usuario {current_user.user_id}")
                 if temp_path and temp_path.exists():
@@ -157,7 +174,7 @@ async def upload_file(
                     status_code=400,
                     detail="El archivo no es una imagen válida o está corrupto"
                 )
-            
+
             if temp_path and temp_path.exists():
                 temp_path.unlink()
 
@@ -168,7 +185,7 @@ async def upload_file(
             buffer.write(content)
 
         file_url = f"/uploads/{category}/{unique_filename}"
-        
+
         logger.info(f"Archivo subido: {file_url} por usuario {current_user.user_id}")
 
         return {

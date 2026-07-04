@@ -427,6 +427,7 @@ const ShopView = ({ user, showNotification }) => {
         delivery_phone: purchaseData.deliveryPhone || null,
         delivery_address: purchaseData.deliveryAddress || null,
         user_email: user?.user_email || null,
+        channel: 'WEB',
 
         // Con Culqi el pago se procesa íntegramente en el backend — no hay datos de gateway desde el frontend
       };
@@ -1012,7 +1013,12 @@ const ShopView = ({ user, showNotification }) => {
 
     if (purchaseResult.purchase_receip_url) {
       const fullUrl = getUploadUrl(purchaseResult.purchase_receip_url);
-      window.open(fullUrl, '_blank');
+      const link = document.createElement('a');
+      link.href = fullUrl;
+      link.download = `recibo-${purchaseResult.reference}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       return;
     }
 
@@ -1053,116 +1059,6 @@ generateAndUploadReceiptPDF({
     });
   };
 
-  const handleDownloadReceipt = () => {
-    if (!purchaseResult) return;
-
-    let destinatario = '';
-    if (purchaseData.productType === 'bill_payment') {
-      destinatario = `CUENTA PAGADA: ${purchaseData.accountNumber}`;
-    } else if (purchaseData.productType === 'smartphone') {
-      destinatario = `CONTACTO ENTREGA: ${purchaseData.phoneNumber}`;
-    } else if (purchaseData.productType === 'transfer') {
-      destinatario = `NUMERO DESTINO: ${purchaseData.phoneNumber}`;
-    } else {
-      destinatario = `NUMERO RECARGADO: ${purchaseData.phoneNumber}`;
-    }
-
-    const montoAPagar = purchaseResult.monto_pagar || parseFloat(selectedProduct.product_base_price) || 0;
-    const descuento = purchaseResult.descuento || 0;
-    const fee = purchaseResult.fee || 0;
-    const totalAmount = parseFloat(purchaseResult.amount) || 0;
-    const porcentajeDesc = purchaseResult.porcentaje_descuento || 0;
-
-    const receiptText = `
-===================================
-        COMPROBANTE DE COMPRA
-           LATCONECTA
-===================================
-
-Fecha: ${new Date(purchaseResult.date).toLocaleString()}
-Referencia: ${purchaseResult.reference}
-${destinatario}
-
------------------------------------
-PRODUCTO
------------------------------------
-${selectedProduct.product_name}
-Servicio: ${selectedService.service_name}
-
------------------------------------
-MONTO
------------------------------------
-Valor de venta:   ${selectedProduct.product_currency} ${(purchaseResult.base_imponible || 0).toFixed(2)}
-${descuento > 0 ? `Descuento (${porcentajeDesc}%):   ${selectedProduct.product_currency} -${(descuento / (1 + (purchaseResult.tax_rate || 0.18))).toFixed(2)}` : ''}
-${fee > 0 ? `Comision:         ${selectedProduct.product_currency} +${(fee / (1 + (purchaseResult.tax_rate || 0.18))).toFixed(2)}` : ''}
-Op. Gravada:      ${selectedProduct.product_currency} ${(purchaseResult.base_imponible || 0).toFixed(2)}
-${purchaseResult.tax_label || 'IGV'} (${((purchaseResult.tax_rate || 0.18) * 100).toFixed(0)}%):       ${selectedProduct.product_currency} +${(purchaseResult.tax_amount || 0).toFixed(2)}
------------------------------------
-IMPORTE TOTAL:    ${selectedProduct.product_currency} ${totalAmount.toFixed(2)}
-
------------------------------------
-ESTADO
------------------------------------
-Estado Compra: ${purchaseResult.purchase_status}
-Estado Pago: ${purchaseResult.payment_status}
-${purchaseResult.delivery_status ? `Estado Provisión: ${purchaseResult.delivery_status}` : ''}
-
-${purchaseResult.payment_ref ? `Ref. Pago: ${purchaseResult.payment_ref}` : ''}
-${purchaseResult.provision_ref ? `Ref. Provisión: ${purchaseResult.provision_ref}` : ''}
-${purchaseResult.reversal_ref ? `Ref. Reversión: ${purchaseResult.reversal_ref}` : ''}
-${purchaseResult.barcode ? `Código Barras: ${purchaseResult.barcode}` : ''}
-
-${purchaseResult.purchase_status === 'Failed' && purchaseResult.payment_status === 'Reversed' ? `
------------------------------------
-⚠️  PROVISIÓN FALLIDA
------------------------------------
-No se pudo completar la provisión
-del servicio solicitado.
-
-✓ PAGO REVERTIDO EXITOSAMENTE
-No se realizó ningún cargo a su 
-tarjeta de crédito.
-` : ''}
-
-${purchaseResult.requires_manual_intervention ? `
------------------------------------
-⚠️  INTERVENCIÓN MANUAL REQUERIDA
------------------------------------
-La provisión falló y no se pudo 
-revertir el pago automáticamente.
-
-El cargo permanece en su tarjeta.
-
-Si en 48 horas no recibe la 
-devolución, comuníquese con:
-soporte@latconecta.com
-
-Referencia: ${purchaseResult.reference}
-` : ''}
-
-${purchaseData.productType === 'smartphone' ? `-----------------------------------
-CONTACTO
------------------------------------
-Teléfono: ${purchaseData.deliveryPhone || purchaseData.phoneNumber}
-Nombre: ${purchaseData.deliveryName}
-Dirección: ${purchaseData.deliveryAddress}
-` : ''}
-
-===================================
-       Gracias por su compra
-===================================
-    `.trim();
-
-    const blob = new Blob([receiptText], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `recibo-${purchaseResult.reference}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   const closePurchasePopup = () => {
     setShowPurchasePopup(false);
@@ -1360,7 +1256,6 @@ Dirección: ${purchaseData.deliveryAddress}
         handlePaymentAndProvision={handlePaymentAndProvision}
         showNotification={showNotification}
         purchaseResult={purchaseResult}
-        handleDownloadReceipt={handleDownloadReceipt}
         handleDownloadReceiptPDF={handleDownloadReceiptPDF}
         user={user}
         company={company}

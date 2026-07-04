@@ -199,6 +199,7 @@ class PurchaseCreateRequest(BaseModel):
     payment_transaction_datetime: Optional[str] = None
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
+    channel: Optional[str] = None
 
 
 class PurchaseResponse(BaseModel):
@@ -404,6 +405,8 @@ async def create_purchase(
         reversal_ref = None
         vendor_trans_id = None
         vendor_provider_trans_id = None
+        vendor_response_code = None
+        vendor_response_description = None
         vendor_request_json = None
         vendor_response_json = None
         delivery_status = None
@@ -474,16 +477,21 @@ async def create_purchase(
                         provision_ref = prov_result.get('provision_ref')
                         vendor_trans_id = ext.get('vendor_trans_id')
                         vendor_provider_trans_id = ext.get('vendor_provider_trans_id')
+                        vendor_response_code = ext.get('purchase_vendor_response_code')
+                        vendor_response_description = ext.get('purchase_vendor_response_description')
                         if purchase_data.product_type == 'smartphone':
                             ds = ext.get('purchase_delivery_status', 'ordered')
                             delivery_status = 'Success' if ds in ['completed','SUCCESS','success'] else ('Ordered' if ds == 'ordered' else ds)
                         purchase_status = 'Success'
                         logger.info(f"✅ Provisión real OK: {provision_ref}")
                     else:
+                        ext = prov_result.get('extracted_data', {})
+                        vendor_response_code = ext.get('purchase_vendor_response_code')
+                        vendor_response_description = ext.get('purchase_vendor_response_description')
                         logger.warning(f"❌ Provisión real FAIL: {prov_result.get('error')}")
                         rev = await _attempt_payment_reversal(purchase_data, calculation, payment_ref)
                         if rev.get('success'):
-                            payment_status = 'Refunded' if rev.get('cancel_id') else 'Reversed'
+                            payment_status = 'Reversed'
                             purchase_status = 'Failed'
                             reversal_ref = rev.get('reversal_ref') or rev.get('cancel_id')
                         else:
@@ -495,7 +503,7 @@ async def create_purchase(
                     try:
                         rev = await _attempt_payment_reversal(purchase_data, calculation, payment_ref)
                         if rev.get('success'):
-                            payment_status = 'Refunded' if rev.get('cancel_id') else 'Reversed'
+                            payment_status = 'Reversed'
                             purchase_status = 'Failed'
                             reversal_ref = rev.get('reversal_ref') or rev.get('cancel_id')
                         else:
@@ -523,7 +531,8 @@ async def create_purchase(
 
         # PASO 7: GRABAR
         timestamp = datetime.now()
-        reference = f"REF-{timestamp.strftime('%Y%m%d%H%M%S')}"
+        channel = (purchase_data.channel or "WEB").upper()
+        reference = f"REF-{channel}-{timestamp.strftime('%Y%m%d%H%M%S')}"
         purchase = Purchase(
             purchase_reference=reference, purchase_user_id=purchase_data.user_id,
             purchase_product_id=product.product_id, purchase_service_name=product.service.service_name,
@@ -554,6 +563,8 @@ async def create_purchase(
             purchase_initial_balance=float(vendor_initial_balance),
             purchase_final_balance=float(vendor_final_balance),
             vendor_trans_id=vendor_trans_id, vendor_provider_trans_id=vendor_provider_trans_id,
+            purchase_vendor_response_code=vendor_response_code,
+            purchase_vendor_response_description=vendor_response_description,
             vendor_request=vendor_request_json, vendor_response=vendor_response_json,
             requires_manual_intervention=requires_manual_intervention,
             purchase_ip_petition=purchase_data.ip_address,
@@ -726,7 +737,7 @@ async def update_receip_url(
         raise HTTPException(status_code=404, detail="Compra no encontrada")
 
     # Validar ownership: solo el dueño de la compra puede actualizar el recibo
-    if current_user and purchase.user_id and purchase.user_id != current_user.user_id:
+    if current_user and purchase.purchase_user_id and purchase.purchase_user_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="No autorizado")
 
     # Validar que la URL pertenece al propio servidor

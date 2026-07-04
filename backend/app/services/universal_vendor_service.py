@@ -461,6 +461,7 @@ class UniversalVendorService:
                 }
             else:
                 # Error del vendor (no transitorio) - no registrar en circuit breaker
+                parsed_response = mapper.parse_response(response_data)
                 return {
                     "status": "error",
                     "error_code": response_data.get('error_code', 'VENDOR_ERROR'),
@@ -468,7 +469,8 @@ class UniversalVendorService:
                     "status_code": response.status_code,
                     "vendor_request": request_body,
                     "vendor_response": response_data,
-                    "raw_response": response_data
+                    "raw_response": response_data,
+                    "extracted_data": parsed_response
                 }
 
         except httpx.TimeoutException as e:
