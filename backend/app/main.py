@@ -188,6 +188,7 @@ from app.routers import (
     vendor_api_mappings,
     mock_vendors,
     operations_config,
+    whatsapp,
 )
 
 # ✅ LR-001 — Libro de Reclamaciones Virtual
@@ -212,6 +213,9 @@ app.include_router(operations_config.router, prefix="/api/v1/operations", tags=[
 # Vendor API Mappings y Mock Vendors
 app.include_router(vendor_api_mappings.router, prefix="/api/v1/vendor-api-mappings", tags=["Vendor API Mappings"])
 app.include_router(mock_vendors.router, prefix="/api/v1/mock", tags=["Mock Vendors"])
+
+# Bot WhatsApp — endpoints exclusivos, autenticados con X-Bot-Service-Token
+app.include_router(whatsapp.router, prefix="/api/v1/whatsapp", tags=["WhatsApp Bot"])
 
 # Upload routers
 from app.routers.upload_reclamaciones import router as upload_reclamaciones_router

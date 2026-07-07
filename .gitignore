@@ -107,3 +107,6 @@ desktop.ini
 vendor_simulator/.venv/
 *.save
 *.log
+
+# WhatsApp bot - sesión de Baileys (credencial activa, nunca subir)
+whatsapp_bot/auth/

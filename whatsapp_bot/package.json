@@ -1,0 +1,18 @@
+{
+  "name": "latconecta-whatsapp-bot",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Bot WhatsApp de Latconecta - canal de ventas via Baileys (transporte de pruebas)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "axios": "^1.9.0",
+    "dotenv": "^16.5.0",
+    "qrcode-terminal": "^0.12.0",
+    "pino": "^9.0.0"
+  }
+}

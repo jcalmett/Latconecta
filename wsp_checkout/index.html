@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Latconecta - Pago</title>
+<meta property="og:title" content="Latconecta — Completa tu pago">
+<meta property="og:description" content="Toca para pagar tu pedido de forma segura con Culqi.">
+<meta property="og:type" content="website">
+<script src="https://js.culqi.com/checkout-js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f9fafb;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    max-width: 380px;
+    width: 100%;
+    text-align: center;
+  }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 4px solid #e5e7eb;
+    border-top-color: #16a34a;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h2 { color: #1e3a5f; font-size: 18px; margin-bottom: 6px; }
+  .price { font-size: 28px; font-weight: 700; color: #1f2937; margin-bottom: 16px; }
+  .muted { color: #6b7280; font-size: 15px; margin-top: 8px; }
+  .icon { font-size: 48px; margin-bottom: 12px; }
+  .msg-success { color: #16a34a; font-weight: 700; font-size: 22px; }
+  .msg-warning { color: #ea580c; font-weight: 700; font-size: 22px; }
+  .msg-error { color: #dc2626; font-weight: 700; font-size: 22px; }
+  .ref { color: #6b7280; font-size: 13px; margin-top: 10px; }
+  .retry-box {
+    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
+    padding: 10px; margin-top: 14px; color: #15803d; font-size: 13px;
+  }
+  .green-box {
+    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
+    padding: 12px; margin: 12px auto; max-width: 320px; text-align: left;
+  }
+  .green-box p:first-child { color: #15803d; font-weight: 600; font-size: 14px; margin: 0; }
+  .green-box p:last-child { color: #16a34a; font-size: 12px; margin: 4px 0 0; }
+  .red-box {
+    background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+    padding: 12px; margin: 12px auto; max-width: 320px; text-align: left;
+  }
+  .red-box p:first-child { color: #b91c1c; font-weight: 600; font-size: 14px; margin: 0; }
+  .red-box p:last-child { color: #dc2626; font-size: 12px; margin: 4px 0 0; }
+  .receipt {
+    background: #ffffff; border-radius: 12px; padding: 24px; margin-top: 12px;
+    width: 456px; max-width: none;
+  }
+  .save-btn {
+    margin-top: 16px; background: #16a34a; color: #fff; border: none;
+    padding: 10px 20px; border-radius: 8px; font-size: 15px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <div class="card" id="app">
+    <div class="spinner"></div>
+    <p class="muted">Cargando tu pedido...</p>
+  </div>
+
+<script>
+/**
+ * MÓDULO PROPIO DE CHECKOUT — CANAL WHATSAPP
+ * ============================================
+ * HTML/JS plano, sin build, sin dependencia de latconecta_users.
+ * Replica exactamente el uso del SDK de Culqi documentado por Culqi
+ * (mismo patrón que CulqiCheckout.jsx de la web: new window.CulqiCheckout(publicKey, config)).
+ *
+ * Se sirve bajo el MISMO origen ya autorizado en CORS (https://peruse.latconecta.com),
+ * en una ruta nueva (/wsp-checkout/) — evita tocar la app React y evita
+ * cualquier cambio de CORS en el backend.
+ *
+ * Reglas de negocio (confirmadas leyendo backend/app/routers/purchases.py,
+ * no adivinadas): cobra -> provisiona -> si falla, revierte -> informa
+ * el resultado real en cada uno de los 4 casos posibles.
+ *
+ * Mapeo product_type <- service_id (backend/app/schemas/product.py):
+ *   2=package, 3=bill_payment, 4=smartphone, 5=topup, 6=transfer
+ */
+
+// Ruta relativa: usa el mismo origen (HTTPS) del que se sirve esta página,
+// aprovechando el proxy Nginx /api/ ya configurado hacia el backend (puerto 8100).
+// NUNCA usar http://77.42.92.151:8100 directo — Mixed Content bloqueado por el
+// navegador en una página HTTPS (trampa ya documentada en el propio sistema).
+const API_URL = '/api/v1';
+// Ruta del "puente" hacia el bot — proxy Nginx nuevo hacia el puerto interno
+// del bot (127.0.0.1:3001), mismo patrón que /api/ para evitar Mixed Content.
+const NOTIFY_URL = '/wsp-notify/notify-payment';
+// LIMITACIÓN CONOCIDA: este token es visible en el código fuente del navegador
+// (no hay forma de ocultar un secreto en una página estática pública) — solo
+// desalienta tráfico accidental, no protege contra un atacante decidido.
+const NOTIFY_TOKEN = '498f28aaa3b4c8b2ff46d1cd90b29b6fb39e20dac45585bb56e916aa271b8190';
+const BOT_WA_NUMBER = '51965423722';
+const SERVICE_ID_TO_PRODUCT_TYPE = { 2: 'package', 3: 'bill_payment', 4: 'smartphone', 5: 'topup', 6: 'transfer' };
+const MAX_RETRIES = 3;
+
+const app = document.getElementById('app');
+const params = new URLSearchParams(window.location.search);
+
+const productId = params.get('product_id');
+const jid = params.get('jid') || null;
+const phoneNumber = params.get('phone_number') || null;
+const accountNumber = params.get('account_number') || null;
+const deliveryName = params.get('delivery_name') || null;
+const deliveryPhone = params.get('delivery_phone') || null;
+const deliveryAddress = params.get('delivery_address') || null;
+
+let retryCount = 0;
+let product = null;
+let currentAmount = null;
+
+function render(html) {
+  app.innerHTML = html;
+}
+
+function renderError(message) {
+  render(`
+    <div class="icon">❌</div>
+    <p class="msg-error">${escapeHtml(message)}</p>
+    <button onclick="window.__retryPayment()" style="margin-top:16px;background:#2563eb;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:15px;cursor:pointer;">Pagar de nuevo</button>
+  `);
+}
+
+window.__retryPayment = function () {
+  if (currentAmount === null) return;
+  retryCount = 0;
+  render(`
+    <h2>${escapeHtml(product.product_name)}</h2>
+    <div class="price">${escapeHtml(product.product_currency)} ${currentAmount.toFixed(2)}</div>
+    <div class="spinner"></div>
+    <p class="muted">Abriendo pasarela de pago...</p>
+    <div id="retryBox"></div>
+  `);
+  openCulqi(currentAmount);
+};
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function fetchJson(url, options) {
+  const res = await fetch(url, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || `Error ${res.status}`);
+  }
+  return data;
+}
+
+/**
+ * Punto único de cierre para cualquier resultado final del pago
+ * (éxito, revertido, problema manual, cancelación definitiva, error técnico).
+ * Muestra el mensaje en pantalla, avisa al bot para que mande el mensaje de
+ * WhatsApp solo (sin que el cliente toque nada), y regresa automáticamente
+ * a la conversación después de una breve pausa.
+ */
+async function finishAndReturn(displayHtml, whatsappMessage) {
+  // NOTA: se quitó la redirección automática a wa.me — WhatsApp valida el
+  // número contra su directorio antes de abrir el chat y falla con "el
+  // número no existe" incluso siendo un número real y activo (confirmado
+  // con evidencia real, no es un bug nuestro que podamos corregir). El
+  // aviso al bot (abajo) ya entrega el resultado directo en la conversación
+  // existente sin necesidad de abrir nada nuevo — es lo único necesario.
+  render(displayHtml + '<p class="muted" style="margin-top:14px;">Ya puedes volver a WhatsApp — ahí verás el resultado de tu pedido.</p>');
+
+  if (jid) {
+    try {
+      await fetch(NOTIFY_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Checkout-Notify-Token': NOTIFY_TOKEN,
+        },
+        body: JSON.stringify({ jid, message: whatsappMessage }),
+      });
+    } catch (err) {
+      // Si el aviso automático falla, el cliente igual ve el resultado en
+      // pantalla — no es un error bloqueante para él.
+      console.error('Error avisando al bot:', err.message);
+    }
+  }
+}
+
+/**
+ * Para los 3 casos reales de resultado de compra (éxito, provisión fallida
+ * con reembolso, intervención manual): arma un recibo visual, lo convierte
+ * en imagen (html2canvas), ofrece guardarlo, y manda esa misma imagen al
+ * bot para que el cliente la vea también en el chat al volver.
+ */
+async function finishWithReceipt(receiptHtml, whatsappCaption) {
+  render(`
+    <div class="receipt" id="receiptCard">${receiptHtml}</div>
+    <p class="muted" id="receiptStatus" style="margin-top:14px;">Generando tu recibo...</p>
+  `);
+
+  let imageBase64 = null;
+  try {
+    const canvas = await html2canvas(document.getElementById('receiptCard'), { backgroundColor: '#ffffff', scale: 2 });
+    const dataUrl = canvas.toDataURL('image/png');
+    imageBase64 = dataUrl.split(',')[1];
+
+    const statusEl = document.getElementById('receiptStatus');
+    if (statusEl) {
+      statusEl.outerHTML = `
+        <a href="${dataUrl}" download="recibo-latconecta.png" class="save-btn" style="display:inline-block;text-decoration:none;">Guardar imagen del recibo</a>
+        <p class="muted" style="margin-top:14px;">Ya puedes volver a WhatsApp — ahí verás este mismo recibo.</p>
+      `;
+    }
+  } catch (err) {
+    console.error('Error generando imagen del recibo:', err.message);
+    const statusEl = document.getElementById('receiptStatus');
+    if (statusEl) statusEl.textContent = 'Ya puedes volver a WhatsApp — ahí verás el resultado de tu pedido.';
+  }
+
+  if (jid) {
+    try {
+      await fetch(NOTIFY_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Checkout-Notify-Token': NOTIFY_TOKEN,
+        },
+        body: JSON.stringify({ jid, message: whatsappCaption, imageBase64 }),
+      });
+    } catch (err) {
+      console.error('Error avisando al bot:', err.message);
+    }
+  }
+}
+
+async function init() {
+  if (!productId) {
+    renderError('Enlace inválido: falta el producto.');
+    return;
+  }
+
+  try {
+    product = await fetchJson(`${API_URL}/products/${productId}`);
+  } catch (err) {
+    renderError('No pudimos cargar el producto. Intenta de nuevo desde WhatsApp.');
+    return;
+  }
+
+  if (!product || product.product_status !== 'active') {
+    renderError('Este producto ya no está disponible.');
+    return;
+  }
+
+  const amount = parseFloat(product.product_total_price);
+  currentAmount = amount;
+  render(`
+    <h2>${escapeHtml(product.product_name)}</h2>
+    <div class="price">${escapeHtml(product.product_currency)} ${amount.toFixed(2)}</div>
+    <div class="spinner"></div>
+    <p class="muted">Abriendo pasarela de pago...</p>
+    <div id="retryBox"></div>
+  `);
+
+  openCulqi(amount);
+}
+
+async function openCulqi(amount) {
+  let config;
+  try {
+    config = await fetchJson(`${API_URL}/payments/config`);
+  } catch (err) {
+    renderError('No se pudo conectar con el procesador de pagos.');
+    return;
+  }
+
+  const publicKey = config.public_key;
+  if (!publicKey || typeof window.CulqiCheckout === 'undefined') {
+    renderError('El procesador de pagos no está disponible en este momento.');
+    return;
+  }
+
+  const orderNumber = `LC${Date.now().toString().slice(-12)}`;
+  const amountCents = Math.round(amount * 100);
+  const currency = product.product_currency || 'PEN';
+
+  const culqiSettings = { title: 'Latconecta', currency, amount: amountCents };
+  if (config.rsa_id && config.rsa_public_key) {
+    culqiSettings.xculqirsaid = config.rsa_id;
+    culqiSettings.rsapublickey = config.rsa_public_key;
+  }
+
+  const culqiConfig = {
+    settings: culqiSettings,
+    client: { email: 'cliente@latconecta.com' },
+    options: {
+      lang: 'auto',
+      installments: false,
+      modal: true,
+      paymentMethods: { yape: true, tarjeta: true, billetera: false, bancaMovil: false, agente: false, cuotealo: false },
+      paymentMethodsSort: ['yape', 'tarjeta'],
+    },
+    appearance: {
+      theme: 'default',
+      hiddenCulqiLogo: false,
+      hiddenBanner: false,
+      hiddenToolBarAmount: false,
+      menuType: 'sidebar',
+      buttonCardPayText: 'Pagar',
+      defaultStyle: {
+        bannerColor: '#1e3a5f',
+        buttonBackground: '#16a34a',
+        menuColor: '#16a34a',
+        linksColor: '#16a34a',
+        buttonTextColor: '#ffffff',
+        priceColor: '#1e3a5f',
+      },
+    },
+  };
+
+  const culqi = new window.CulqiCheckout(publicKey, culqiConfig);
+
+  let callbackFired = false;
+
+  // HEURÍSTICA (no es un evento oficial de Culqi — no existe uno documentado
+  // para "usuario cerró sin pagar"): detecta cuando el modal desaparece del
+  // DOM sin que culqi.culqi() se haya disparado, y lo trata como cancelación.
+  const bodyChildrenBefore = document.body.children.length;
+  const domObserver = new MutationObserver(() => {
+    if (!callbackFired && document.body.children.length <= bodyChildrenBefore) {
+      callbackFired = true;
+      domObserver.disconnect();
+      render(`
+        <p class="muted">Pago cancelado.</p>
+        <button onclick="window.__retryPayment()" style="margin-top:16px;background:#2563eb;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:15px;cursor:pointer;">Pagar de nuevo</button>
+      `);
+    }
+  });
+  domObserver.observe(document.body, { childList: true });
+
+  // Red de seguridad adicional: si ni el callback ni la detección por DOM
+  // funcionan, no dejamos la pantalla colgada para siempre — a los 90s
+  // mostramos opción de reintentar de todas formas.
+  setTimeout(() => {
+    domObserver.disconnect();
+    if (!callbackFired) {
+      renderError('El pago está tardando más de lo esperado.');
+    }
+  }, 90000);
+
+  const safeClose = () => {
+    try { culqi.close(); } catch (e) { /* el modal pudo ya estar cerrado por el usuario */ }
+  };
+
+  culqi.culqi = async () => {
+    callbackFired = true;
+    domObserver.disconnect();
+    try {
+      if (culqi.token) {
+        const token = culqi.token;
+        try {
+          const chargeResp = await fetchJson(`${API_URL}/payments/charge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token_id: token.id,
+              amount: amountCents,
+              currency_code: currency,
+              email: token.email || 'cliente@latconecta.com',
+              description: `Latconecta — ${orderNumber}`,
+              order_number: orderNumber,
+            }),
+          });
+
+          if (chargeResp.success) {
+            safeClose();
+            await onPaymentSuccess({ charge_id: chargeResp.charge_id, orderNumber, amountCents, currency });
+          } else {
+            retryCount += 1;
+            const msg = chargeResp.message || 'Pago rechazado';
+            safeClose();
+            if (retryCount >= MAX_RETRIES) {
+              await finishAndReturn(
+                `<div class="icon">❌</div><p class="msg-error">No se pudo completar el pago después de 3 intentos.</p>`,
+                `No pudimos procesar el pago de tu pedido después de varios intentos. Escribe *menu* si deseas intentarlo de nuevo.`
+              );
+            } else {
+              const box = document.getElementById('retryBox');
+              if (box) box.innerHTML = `<div class="retry-box">${escapeHtml(msg)}. Intenta con otra tarjeta o con Yape.</div>`;
+              openCulqi(amount);
+            }
+          }
+        } catch (err) {
+          safeClose();
+          await finishAndReturn(
+            `<div class="icon">❌</div><p class="msg-error">Ocurrió un error técnico al procesar el pago.</p>`,
+            `Ocurrió un error técnico al procesar el pago de tu pedido. Escribe *menu* para intentarlo de nuevo.`
+          );
+        }
+      } else if (culqi.order) {
+        safeClose();
+        await onPaymentSuccess({ charge_id: culqi.order.id, orderNumber, amountCents, currency });
+      } else {
+        safeClose();
+        if (culqi.error) {
+          await finishAndReturn(
+            `<div class="icon">❌</div><p class="msg-error">Ocurrió un error técnico al procesar el pago.</p>`,
+            `Ocurrió un error técnico al procesar el pago de tu pedido. Escribe *menu* para intentarlo de nuevo.`
+          );
+        } else {
+          render(`
+          <p class="muted">Pago cancelado.</p>
+          <button onclick="window.__retryPayment()" style="margin-top:16px;background:#2563eb;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:15px;cursor:pointer;">Pagar de nuevo</button>
+        `);
+        }
+      }
+    } catch (err) {
+      // Red de seguridad: cualquier excepción no prevista en esta rama
+      // ya no deja la pantalla congelada — siempre muestra algo procesable.
+      safeClose();
+      await finishAndReturn(
+        `<div class="icon">❌</div><p class="msg-error">Ocurrió un error inesperado al procesar el pago.</p>`,
+        `Ocurrió un error inesperado al procesar tu pedido. Escribe *menu* para intentarlo de nuevo.`
+      );
+    }
+  };
+
+  culqi.open();
+}
+
+async function onPaymentSuccess({ charge_id, orderNumber, amountCents, currency }) {
+  render(`<div class="spinner"></div><p class="muted">Confirmando tu pedido...</p>`);
+
+  const productType = SERVICE_ID_TO_PRODUCT_TYPE[product.service_id] || 'topup';
+
+  const purchaseRequest = {
+    product_id: product.product_id,
+    product_type: productType,
+    phone_number: phoneNumber,
+    account_number: accountNumber,
+    delivery_name: deliveryName,
+    delivery_phone: deliveryPhone,
+    delivery_address: deliveryAddress,
+    payment_method: 'card',
+    payment_gateway: 'culqi',
+    payment_transaction_id: charge_id,
+    payment_order_number: orderNumber,
+    payment_amount: amountCents / 100,
+    payment_currency: currency,
+    channel: 'WSP',
+    user_email: 'cliente@latconecta.com',
+  };
+
+  let result;
+  try {
+    result = await fetchJson(`${API_URL}/purchases/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(purchaseRequest),
+    });
+  } catch (err) {
+    renderError(err.message || 'Ocurrió un error al procesar tu pedido.');
+    return;
+  }
+
+  renderResult(result);
+}
+
+function renderResult(result) {
+  const paymentOk = result.payment_status === 'Success';
+  const provisionOk = result.purchase_status === 'Success';
+  const reversed = result.payment_status === 'Reversed';
+  const manualIssue = result.requires_manual_intervention === true;
+  const fecha = new Date().toLocaleString('es-PE');
+
+  const destinoLabel =
+    result.purchase_product_type === 'bill_payment' ? 'Cuenta pagada' :
+    result.purchase_product_type === 'smartphone' ? 'Contacto entrega' :
+    result.purchase_product_type === 'transfer' ? 'Número destino' :
+    'Número recargado';
+  const destinoValor = result.purchase_phone_number || result.purchase_account_number || '—';
+
+  const base = parseFloat(result.purchase_base_price || 0);
+  const descuento = parseFloat(result.purchase_discount || 0);
+  const fee = parseFloat(result.purchase_fee || 0);
+  const total = parseFloat(result.purchase_total_amount || 0);
+  const moneda = result.purchase_currency || '';
+
+  const detailHtml = `
+    <div style="text-align:left;background:#f9fafb;border-radius:8px;padding:14px;margin-top:14px;font-size:14px;color:#374151;line-height:1.6;">
+      <p><b>Fecha:</b> ${fecha}</p>
+      <p><b>Referencia:</b> ${escapeHtml(result.purchase_reference)}</p>
+      <p style="margin-top:6px;"><b>${destinoLabel}:</b> ${escapeHtml(destinoValor)}</p>
+      <p style="margin-top:6px;"><b>Producto:</b> ${escapeHtml(result.purchase_product_name)}</p>
+      <p><b>Servicio:</b> ${escapeHtml(result.purchase_service_name || '')}</p>
+      <p style="margin-top:6px;"><b>Monto a pagar:</b> ${moneda} ${base.toFixed(2)}</p>
+      ${descuento > 0 ? `<p><b>Descuento:</b> -${moneda} ${descuento.toFixed(2)}</p>` : ''}
+      ${fee > 0 ? `<p><b>Comisión:</b> +${moneda} ${fee.toFixed(2)}</p>` : ''}
+      <p style="margin-top:2px;"><b>PAGO TOTAL:</b> ${moneda} ${total.toFixed(2)}</p>
+      <p style="margin-top:6px;"><b>Estado pago:</b> ${escapeHtml(result.payment_status || '')}</p>
+      ${result.delivery_status ? `<p><b>Estado provisión:</b> ${escapeHtml(result.delivery_status)}</p>` : ''}
+      ${result.payment_ref ? `<p style="margin-top:6px;"><b>Ref. de pago (Culqi):</b> ${escapeHtml(result.payment_ref)}</p>` : ''}
+    </div>`;
+
+  if (paymentOk && provisionOk) {
+    finishWithReceipt(
+      `<div style="width:64px;height:64px;background:#dcfce7;border-radius:9999px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:32px;">✅</div>
+       <p class="msg-success" style="text-align:center;">¡Compra Exitosa!</p>
+       <p class="muted" style="text-align:center;">Tu transacción ha sido completada</p>
+       ${detailHtml}`,
+      `✅ ¡Gracias por tu compra! Escribe *menu* para otra compra.`
+    );
+    return;
+  }
+
+  if (reversed) {
+    finishWithReceipt(
+      `<div style="width:64px;height:64px;background:#ffedd5;border-radius:9999px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:32px;">⚠️</div>
+       <p class="msg-warning" style="text-align:center;">Provisión Fallida</p>
+       <p class="muted" style="text-align:center;">No se pudo completar la provisión del servicio</p>
+       <div class="green-box">
+         <p>✓ El pago ha sido reembolsado por la pasarela</p>
+         <p>No se realizó ningún cargo definitivo a tu tarjeta</p>
+       </div>
+       ${detailHtml}`,
+      `⚠️ Tu compra no pudo completarse, pero ya se te devolvió el dinero. Escribe *menu* si deseas intentarlo de nuevo.`
+    );
+    return;
+  }
+
+  if (paymentOk && !provisionOk && manualIssue) {
+    finishWithReceipt(
+      `<div style="width:64px;height:64px;background:#fee2e2;border-radius:9999px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:32px;">⚠️</div>
+       <p class="msg-error" style="text-align:center;">Intervención Manual Requerida</p>
+       <p class="muted" style="text-align:center;">La provisión del servicio falló</p>
+       <div class="red-box">
+         <p>✗ No se pudo revertir el pago automáticamente</p>
+         <p>El cargo permanece en tu tarjeta</p>
+       </div>
+       ${detailHtml}`,
+      `⚠️ Tu compra tuvo un problema y tu pago sigue activo. Nuestro equipo se contactará contigo para resolverlo.`
+    );
+    return;
+  }
+
+  finishAndReturn(
+    `<p class="muted">Estado: pago ${escapeHtml(result.payment_status)}, pedido ${escapeHtml(result.purchase_status)}.</p>
+     <p class="ref">Referencia: ${escapeHtml(result.purchase_reference)}</p>`,
+    `Estado de tu pedido: pago ${result.payment_status}, pedido ${result.purchase_status}.\nReferencia: ${result.purchase_reference}`
+  );
+}
+
+init();
+</script>
+</body>
+</html>

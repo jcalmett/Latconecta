@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     # PIN para acceso al OperationsPanel — requerido para cambiar F1/F2
     # Vacío = panel deshabilitado (producción). Definir en .env para pruebas.
     OPS_PANEL_PIN: str = ""
+    # Token de servicio para el bot de WhatsApp (header X-Bot-Service-Token).
+    # Vacío = endpoints /whatsapp/* deshabilitados. Definir en .env.
+    BOT_SERVICE_TOKEN: str = ""
 
     # =========================================================================
     # CONFIGURACIÓN DE CULQI - PASARELA DE PAGOS (Perú)
