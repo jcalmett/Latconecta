@@ -373,7 +373,7 @@ const ShopView = ({ user, showNotification }) => {
     }
   };
 
-  const handlePaymentAndProvision = async () => {
+  const handlePaymentAndProvision = async (gatewayResult = null) => {
     if (!purchaseData.paymentMethod) {
       setError('Selecciona un método de pago');
       return;
@@ -429,7 +429,8 @@ const ShopView = ({ user, showNotification }) => {
         user_email: user?.user_email || null,
         channel: 'WEB',
 
-        // Con Culqi el pago se procesa íntegramente en el backend — no hay datos de gateway desde el frontend
+        payment_gateway: gatewayResult?.provider || null,
+        payment_transaction_id: gatewayResult?.charge_id || null,
       };
 
       console.log('📤 Enviando purchase request:', purchaseRequest);
