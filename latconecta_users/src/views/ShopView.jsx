@@ -481,6 +481,7 @@ const ShopView = ({ user, showNotification }) => {
         payment_ref: response.payment_ref,
         provision_ref: response.provision_ref,
         reversal_ref: response.reversal_ref,
+        vendor_trans_id: response.vendor_trans_id,
         monto_pagar: parseFloat(response.purchase_base_price),
         descuento: parseFloat(response.purchase_discount),
         fee: parseFloat(response.purchase_fee),
@@ -526,6 +527,7 @@ const ShopView = ({ user, showNotification }) => {
             paymentRef: response.payment_ref,
             provisionRef: response.provision_ref,
             reversalRef: response.reversal_ref,
+            vendorTransId: response.vendor_trans_id,
             requiresManualIntervention: response.requires_manual_intervention || false,
             barcode: response.barcode,
             barcodeImage: response.barcode_image,
@@ -648,11 +650,15 @@ const ShopView = ({ user, showNotification }) => {
 
       doc.setFontSize(11);
       doc.setFont('courier', 'bold');
-      doc.text('COMPROBANTE DE COMPRA', 52.5, y, { align: 'center' });
+      doc.text('LATCONECTA', 52.5, y, { align: 'center' });
       y += 4;
 
-      doc.setFontSize(10);
-      doc.text('BITEL TELECOM', 52.5, y, { align: 'center' });
+      doc.setFontSize(8);
+      doc.setFont('courier', 'normal');
+      doc.text('Latcom Horizons SRL          RUC: 20612907791', 52.5, y, { align: 'center' });
+      y += 4;
+
+      doc.text('Cal. los Recuerdos Nro. 387, San Borja', 52.5, y, { align: 'center' });
       y += 6;
 
       doc.setLineWidth(0.5);
@@ -664,25 +670,10 @@ const ShopView = ({ user, showNotification }) => {
 
       doc.text(`Fecha: ${new Date(receiptData.date).toLocaleString('es-PE')}`, 12, y);
       y += spacing.medium;
-      doc.text(`Referencia: ${receiptData.reference}`, 12, y);
+      doc.text(`Operacion: ${receiptData.reference}`, 12, y);
       y += spacing.medium;
       doc.text(`${labelDestinatario}: ${destinatario}`, 12, y);
-      y += spacing.large;
-
-      doc.setLineWidth(0.3);
-      doc.line(10, y, 95, y);
-      y += 4;
-
-      doc.setFontSize(9);
-      doc.setFont('courier', 'bold');
-      doc.text('PRODUCTO', 12, y);
       y += spacing.medium;
-
-      doc.setFont('courier', 'normal');
-      doc.text(receiptData.productName, 12, y);
-      y += spacing.medium;
-
-      doc.setFontSize(7);
       doc.text(`Servicio: ${receiptData.serviceName}`, 12, y);
       y += spacing.large;
 
@@ -692,27 +683,26 @@ const ShopView = ({ user, showNotification }) => {
 
       doc.setFontSize(9);
       doc.setFont('courier', 'bold');
-      doc.text('MONTO', 12, y);
-      y += 4;
+      doc.text('DETALLE DE LA COMPRA', 12, y);
+      y += spacing.medium;
 
       doc.setFontSize(8);
       doc.setFont('courier', 'normal');
-
-      doc.text('Valor de venta:', 12, y);
-      doc.text(`${receiptData.currency} ${receiptData.baseImponible.toFixed(2)}`, 93, y, { align: 'right' });
+      doc.text(receiptData.productName, 12, y);
+      doc.text(`${receiptData.currency} ${receiptData.montoPagar.toFixed(2)}`, 93, y, { align: 'right' });
       y += spacing.medium;
 
       if (receiptData.descuento > 0) {
         doc.setTextColor(0, 128, 0);
-        doc.text(`Descuento (${receiptData.porcentajeDescuento}%):`, 12, y);
-        doc.text(`-${receiptData.currency} ${(receiptData.descuento / (1 + receiptData.taxRate)).toFixed(2)}`, 93, y, { align: 'right' });
+        doc.text(`Descuento${receiptData.porcentajeDescuento ? ` (${receiptData.porcentajeDescuento}%)` : ''}:`, 12, y);
+        doc.text(`-${receiptData.currency} ${receiptData.descuento.toFixed(2)}`, 93, y, { align: 'right' });
         doc.setTextColor(0, 0, 0);
         y += spacing.medium;
       }
 
       if (receiptData.fee > 0) {
         doc.text('Comision:', 12, y);
-        doc.text(`+${receiptData.currency} ${(receiptData.fee / (1 + receiptData.taxRate)).toFixed(2)}`, 93, y, { align: 'right' });
+        doc.text(`+${receiptData.currency} ${receiptData.fee.toFixed(2)}`, 93, y, { align: 'right' });
         y += spacing.medium;
       }
 
@@ -720,21 +710,9 @@ const ShopView = ({ user, showNotification }) => {
       doc.line(12, y, 93, y);
       y += 3;
 
-      doc.text('Op. Gravada:', 12, y);
-      doc.text(`${receiptData.currency} ${receiptData.baseImponible.toFixed(2)}`, 93, y, { align: 'right' });
-      y += spacing.medium;
-
-      doc.text(`${receiptData.taxLabel} (${(receiptData.taxRate * 100).toFixed(0)}%):`, 12, y);
-      doc.text(`+${receiptData.currency} ${receiptData.taxAmount.toFixed(2)}`, 93, y, { align: 'right' });
-      y += spacing.medium;
-
-      doc.setLineWidth(0.5);
-      doc.line(12, y, 93, y);
-      y += 4;
-
       doc.setFontSize(10);
       doc.setFont('courier', 'bold');
-      doc.text('IMPORTE TOTAL:', 12, y);
+      doc.text('Monto a pagar:', 12, y);
       doc.text(`${receiptData.currency} ${receiptData.totalAmount.toFixed(2)}`, 93, y, { align: 'right' });
       y += spacing.large;
 
@@ -742,40 +720,57 @@ const ShopView = ({ user, showNotification }) => {
       doc.line(10, y, 95, y);
       y += 4;
 
+      // Cobro, Provisión y Devolución son los 3 pasos secuenciales de la venta:
+      // 1) Cobro (procesador de pagos) — 2) Provisión (vendor, ref. vendor_trans_id,
+      // NO provision_ref que siempre viene vacío) — 3) Devolución, solo si el
+      // Cobro fue Éxito y la Provisión fue Fallo.
+      const cobroOk = receiptData.paymentStatus === 'Success' || receiptData.paymentStatus === 'Reversed';
+      const provOk = receiptData.purchaseStatus === 'Success' || receiptData.purchaseStatus === 'Pending';
+      const payReversed = receiptData.paymentStatus === 'Reversed';
+      const devolucionAplica = cobroOk && !provOk && (payReversed || receiptData.requiresManualIntervention);
+
       doc.setFontSize(9);
       doc.setFont('courier', 'bold');
-      doc.text('ESTADO', 12, y);
+      doc.text('RESULTADOS', 12, y);
       y += spacing.medium;
+
+      doc.setFontSize(7);
+      doc.setFont('courier', 'normal');
+      doc.text('Tema', 12, y);
+      doc.text('Estado', 38, y, { align: 'center' });
+      doc.text('Referencia', 93, y, { align: 'right' });
+      y += spacing.small;
 
       doc.setFontSize(8);
-      doc.setFont('courier', 'normal');
-      doc.text(`Estado Pago: ${receiptData.paymentStatus}`, 12, y);
-      y += spacing.medium;
-
-      if (receiptData.deliveryStatus) {
-        doc.text(`Estado Provision: ${receiptData.deliveryStatus}`, 12, y);
-        y += spacing.medium;
-      }
-
+      doc.text('Cobro:', 12, y);
+      doc.text(cobroOk ? 'Exito' : 'Fallo', 38, y, { align: 'center' });
       if (receiptData.paymentRef) {
-        doc.setFontSize(7);
-        doc.text(`Ref. Pago: ${receiptData.paymentRef}`, 12, y);
+        doc.setFontSize(6);
+        doc.text(receiptData.paymentRef, 93, y, { align: 'right' });
+        doc.setFontSize(8);
+      }
+      y += spacing.small;
+
+      doc.text('Provision:', 12, y);
+      doc.text(provOk ? 'Exito' : 'Fallo', 38, y, { align: 'center' });
+      if (receiptData.vendorTransId) {
+        doc.setFontSize(6);
+        doc.text(receiptData.vendorTransId, 93, y, { align: 'right' });
+        doc.setFontSize(8);
+      }
+      y += spacing.small;
+
+      if (devolucionAplica) {
+        doc.text('Devolucion:', 12, y);
+        doc.text(payReversed ? 'Exito' : 'Fallo', 38, y, { align: 'center' });
+        if (receiptData.reversalRef) {
+          doc.setFontSize(6);
+          doc.text(receiptData.reversalRef, 93, y, { align: 'right' });
+          doc.setFontSize(8);
+        }
         y += spacing.small;
       }
-
-      if (receiptData.provisionRef) {
-        doc.setFontSize(7);
-        doc.text(`Ref. Provision: ${receiptData.provisionRef}`, 12, y);
-        y += spacing.medium;
-      }
-
-      if (receiptData.reversalRef) {
-        doc.setFontSize(7);
-        doc.setTextColor(0, 128, 0);
-        doc.text(`Ref. Reversion: ${receiptData.reversalRef}`, 12, y);
-        doc.setTextColor(0, 0, 0);
-        y += spacing.medium;
-      }
+      y += spacing.small;
 
       if (receiptData.purchaseStatus === 'Failed' && receiptData.paymentStatus === 'Reversed') {
         y += 2;
@@ -842,7 +837,7 @@ const ShopView = ({ user, showNotification }) => {
         doc.setFont('courier', 'normal');
         doc.setTextColor(0, 0, 0);
 
-        const lines4 = doc.splitTextToSize('Si en 48 horas no recibe la devolucion, comuniquese con: soporte@latconecta.com', 80);
+        const lines4 = doc.splitTextToSize('Si en 48 horas no recibe la devolucion, comuniquese con: latconecta.digital@gmail.com', 80);
         lines4.forEach(line => {
           doc.text(line, 12, y);
           y += spacing.small;
@@ -962,6 +957,10 @@ const ShopView = ({ user, showNotification }) => {
       doc.setFontSize(8);
       doc.setFont('courier', 'normal');
       doc.text('Gracias por su compra', 52.5, y, { align: 'center' });
+      y += spacing.medium;
+
+      doc.setFontSize(7);
+      doc.text('E-mail atencion a usuario: latconecta.digital@gmail.com', 52.5, y, { align: 'center' });
 
       console.log('✅ PDF creado con jsPDF');
 
@@ -1047,6 +1046,7 @@ generateAndUploadReceiptPDF({
       deliveryStatus: purchaseResult.delivery_status,
       paymentRef: purchaseResult.payment_ref,
       provisionRef: purchaseResult.provision_ref,
+      vendorTransId: purchaseResult.vendor_trans_id,
       reversalRef: purchaseResult.reversal_ref,
       requiresManualIntervention: purchaseResult.requires_manual_intervention,
       barcode: purchaseResult.barcode,

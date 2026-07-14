@@ -5,6 +5,128 @@ import opsConfigService from '../services/operationsConfigService';
 import paymentService from '../services/paymentService';
 import CulqiCheckout from './payment/CulqiCheckout';
 
+// Bloque de detalle unificado — usado en los 3 casos de resultado (éxito, revertido, intervención manual)
+// y replicado con el mismo formato en el recibo PDF (ShopView.jsx) y en WhatsApp (wsp_checkout/index.html).
+function ReceiptDetailBlock({ purchaseResult, purchaseData, selectedProduct, selectedService }) {
+  const moneda = selectedProduct.product_currency;
+
+  let labelDestinatario = '';
+  let destinatario = '';
+  if (purchaseData.productType === 'bill_payment') {
+    labelDestinatario = 'Cuenta pagada';
+    destinatario = purchaseData.accountNumber || 'N/A';
+  } else if (purchaseData.productType === 'smartphone') {
+    labelDestinatario = 'Número contacto';
+    destinatario = purchaseData.phoneNumber || 'N/A';
+  } else if (purchaseData.productType === 'transfer') {
+    labelDestinatario = 'Número destino';
+    destinatario = purchaseData.phoneNumber || 'N/A';
+  } else {
+    labelDestinatario = 'Número teléfono';
+    destinatario = purchaseData.phoneNumber || 'N/A';
+  }
+
+  // Cobro, Provisión y Devolución son los 3 pasos secuenciales de la venta:
+  // 1) Cobro (procesador de pagos, ref. payment_ref) — 2) Provisión (vendor,
+  // ref. vendor_trans_id — NO provision_ref, que siempre viene vacío del
+  // response_mapping de MEGAPUNTO) — 3) Devolución, solo si el Cobro fue
+  // Éxito y la Provisión fue Fallo.
+  const cobroOk = purchaseResult.payment_status === 'Success' || purchaseResult.payment_status === 'Reversed';
+  const provisionOk = purchaseResult.purchase_status === 'Success' || purchaseResult.purchase_status === 'Pending';
+  const reversed = purchaseResult.payment_status === 'Reversed';
+  const devolucionAplica = cobroOk && !provisionOk && (reversed || purchaseResult.requires_manual_intervention === true);
+
+  return (
+    <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3 text-sm">
+      <div className="text-center border-b pb-2">
+        <p className="font-bold">LATCONECTA</p>
+        <p className="text-xs text-gray-600">Latcom Horizons SRL &nbsp;&nbsp; RUC: 20612907791</p>
+        <p className="text-xs text-gray-600">Cal. los Recuerdos Nro. 387, San Borja</p>
+        <p className="text-xs mt-1">Operación: <span className="font-semibold">{purchaseResult.reference}</span></p>
+      </div>
+
+      <div className="border-b pb-2 text-xs space-y-0.5">
+        <div className="flex justify-between">
+          <span className="text-gray-600">Fecha</span>
+          <span className="font-semibold">{new Date(purchaseResult.date).toLocaleString('es-PE')}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">{labelDestinatario}</span>
+          <span className="font-semibold">{destinatario}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">Servicio</span>
+          <span className="font-semibold">{selectedService.service_name}</span>
+        </div>
+      </div>
+
+      <div className="border-b pb-2">
+        <p className="text-xs font-bold text-gray-700 mb-1">DETALLE DE LA COMPRA</p>
+        <div className="flex justify-between">
+          <span>{selectedProduct.product_name}</span>
+          <span>{moneda} {purchaseResult.monto_pagar.toFixed(2)}</span>
+        </div>
+        {purchaseResult.descuento > 0 && (
+          <div className="flex justify-between text-green-600">
+            <span>Descuento {purchaseResult.porcentaje_descuento ? `(${purchaseResult.porcentaje_descuento}%)` : ''}</span>
+            <span>-{moneda} {purchaseResult.descuento.toFixed(2)}</span>
+          </div>
+        )}
+        {purchaseResult.fee > 0 && (
+          <div className="flex justify-between">
+            <span>Comisión</span>
+            <span>+{moneda} {purchaseResult.fee.toFixed(2)}</span>
+          </div>
+        )}
+        <div className="flex justify-between pt-1 mt-1 border-t border-gray-300 font-bold">
+          <span>Monto a pagar</span>
+          <span>{moneda} {parseFloat(purchaseResult.amount).toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-bold text-gray-700 mb-1">RESULTADOS</p>
+        <div className="grid grid-cols-[1fr_1fr_1.4fr] text-[11px] text-gray-500 font-semibold mb-0.5">
+          <span>Tema</span>
+          <span className="text-center">Estado</span>
+          <span className="text-right">Referencia</span>
+        </div>
+        <div className="space-y-1">
+          <div className="grid grid-cols-[1fr_1fr_1.4fr] items-start">
+            <span>Cobro</span>
+            <span className={`text-center ${cobroOk ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}`}>
+              {cobroOk ? 'Éxito' : 'Fallo'}
+            </span>
+            <span className="text-right text-[10px] text-gray-500 break-all">{purchaseResult.payment_ref || ''}</span>
+          </div>
+
+          <div className="grid grid-cols-[1fr_1fr_1.4fr] items-start">
+            <span>Provisión</span>
+            <span className={`text-center ${provisionOk ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}`}>
+              {provisionOk ? 'Éxito' : 'Fallo'}
+            </span>
+            <span className="text-right text-[10px] text-gray-500 break-all">{purchaseResult.vendor_trans_id || ''}</span>
+          </div>
+
+          {devolucionAplica && (
+            <div className="grid grid-cols-[1fr_1fr_1.4fr] items-start">
+              <span>Devolución</span>
+              <span className={`text-center ${reversed ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}`}>
+                {reversed ? 'Éxito' : 'Fallo'}
+              </span>
+              <span className="text-right text-[10px] text-gray-500 break-all">{purchaseResult.reversal_ref || ''}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="text-center text-[11px] text-gray-500 pt-2 border-t">
+        E-mail atención a usuario: latconecta.digital@gmail.com
+      </div>
+    </div>
+  );
+}
+
 const PurchasePopup = React.memo(({
   showPurchasePopup,
   selectedProduct,
@@ -1025,92 +1147,12 @@ const PurchasePopup = React.memo(({
                     </div>
                   </div>
 
-                  <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3">
-                    <div className="border-b pb-2">
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                        <div>
-                          <span className="text-gray-600">Fecha:</span>
-                          <p className="font-semibold">{new Date(purchaseResult.date).toLocaleString('es-PE')}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Referencia:</span>
-                          <p className="font-bold text-orange-600">{purchaseResult.reference}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border-b pb-2">
-                      <p className="text-xs text-gray-500 mb-1">
-                        {purchaseData.productType === 'bill_payment' ? 'CUENTA' :
-                         purchaseData.productType === 'smartphone' ? 'CONTACTO' :
-                         purchaseData.productType === 'transfer' ? 'NÚMERO DESTINO' :
-                         'NÚMERO'}
-                      </p>
-                      <p className="font-semibold">
-                        {purchaseData.phoneNumber || purchaseData.accountNumber}
-                      </p>
-                    </div>
-
-                    <div className="border-b pb-2">
-                      <p className="text-xs font-bold text-gray-700 mb-1">PRODUCTO SOLICITADO</p>
-                      <p className="font-semibold text-sm">{selectedProduct.product_name}</p>
-                      <p className="text-xs text-gray-600">Servicio: {selectedService.service_name}</p>
-                    </div>
-
-                    <div className="border-b pb-2">
-                      <p className="text-xs font-bold text-gray-700 mb-1">MONTO</p>
-                      <div className="space-y-0.5 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Monto solicitado:</span>
-                          <span className="font-semibold">
-                            {selectedProduct.product_currency} {purchaseResult.monto_pagar.toFixed(2)}
-                          </span>
-                        </div>
-                        {purchaseResult.fee > 0 && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Comisión:</span>
-                            <span className="font-semibold">
-                              +{selectedProduct.product_currency} {purchaseResult.fee.toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between pt-1 border-t border-gray-300">
-                          <span className="font-bold">Total:</span>
-                          <span className="font-bold line-through text-gray-500">
-                            {selectedProduct.product_currency} {parseFloat(purchaseResult.amount).toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-green-600 font-bold">
-                          <span>CARGO REAL:</span>
-                          <span className="text-lg">$0.00</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-bold text-gray-700 mb-1">ESTADO</p>
-                      <div className="space-y-0.5 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Estado Compra:</span>
-                          <span className="font-semibold text-red-600">{purchaseResult.purchase_status}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Estado Pago:</span>
-                          <span className="font-semibold text-green-600">{purchaseResult.payment_status}</span>
-                        </div>
-                        {purchaseResult.payment_ref && (
-                          <div className="text-xs text-gray-500">
-                            Ref. Pago: {purchaseResult.payment_ref}
-                          </div>
-                        )}
-                        {purchaseResult.reversal_ref && (
-                          <div className="text-xs text-green-600 font-semibold">
-                            Ref. Reversión: {purchaseResult.reversal_ref}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <ReceiptDetailBlock
+                    purchaseResult={purchaseResult}
+                    purchaseData={purchaseData}
+                    selectedProduct={selectedProduct}
+                    selectedService={selectedService}
+                  />
 
                   <div className="space-y-2">
                     <button
@@ -1144,88 +1186,21 @@ const PurchasePopup = React.memo(({
                     </div>
                   </div>
 
-                  <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3">
-                    <div className="border-b pb-2">
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                        <div>
-                          <span className="text-gray-600">Fecha:</span>
-                          <p className="font-semibold">{new Date(purchaseResult.date).toLocaleString('es-PE')}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Referencia:</span>
-                          <p className="font-bold text-red-600">{purchaseResult.reference}</p>
-                        </div>
-                      </div>
-                    </div>
+                  <ReceiptDetailBlock
+                    purchaseResult={purchaseResult}
+                    purchaseData={purchaseData}
+                    selectedProduct={selectedProduct}
+                    selectedService={selectedService}
+                  />
 
-                    <div className="border-b pb-2">
-                      <p className="text-xs text-gray-500 mb-1">
-                        {purchaseData.productType === 'bill_payment' ? 'CUENTA' :
-                         purchaseData.productType === 'smartphone' ? 'CONTACTO' :
-                         purchaseData.productType === 'transfer' ? 'NÚMERO DESTINO' :
-                         'NÚMERO'}
-                      </p>
-                      <p className="font-semibold">{purchaseData.phoneNumber || purchaseData.accountNumber}</p>
-                    </div>
-
-                    <div className="border-b pb-2">
-                      <p className="text-xs font-bold text-gray-700 mb-1">PRODUCTO SOLICITADO</p>
-                      <p className="font-semibold text-sm">{selectedProduct.product_name}</p>
-                      <p className="text-xs text-gray-600">Servicio: {selectedService.service_name}</p>
-                    </div>
-
-                    <div className="border-b pb-2">
-                      <p className="text-xs font-bold text-gray-700 mb-1">MONTO COBRADO</p>
-                      <div className="space-y-0.5 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Monto:</span>
-                          <span className="font-semibold">
-                            {selectedProduct.product_currency} {purchaseResult.monto_pagar.toFixed(2)}
-                          </span>
-                        </div>
-                        {purchaseResult.fee > 0 && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Comisión:</span>
-                            <span className="font-semibold">
-                              +{selectedProduct.product_currency} {purchaseResult.fee.toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between pt-1 border-t border-gray-300 font-bold text-red-600">
-                          <span>TOTAL COBRADO:</span>
-                          <span className="text-lg">
-                            {selectedProduct.product_currency} {parseFloat(purchaseResult.amount).toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border-b pb-2">
-                      <p className="text-xs font-bold text-gray-700 mb-1">ESTADO</p>
-                      <div className="space-y-0.5 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Estado Compra:</span>
-                          <span className="font-semibold text-red-600">{purchaseResult.purchase_status}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Estado Pago:</span>
-                          <span className="font-semibold text-red-600">{purchaseResult.payment_status}</span>
-                        </div>
-                        {purchaseResult.payment_ref && (
-                          <div className="text-xs text-gray-500">Ref. Pago: {purchaseResult.payment_ref}</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
-                      <p className="text-xs font-bold text-yellow-800 mb-2">📞 ACCIÓN REQUERIDA</p>
-                      <p className="text-xs text-yellow-700">
-                        No se pudo completar la devolución automática.
-                        Si no recibes tu reembolso en las próximas 48 horas,
-                        contacta a <span className="font-semibold">soporte@latconecta.com</span> con
-                        la referencia: <span className="font-bold">{purchaseResult.reference}</span>
-                      </p>
-                    </div>
+                  <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-4">
+                    <p className="text-xs font-bold text-yellow-800 mb-2">📞 ACCIÓN REQUERIDA</p>
+                    <p className="text-xs text-yellow-700">
+                      No se pudo completar la devolución automática.
+                      Si no recibes tu reembolso en las próximas 48 horas,
+                      contacta a <span className="font-semibold">latconecta.digital@gmail.com</span> con
+                      la referencia: <span className="font-bold">{purchaseResult.reference}</span>
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -1262,143 +1237,67 @@ const PurchasePopup = React.memo(({
                     </p>
                   </div>
 
-                  <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3">
-                    <div className="border-b pb-2">
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <ReceiptDetailBlock
+                    purchaseResult={purchaseResult}
+                    purchaseData={purchaseData}
+                    selectedProduct={selectedProduct}
+                    selectedService={selectedService}
+                  />
+
+                  {(purchaseResult.barcode || purchaseData.productType === 'smartphone' || purchaseResult.requires_manual_intervention) && (
+                    <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left space-y-3">
+
+                      {purchaseResult.barcode && (
+                        <div className={purchaseData.productType === 'smartphone' ? 'border-b pb-2' : ''}>
+                          <p className="text-xs font-bold text-gray-700 mb-1">CÓDIGO DE BARRAS</p>
+                          <p className="font-mono text-center text-base font-bold my-2">{purchaseResult.barcode}</p>
+                          {purchaseResult.barcode_image && (
+                            <div className="flex justify-center my-2">
+                              <img
+                                src={purchaseResult.barcode_image}
+                                alt="Barcode"
+                                className="max-w-full h-auto"
+                                style={{ maxHeight: '80px' }}
+                              />
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-500 text-center">
+                            Acércate a una tienda autorizada para realizar el pago
+                          </p>
+                        </div>
+                      )}
+
+                      {purchaseData.productType === 'smartphone' && (
                         <div>
-                          <span className="text-gray-600">Fecha:</span>
-                          <p className="font-semibold">{new Date(purchaseResult.date).toLocaleString('es-PE')}</p>
+                          <p className="text-xs font-bold text-gray-700 mb-1">CONTACTO</p>
+                          <div className="space-y-0.5 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Teléfono:</span>
+                              <span className="font-semibold">{purchaseData.deliveryPhone || purchaseData.phoneNumber}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Nombre:</span>
+                              <span className="font-semibold">{purchaseData.deliveryName}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600 text-xs">Dirección:</span>
+                              <p className="text-sm font-semibold">{purchaseData.deliveryAddress}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-gray-600">Referencia:</span>
-                          <p className="font-bold text-bitel-blue">{purchaseResult.reference}</p>
+                      )}
+
+                      {purchaseResult.requires_manual_intervention && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
+                          <p className="text-xs text-yellow-800 font-semibold">⚠️ Atención Requerida</p>
+                          <p className="text-xs text-yellow-700 mt-1">
+                            No se pudo completar la devolución automática. Si no recibes tu reembolso en 48 horas,
+                            contacta a latconecta.digital@gmail.com con la referencia: {purchaseResult.reference}
+                          </p>
                         </div>
-                      </div>
+                      )}
                     </div>
-
-                    <div className="border-b pb-2">
-                      <p className="text-xs text-gray-500 mb-1">
-                        {purchaseData.productType === 'bill_payment' ? 'CUENTA PAGADA' :
-                         purchaseData.productType === 'smartphone' ? 'CONTACTO ENTREGA' :
-                         purchaseData.productType === 'transfer' ? 'NÚMERO DESTINO' :
-                         'NÚMERO RECARGADO'}
-                      </p>
-                      <p className="font-semibold">{purchaseData.phoneNumber || purchaseData.accountNumber}</p>
-                    </div>
-
-                    <div className="border-b pb-2">
-                      <p className="text-xs font-bold text-gray-700 mb-1">PRODUCTO</p>
-                      <p className="font-semibold text-sm">{selectedProduct.product_name}</p>
-                      <p className="text-xs text-gray-600">Servicio: {selectedService.service_name}</p>
-                    </div>
-
-                    <div className="border-b pb-2">
-                      <p className="text-xs font-bold text-gray-700 mb-1">MONTO</p>
-                      <div className="space-y-0.5 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Monto a pagar:</span>
-                          <span className="font-semibold">
-                            {selectedProduct.product_currency} {purchaseResult.monto_pagar.toFixed(2)}
-                          </span>
-                        </div>
-                        {purchaseResult.descuento > 0 && (
-                          <div className="flex justify-between text-green-600">
-                            <span>Descuento ({purchaseResult.porcentaje_descuento}%):</span>
-                            <span>-{selectedProduct.product_currency} {purchaseResult.descuento.toFixed(2)}</span>
-                          </div>
-                        )}
-                        {purchaseResult.fee > 0 && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Comisión:</span>
-                            <span className="font-semibold">
-                              +{selectedProduct.product_currency} {purchaseResult.fee.toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between pt-1 border-t border-gray-300 font-bold">
-                          <span>PAGO TOTAL:</span>
-                          <span className="text-bitel-blue text-base">
-                            {selectedProduct.product_currency} {parseFloat(purchaseResult.amount).toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className={purchaseResult.barcode ? 'border-b pb-2' : ''}>
-                      <p className="text-xs font-bold text-gray-700 mb-1">ESTADO</p>
-                      <div className="space-y-0.5 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Estado Pago:</span>
-                          <span className="font-semibold">{purchaseResult.payment_status}</span>
-                        </div>
-                        {purchaseResult.delivery_status && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Estado Provisión:</span>
-                            <span className="font-semibold">{purchaseResult.delivery_status}</span>
-                          </div>
-                        )}
-                        {purchaseResult.payment_ref && (
-                          <div className="text-xs text-gray-500">Ref. Pago: {purchaseResult.payment_ref}</div>
-                        )}
-                        {purchaseResult.provision_ref && (
-                          <div className="text-xs text-gray-500">Ref. Provisión: {purchaseResult.provision_ref}</div>
-                        )}
-                        {purchaseResult.reversal_ref && (
-                          <div className="text-xs text-green-600 font-semibold">Ref. Reversión: {purchaseResult.reversal_ref}</div>
-                        )}
-                      </div>
-                    </div>
-
-                    {purchaseResult.barcode && (
-                      <div className={purchaseData.productType === 'smartphone' ? 'border-b pb-2' : ''}>
-                        <p className="text-xs font-bold text-gray-700 mb-1">CÓDIGO DE BARRAS</p>
-                        <p className="font-mono text-center text-base font-bold my-2">{purchaseResult.barcode}</p>
-                        {purchaseResult.barcode_image && (
-                          <div className="flex justify-center my-2">
-                            <img
-                              src={purchaseResult.barcode_image}
-                              alt="Barcode"
-                              className="max-w-full h-auto"
-                              style={{ maxHeight: '80px' }}
-                            />
-                          </div>
-                        )}
-                        <p className="text-xs text-gray-500 text-center">
-                          Acércate a una tienda autorizada para realizar el pago
-                        </p>
-                      </div>
-                    )}
-
-                    {purchaseData.productType === 'smartphone' && (
-                      <div>
-                        <p className="text-xs font-bold text-gray-700 mb-1">CONTACTO</p>
-                        <div className="space-y-0.5 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Teléfono:</span>
-                            <span className="font-semibold">{purchaseData.deliveryPhone || purchaseData.phoneNumber}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Nombre:</span>
-                            <span className="font-semibold">{purchaseData.deliveryName}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600 text-xs">Dirección:</span>
-                            <p className="text-sm font-semibold">{purchaseData.deliveryAddress}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {purchaseResult.requires_manual_intervention && (
-                      <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
-                        <p className="text-xs text-yellow-800 font-semibold">⚠️ Atención Requerida</p>
-                        <p className="text-xs text-yellow-700 mt-1">
-                          No se pudo completar la devolución automática. Si no recibes tu reembolso en 48 horas,
-                          contacta a soporte@latconecta.com con la referencia: {purchaseResult.reference}
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  )}
 
                   <div className="space-y-2">
                     <button

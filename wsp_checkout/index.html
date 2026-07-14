@@ -448,8 +448,8 @@ async function onPaymentSuccess({ charge_id, orderNumber, amountCents, currency 
   const purchaseRequest = {
     product_id: product.product_id,
     product_type: productType,
-    phone_number: phoneNumber,
-    account_number: accountNumber,
+    phone_number: productType === 'bill_payment' ? null : phoneNumber,
+    account_number: productType === 'bill_payment' ? accountNumber : null,
     delivery_name: deliveryName,
     delivery_phone: deliveryPhone,
     delivery_address: deliveryAddress,
@@ -483,14 +483,6 @@ function renderResult(result) {
   const provisionOk = result.purchase_status === 'Success';
   const reversed = result.payment_status === 'Reversed';
   const manualIssue = result.requires_manual_intervention === true;
-  const fecha = new Date().toLocaleString('es-PE');
-
-  const destinoLabel =
-    result.purchase_product_type === 'bill_payment' ? 'Cuenta pagada' :
-    result.purchase_product_type === 'smartphone' ? 'Contacto entrega' :
-    result.purchase_product_type === 'transfer' ? 'Número destino' :
-    'Número recargado';
-  const destinoValor = result.purchase_phone_number || result.purchase_account_number || '—';
 
   const base = parseFloat(result.purchase_base_price || 0);
   const descuento = parseFloat(result.purchase_discount || 0);
@@ -498,20 +490,65 @@ function renderResult(result) {
   const total = parseFloat(result.purchase_total_amount || 0);
   const moneda = result.purchase_currency || '';
 
+  const payOk = result.payment_status === 'Success';
+  const payReversed = result.payment_status === 'Reversed';
+  const provOk = result.purchase_status === 'Success' || result.purchase_status === 'Pending';
+
+  // Cobro, Provisión y Devolución son los 3 pasos secuenciales de la venta:
+  // 1) Cobro (procesador de pagos, ref. payment_ref) — 2) Provisión (vendor,
+  // ref. vendor_trans_id — NO provision_ref, que siempre viene vacío del
+  // response_mapping de MEGAPUNTO) — 3) Devolución, solo si el Cobro fue
+  // Éxito y la Provisión fue Fallo.
+  const cobroOk = payOk || payReversed;
+  const devolucionAplica = cobroOk && !provOk && (payReversed || manualIssue);
+
+  // NOTA: productType (variable del handler de envío) no está en el scope de
+  // esta función — se usa result.purchase_product_type (viene en la
+  // respuesta del backend) en su lugar.
+  let labelDestinatario = '';
+  let destinatario = '';
+  if (result.purchase_product_type === 'bill_payment') {
+    labelDestinatario = 'Cuenta pagada';
+    destinatario = result.purchase_account_number || 'N/A';
+  } else if (result.purchase_product_type === 'smartphone') {
+    labelDestinatario = 'Número contacto';
+    destinatario = result.purchase_phone_number || 'N/A';
+  } else if (result.purchase_product_type === 'transfer') {
+    labelDestinatario = 'Número destino';
+    destinatario = result.purchase_phone_number || 'N/A';
+  } else {
+    labelDestinatario = 'Número teléfono';
+    destinatario = result.purchase_phone_number || 'N/A';
+  }
+
   const detailHtml = `
-    <div style="text-align:left;background:#f9fafb;border-radius:8px;padding:14px;margin-top:14px;font-size:14px;color:#374151;line-height:1.6;">
-      <p><b>Fecha:</b> ${fecha}</p>
-      <p><b>Referencia:</b> ${escapeHtml(result.purchase_reference)}</p>
-      <p style="margin-top:6px;"><b>${destinoLabel}:</b> ${escapeHtml(destinoValor)}</p>
-      <p style="margin-top:6px;"><b>Producto:</b> ${escapeHtml(result.purchase_product_name)}</p>
-      <p><b>Servicio:</b> ${escapeHtml(result.purchase_service_name || '')}</p>
-      <p style="margin-top:6px;"><b>Monto a pagar:</b> ${moneda} ${base.toFixed(2)}</p>
-      ${descuento > 0 ? `<p><b>Descuento:</b> -${moneda} ${descuento.toFixed(2)}</p>` : ''}
-      ${fee > 0 ? `<p><b>Comisión:</b> +${moneda} ${fee.toFixed(2)}</p>` : ''}
-      <p style="margin-top:2px;"><b>PAGO TOTAL:</b> ${moneda} ${total.toFixed(2)}</p>
-      <p style="margin-top:6px;"><b>Estado pago:</b> ${escapeHtml(result.payment_status || '')}</p>
-      ${result.delivery_status ? `<p><b>Estado provisión:</b> ${escapeHtml(result.delivery_status)}</p>` : ''}
-      ${result.payment_ref ? `<p style="margin-top:6px;"><b>Ref. de pago (Culqi):</b> ${escapeHtml(result.payment_ref)}</p>` : ''}
+    <div style="text-align:center;margin-top:10px;">
+      <p style="font-weight:700;margin:0;">LATCONECTA</p>
+      <p style="font-size:12px;color:#6b7280;margin:2px 0 0;">Latcom Horizons SRL &nbsp;&nbsp; RUC: 20612907791</p>
+      <p style="font-size:12px;color:#6b7280;margin:2px 0 0;">Cal. los Recuerdos Nro. 387, San Borja</p>
+      <p style="font-size:12px;margin:4px 0 0;">Operación: <b>${escapeHtml(result.purchase_reference)}</b></p>
+    </div>
+    <div style="text-align:left;background:#f9fafb;border-radius:8px;padding:14px;margin-top:14px;font-size:13px;color:#374151;line-height:1.6;">
+      <p style="display:flex;justify-content:space-between;margin:2px 0;"><span style="color:#6b7280;">Fecha</span><span>${escapeHtml(new Date(result.purchase_date).toLocaleString('es-PE'))}</span></p>
+      <p style="display:flex;justify-content:space-between;margin:2px 0;"><span style="color:#6b7280;">${labelDestinatario}</span><span>${escapeHtml(destinatario)}</span></p>
+      <p style="display:flex;justify-content:space-between;margin:2px 0;"><span style="color:#6b7280;">Servicio</span><span>${escapeHtml(result.purchase_service_name || '')}</span></p>
+    </div>
+    <div style="text-align:left;background:#f9fafb;border-radius:8px;padding:14px;margin-top:10px;font-size:14px;color:#374151;line-height:1.6;">
+      <p><b>Detalle de la compra</b></p>
+      <p style="display:flex;justify-content:space-between;margin:2px 0;"><span>${escapeHtml(result.purchase_product_name)}</span><span>${moneda} ${base.toFixed(2)}</span></p>
+      ${descuento > 0 ? `<p style="display:flex;justify-content:space-between;margin:2px 0;color:#16a34a;"><span>Descuento</span><span>-${moneda} ${descuento.toFixed(2)}</span></p>` : ''}
+      ${fee > 0 ? `<p style="display:flex;justify-content:space-between;margin:2px 0;"><span>Comisión</span><span>+${moneda} ${fee.toFixed(2)}</span></p>` : ''}
+      <p style="display:flex;justify-content:space-between;margin:6px 0 0;border-top:1px solid #e5e7eb;padding-top:6px;font-weight:700;"><span>Monto a pagar</span><span>${moneda} ${total.toFixed(2)}</span></p>
+    </div>
+    <div style="text-align:left;background:#f9fafb;border-radius:8px;padding:14px;margin-top:10px;font-size:14px;color:#374151;line-height:1.6;">
+      <p><b>Resultados</b></p>
+      <p style="display:grid;grid-template-columns:1fr 1fr 1.4fr;margin:6px 0 2px;font-size:11px;color:#9ca3af;font-weight:700;"><span>Tema</span><span style="text-align:center;">Estado</span><span style="text-align:right;">Referencia</span></p>
+      <p style="display:grid;grid-template-columns:1fr 1fr 1.4fr;margin:2px 0;align-items:start;"><span>Cobro</span><span style="text-align:center;">${cobroOk ? 'Éxito' : 'Fallo'}</span><span style="text-align:right;font-size:10px;color:#6b7280;word-break:break-all;">${result.payment_ref ? escapeHtml(result.payment_ref) : ''}</span></p>
+      <p style="display:grid;grid-template-columns:1fr 1fr 1.4fr;margin:2px 0;align-items:start;"><span>Provisión</span><span style="text-align:center;">${provOk ? 'Éxito' : 'Fallo'}</span><span style="text-align:right;font-size:10px;color:#6b7280;word-break:break-all;">${result.vendor_trans_id ? escapeHtml(result.vendor_trans_id) : ''}</span></p>
+      ${devolucionAplica ? `<p style="display:grid;grid-template-columns:1fr 1fr 1.4fr;margin:2px 0;align-items:start;"><span>Devolución</span><span style="text-align:center;">${payReversed ? 'Éxito' : 'Fallo'}</span><span style="text-align:right;font-size:10px;color:#6b7280;word-break:break-all;">${result.reversal_ref ? escapeHtml(result.reversal_ref) : ''}</span></p>` : ''}
+    </div>
+    <div style="text-align:center;margin-top:10px;font-size:11px;color:#9ca3af;">
+      E-mail atención a usuario: latconecta.digital@gmail.com
     </div>`;
 
   if (paymentOk && provisionOk) {
