@@ -268,11 +268,6 @@ class PurchaseResponse(BaseModel):
     last_update_date: datetime
     info_message: Optional[str] = None
     amount_breakdown: Optional[Dict[str, Any]] = None
-    # Impuesto a las ventas (IGV/IVA)
-    purchase_tax_label: Optional[str] = None
-    purchase_tax_rate: Optional[float] = None
-    purchase_tax_amount: Optional[float] = None
-    purchase_base_imponible: Optional[float] = None
     company_initial_balance: Optional[Decimal] = None
     company_final_balance: Optional[Decimal] = None
     payment_status: Optional[str] = None
@@ -581,11 +576,6 @@ async def create_purchase(
             purchase.izipay_form_token = izipay_form_token
 
         response = _map_purchase_to_response(purchase)
-        # Agregar campos de impuesto desde el calculation (no se guardan en BD)
-        response.purchase_tax_label  = calculation.purchase_tax_label
-        response.purchase_tax_rate   = calculation.purchase_tax_rate
-        response.purchase_tax_amount = calculation.purchase_tax_amount
-        response.purchase_base_imponible = calculation.purchase_base_imponible
         return response
 
     except HTTPException:
