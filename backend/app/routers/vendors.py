@@ -388,10 +388,13 @@ async def sync_vendor_balance(
     """
     Sincronizar balance con el vendor (llamada real a API)
 
+    Busca automáticamente el mapping con operation_type='balance' activo
+    para el vendor indicado — mismo patrón genérico que sync-catalog, ya
+    no depende de VendorManager/VendorFactory (que solo sabían construir
+    un servicio LATCOM sin importar el vendor solicitado).
+
     **Requiere:** Admin o Superadmin
     """
-    from app.services.vendor_manager import VendorManager
-
     result = await db.execute(
         select(Vendor).where(Vendor.vendor_code == vendor_code)
     )
@@ -403,11 +406,47 @@ async def sync_vendor_balance(
             detail=f"Vendor {vendor_code} no encontrado"
         )
 
-    try:
-        vendor_manager = VendorManager()
-        vendor_service = await vendor_manager._get_vendor_service(vendor_code, db)
+    # Buscar api_group_code con mapping 'balance' activo para este vendor
+    group_result = await db.execute(
+        text("""
+            SELECT api_group_code
+            FROM vendor_api_mappings
+            WHERE vendor_code    = :vendor_code
+              AND operation_type = 'balance'
+              AND is_active      = true
+            LIMIT 1
+        """),
+        {"vendor_code": vendor_code}
+    )
+    group_row = group_result.fetchone()
+    if not group_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No se encontró configuración de consulta de saldo "
+                f"(operation_type='balance') activa para vendor {vendor_code}. "
+                f"Configure el mapping en APIMappings antes de sincronizar."
+            )
+        )
+    api_group_code = group_row[0]
 
-        balance_response = await vendor_service.get_balance()
+    from app.services.universal_vendor_service import UniversalVendorService
+
+    try:
+        service = UniversalVendorService(db)
+        balance_response = await service.execute_vendor_request(
+            vendor_code=vendor_code,
+            api_group_code=api_group_code,
+            operation_type='balance',
+            data={}
+        )
+
+        if balance_response.get('status') != 'success':
+            return {
+                "success": False,
+                "message": "Error sincronizando balance",
+                "error": balance_response.get('error_message', 'Error desconocido')
+            }
 
         if 'balance_usd' in balance_response:
             vendor.update_usd_balance(amount=float(balance_response['balance_usd']))
@@ -415,7 +454,7 @@ async def sync_vendor_balance(
         if 'balance_local' in balance_response:
             vendor.update_local_balance(
                 amount=float(balance_response['balance_local']),
-                currency=balance_response.get('currency', vendor.vendor_local_currency)
+                currency=vendor.vendor_local_currency
             )
 
         vendor.updated_by = current_user.user_email
@@ -581,14 +620,17 @@ async def test_vendor_connection(
     current_user: User = Depends(require_admin)
 ):
     """
-    Probar conexión con vendor
+    Probar conexión con vendor — ejecuta una consulta de saldo real.
 
-    Intenta hacer login y obtener saldo
+    Busca automáticamente el mapping con operation_type='balance' activo
+    para el vendor indicado — mismo patrón genérico que sync-catalog/
+    sync-balance, ya no depende de VendorManager/VendorFactory (que solo
+    sabían construir un servicio LATCOM sin importar el vendor solicitado
+    — causaba el error "'Settings' object has no attribute 'VENDOR_MODE'"
+    para cualquier otro vendor, incluido MEGAPUNTO).
 
     **Requiere:** Admin o Superadmin
     """
-    from app.services.vendor_manager import VendorManager
-
     result = await db.execute(
         select(Vendor).where(Vendor.vendor_code == vendor_code)
     )
@@ -600,18 +642,52 @@ async def test_vendor_connection(
             detail=f"Vendor {vendor_code} no encontrado"
         )
 
-    try:
-        vendor_manager = VendorManager()
-        vendor_service = await vendor_manager._get_vendor_service(vendor_code, db)
+    group_result = await db.execute(
+        text("""
+            SELECT api_group_code
+            FROM vendor_api_mappings
+            WHERE vendor_code    = :vendor_code
+              AND operation_type = 'balance'
+              AND is_active      = true
+            LIMIT 1
+        """),
+        {"vendor_code": vendor_code}
+    )
+    group_row = group_result.fetchone()
+    if not group_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No se encontró configuración de consulta de saldo "
+                f"(operation_type='balance') activa para vendor {vendor_code}. "
+                f"Configure el mapping en APIMappings antes de probar la conexión."
+            )
+        )
+    api_group_code = group_row[0]
 
-        token = await vendor_service.login()
-        balance = await vendor_service.get_balance()
+    from app.services.universal_vendor_service import UniversalVendorService
+
+    try:
+        service = UniversalVendorService(db)
+        balance_response = await service.execute_vendor_request(
+            vendor_code=vendor_code,
+            api_group_code=api_group_code,
+            operation_type='balance',
+            data={}
+        )
+
+        if balance_response.get('status') != 'success':
+            return {
+                "success": False,
+                "message": "Error conectando con vendor",
+                "error": balance_response.get('error_message', 'Error desconocido')
+            }
 
         return {
             "success": True,
             "message": "Conexión exitosa con vendor",
-            "token_obtained": bool(token),
-            "balance": balance
+            "balance_local": balance_response.get('balance_local'),
+            "balance_usd": balance_response.get('balance_usd')
         }
 
     except Exception as e:

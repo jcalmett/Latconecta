@@ -5,7 +5,7 @@ const PrivacidadView = () => {
         <div className="bg-white rounded-lg shadow-md p-6 md:p-10">
 
           <h1 className="text-2xl font-bold text-bitel-blue mb-1">Política de Privacidad</h1>
-          <p className="text-xs text-gray-500 mb-8">Última actualización: 19 de junio de 2026</p>
+          <p className="text-xs text-gray-500 mb-8">Última actualización: 17 de julio de 2026</p>
 
           <p className="text-sm text-gray-700 mb-6">
             LATCOM HORIZONS PERU S.R.L., con nombre comercial <strong>Latconecta</strong>, RUC 20612907791,
@@ -23,7 +23,8 @@ const PrivacidadView = () => {
               <li>Número de teléfono celular del destinatario de la recarga.</li>
               <li>En caso de registro: nombre completo, correo electrónico, foto de perfil y número de teléfono del usuario.</li>
               <li>Datos de la transacción: monto, operador, fecha, hora y referencia de pago.</li>
-              <li>Información de navegación: dirección IP, tipo de navegador y páginas visitadas.</li>
+              <li>Dirección IP desde la cual se realiza cada compra, registrada al momento de la transacción con fines de seguridad, auditoría y prevención de fraude.</li>
+              <li>Información de navegación: tipo de navegador o dispositivo y páginas visitadas.</li>
             </ul>
             <p className="text-sm text-gray-700 mt-3">
               No recopilamos ni almacenamos datos de tarjetas de crédito o débito. El procesamiento de pagos
@@ -39,6 +40,7 @@ const PrivacidadView = () => {
               <li>Generar el recibo digital de la transacción, disponible para descarga por el usuario.</li>
               <li>Gestionar la cuenta del usuario registrado.</li>
               <li>Atender consultas, reclamos y solicitudes de reembolso.</li>
+              <li>Realizar auditorías, prevenir fraudes y resolver disputas sobre transacciones, utilizando la dirección IP registrada en cada compra.</li>
               <li>Cumplir con obligaciones legales y regulatorias aplicables.</li>
               <li>Mejorar la experiencia de uso de la plataforma.</li>
             </ul>

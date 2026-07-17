@@ -528,6 +528,14 @@ async def create_purchase(
         timestamp = datetime.now()
         channel = (purchase_data.channel or "WEB").upper()
         reference = f"REF-{channel}-{timestamp.strftime('%Y%m%d%H%M%S')}"
+
+        # ✅ OBTENER IP REAL DEL USUARIO
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            client_ip = forwarded.split(",")[0].strip()
+        else:
+            client_ip = request.client.host if request.client else None
+
         purchase = Purchase(
             purchase_reference=reference, purchase_user_id=purchase_data.user_id,
             purchase_product_id=product.product_id, purchase_service_name=product.service.service_name,
@@ -562,7 +570,7 @@ async def create_purchase(
             purchase_vendor_response_description=vendor_response_description,
             vendor_request=vendor_request_json, vendor_response=vendor_response_json,
             requires_manual_intervention=requires_manual_intervention,
-            purchase_ip_petition=purchase_data.ip_address,
+            purchase_ip_petition=client_ip,
             created_by=f"user_{purchase_data.user_id}" if purchase_data.user_id else "anonymous",
             last_update_date=timestamp)
 
