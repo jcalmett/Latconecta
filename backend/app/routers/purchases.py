@@ -426,6 +426,8 @@ async def create_purchase(
         vendor_response_description = None
         vendor_request_json = None
         vendor_response_json = None
+        vendor_date_petition = None
+        vendor_date_response = None
         delivery_status = None
         purchase_status = 'Pending'
         requires_manual_intervention = False
@@ -488,6 +490,8 @@ async def create_purchase(
                         operation_type='provision', data=provision_data)
                     vendor_request_json = json.dumps(prov_result.get('vendor_request', provision_data))
                     vendor_response_json = json.dumps(prov_result.get('vendor_response', {}))
+                    vendor_date_petition = prov_result.get('vendor_date_petition')
+                    vendor_date_response = prov_result.get('vendor_date_response')
 
                     if prov_result.get('success'):
                         ext = prov_result.get('extracted_data', {})
@@ -590,6 +594,8 @@ async def create_purchase(
             vendor_trans_id=vendor_trans_id, vendor_provider_trans_id=vendor_provider_trans_id,
             purchase_vendor_response_code=vendor_response_code,
             purchase_vendor_response_description=vendor_response_description,
+            purchase_vendor_date_petition=vendor_date_petition,
+            purchase_vendor_date_response=vendor_date_response,
             vendor_request=vendor_request_json, vendor_response=vendor_response_json,
             requires_manual_intervention=requires_manual_intervention,
             purchase_ip_petition=client_ip,

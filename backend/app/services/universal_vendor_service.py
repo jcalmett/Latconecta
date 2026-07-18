@@ -390,6 +390,9 @@ class UniversalVendorService:
         # 2. Crear mapper
         mapper = VendorAPIMapper(mapping_config)
 
+        date_petition = None  # se define justo antes de la llamada real (paso 6);
+                               # queda None si algo falla antes de llegar ahí
+
         try:
             # 3. Construir request body
             request_body = mapper.build_request(data)
@@ -427,6 +430,7 @@ class UniversalVendorService:
                 headers['X-Mapping-Code'] = mapping_config.get('mapping_code', 'UNKNOWN')
 
             # 6. Ejecutar request con reintentos
+            date_petition = datetime.now()
             response = await self._execute_with_retry(
                 url=url,
                 http_method=mapping_config['http_method'].upper(),
@@ -436,6 +440,7 @@ class UniversalVendorService:
                 vendor_code=vendor_code,
                 api_group_code=api_group_code
             )
+            date_response = datetime.now()
 
             logger.info(
                 f"[{vendor_code}/{api_group_code}] Response status: {response.status_code}"
@@ -457,7 +462,9 @@ class UniversalVendorService:
                     "raw_response": response_data,
                     "vendor_request": request_body,
                     "vendor_response": response_data,
-                    "extracted_data": parsed_response
+                    "extracted_data": parsed_response,
+                    "vendor_date_petition": date_petition,
+                    "vendor_date_response": date_response
                 }
             else:
                 # Error del vendor (no transitorio) - no registrar en circuit breaker
@@ -470,7 +477,9 @@ class UniversalVendorService:
                     "vendor_request": request_body,
                     "vendor_response": response_data,
                     "raw_response": response_data,
-                    "extracted_data": parsed_response
+                    "extracted_data": parsed_response,
+                    "vendor_date_petition": date_petition,
+                    "vendor_date_response": date_response
                 }
 
         except httpx.TimeoutException as e:
@@ -479,7 +488,9 @@ class UniversalVendorService:
             return {
                 "status": "error",
                 "error_code": "TIMEOUT",
-                "error_message": "Request to vendor timed out after multiple retries"
+                "error_message": "Request to vendor timed out after multiple retries",
+                "vendor_date_petition": date_petition,
+                "vendor_date_response": datetime.now()
             }
         except Exception as e:
             import traceback
@@ -489,7 +500,9 @@ class UniversalVendorService:
             return {
                 "status": "error",
                 "error_code": "INTEGRATION_ERROR",
-                "error_message": "Error de comunicación con el proveedor. Intente nuevamente."
+                "error_message": "Error de comunicación con el proveedor. Intente nuevamente.",
+                "vendor_date_petition": date_petition,
+                "vendor_date_response": datetime.now()
             }
 
     async def execute_catalog_sync(
