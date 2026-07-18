@@ -334,6 +334,28 @@ async def create_purchase(
 
         logger.info(f"Loaded: {product.product_name} / {vendor.vendor_name}")
 
+        # ✅ IDEMPOTENCIA: si este payment_transaction_id (charge real de Culqi)
+        # ya generó una compra antes, devolver esa compra existente en vez de
+        # procesar una segunda provisión para un cobro que ya fue atendido.
+        # Solo aplica a pagos fase2 reales (payment_transaction_id viene del
+        # gateway) — los pagos simulados (fase1) nunca traen este campo, así
+        # que un reintento legítimo tras un fallo simulado no se ve afectado.
+        if purchase_data.payment_transaction_id:
+            existing_result = await db.execute(
+                select(Purchase)
+                .where(Purchase.purchase_payment_ref == purchase_data.payment_transaction_id)
+                .order_by(Purchase.purchase_id.asc())
+                .limit(1)
+            )
+            existing_purchase = existing_result.scalar_one_or_none()
+            if existing_purchase:
+                logger.warning(
+                    f"🔒 Idempotencia: payment_transaction_id={purchase_data.payment_transaction_id} "
+                    f"ya procesado en purchase_id={existing_purchase.purchase_id} — devolviendo compra existente, "
+                    f"sin reintentar la provisión"
+                )
+                return _map_purchase_to_response(existing_purchase)
+
         # PASO 2: CALCULAR MONTOS
         user_data = {
             'product_type': purchase_data.product_type,
