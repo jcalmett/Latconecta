@@ -2,12 +2,18 @@
 
 const companiesService = {
   /**
-   * Obtener todas las compañías
+   * Obtener todas las compañías (activas e inactivas — vista de gestión admin).
+   * IMPORTANTE (17/07/2026): antes el backend nunca filtraba por estado
+   * (bug real, sin relación con esto), así que "todas" ya venía por defecto.
+   * Corregido el backend para filtrar solo 'active' por defecto (para que
+   * web/mobile/WhatsApp no vean inactivas) — el admin ahora debe pedir
+   * explícitamente company_status=all para conservar el mismo comportamiento
+   * de gestión completa que ya tenía.
    */
   getAll: async () => {
     try {
       console.log('🔵 Obteniendo todas las compañías...');
-      const response = await apiClient.get('/companies/');
+      const response = await apiClient.get('/companies/', { params: { company_status: 'all' } });
       console.log('✅ Compañías obtenidas:', response.data);
       return Array.isArray(response.data) ? response.data : [response.data];
     } catch (error) {
@@ -23,7 +29,7 @@ const companiesService = {
   getActive: async () => {
     try {
       console.log('🔵 Obteniendo información de la compañía activa...');
-      const response = await apiClient.get('/companies/');
+      const response = await apiClient.get('/companies/', { params: { company_status: 'all' } });
       console.log('✅ Compañía obtenida:', response.data);
       // Retornar el primer elemento si es array, o el objeto directamente
       return Array.isArray(response.data) ? response.data[0] : response.data;
@@ -40,7 +46,7 @@ const companiesService = {
   get: async () => {
     try {
       console.log('🔵 Obteniendo información de la compañía...');
-      const response = await apiClient.get('/companies/');
+      const response = await apiClient.get('/companies/', { params: { company_status: 'all' } });
       console.log('✅ Compañía obtenida:', response.data);
       // Retornar el primer elemento si es array, o el objeto directamente
       return Array.isArray(response.data) ? response.data[0] : response.data;
@@ -139,7 +145,7 @@ const companiesService = {
     try {
       console.log(`🔵 Obteniendo compañías del país ${countryId}...`);
       const response = await apiClient.get('/companies/', {
-        params: { country_id: countryId }
+        params: { country_id: countryId, company_status: 'all' }
       });
       console.log('✅ Compañías obtenidas:', response.data);
       return Array.isArray(response.data) ? response.data : [response.data];
@@ -157,7 +163,7 @@ const companiesService = {
     try {
       console.log(`🔵 Obteniendo compañías del servicio ${serviceId}...`);
       const response = await apiClient.get('/companies/', {
-        params: { service_id: serviceId }
+        params: { service_id: serviceId, company_status: 'all' }
       });
       console.log('✅ Compañías obtenidas:', response.data);
       return Array.isArray(response.data) ? response.data : [response.data];

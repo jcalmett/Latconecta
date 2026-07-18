@@ -2,6 +2,18 @@
 LATCONECTA - Companies Router
 Endpoints para gestión de compañías
 Actualizado: 2026-01-10 - Renombrado campos de balance y agregados campos de moneda local
+Actualizado: 2026-07-17 - Agregado filtro por company_status (default 'active').
+Web y mobile ya compensaban la ausencia de este filtro con un filtro propio
+del lado del cliente (SelectView.jsx / SelectScreen.jsx), pero el bot de
+WhatsApp no lo hacía (selectService.js / latconectaApi.js) y mostraba
+compañías inactivas en su menú — ese es el bug real. Con el default 'active'
+aquí, el bot queda corregido automáticamente sin tocar su código. El admin
+debe pedir explícitamente company_status=all para seguir viendo y
+gestionando activas e inactivas juntas (companiesService.js del admin
+actualizado en paralelo). Los parámetros country/service (código de país,
+nombre de servicio) NO se tocan — ya funcionan correctamente para los 3
+canales, confirmado revisando SelectView.jsx, SelectScreen.jsx y
+selectService.js/latconectaApi.js del bot.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,6 +75,7 @@ async def validate_company_consistency(
 async def get_companies(
     country: Optional[str] = None,
     service: Optional[str] = None,
+    company_status: Optional[str] = "active",
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db)
@@ -71,8 +84,12 @@ async def get_companies(
     Obtener lista de compañías con filtrado opcional
 
     Args:
-        country: Código de país para filtrar (ej: "PE", "CL") - OPCIONAL
+        country: Código de país para filtrar (ej: "PE", "PER") - OPCIONAL
         service: Nombre de servicio para filtrar (ej: "TopUps") - OPCIONAL
+        company_status: Estado a filtrar. Default 'active' (usado
+            transparentemente por web/mobile/WhatsApp sin que necesiten
+            enviar nada). Pasar 'all' explícitamente (admin) para ver
+            activas e inactivas juntas, necesario para poder gestionarlas.
         skip: Número de registros a saltar (paginación)
         limit: Límite de registros a retornar
         db: Sesión de base de datos
@@ -91,10 +108,12 @@ async def get_companies(
         - company_mail_customer_support
 
     Examples:
-        GET /companies/ → Todas las compañías
-        GET /companies/?country=PE → Compañías en Perú
-        GET /companies/?service=TopUps → Compañías con servicio TopUps
-        GET /companies/?country=PE&service=TopUps → Compañías TopUps en Perú
+        GET /companies/ -> Todas las compañías activas
+        GET /companies/?country=PE -> Compañías activas en Perú
+        GET /companies/?service=TopUps -> Compañías activas con servicio TopUps
+        GET /companies/?country=PE&service=TopUps -> Compañías TopUps activas en Perú
+        GET /companies/?company_status=all -> Todas (activas e inactivas) - uso admin
+        GET /companies/?company_status=inactive -> Solo inactivas
     """
     query = select(Company).options(
         selectinload(Company.country),
@@ -121,6 +140,9 @@ async def get_companies(
         else:
             return []
 
+    if company_status and company_status.lower() != "all":
+        query = query.where(Company.company_status == company_status)
+
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     companies = result.scalars().all()
@@ -135,16 +157,6 @@ async def get_company(
 ):
     """
     Obtener una compañía por ID
-
-    Args:
-        company_id: ID de la compañía
-        db: Sesión de base de datos
-
-    Returns:
-        Compañía con todos sus campos incluyendo los nuevos de Latconecta
-
-    Raises:
-        HTTPException 404: Si la compañía no existe
     """
     result = await db.execute(
         select(Company)
@@ -173,29 +185,6 @@ async def create_company(
 ):
     """
     Crear una nueva compañía
-
-    Args:
-        company_data: Datos de la compañía
-        db: Sesión de base de datos
-        current_user: Usuario actual autenticado
-
-    Returns:
-        Compañía creada con todos sus campos
-
-    Raises:
-        HTTPException 400: Si hay error en validación
-        HTTPException 404: Si country_id o service_id no existen
-        HTTPException 500: Si hay error al crear
-
-    VALIDACIONES LATCONECTA:
-    - country_id debe existir en tabla countries
-    - service_id debe existir en tabla services
-    - company_name debe ser único por combinación (country_id, service_id)
-
-    Campos nuevos obligatorios:
-    - country_id: ID del país donde opera
-    - service_id: ID del servicio que ofrece
-    - company_mail_commercial_support: Email soporte comercial (opcional)
     """
     try:
         await validate_company_consistency(
@@ -254,27 +243,6 @@ async def update_company(
 ):
     """
     Actualizar una compañía existente
-
-    Args:
-        company_id: ID de la compañía a actualizar
-        company_data: Datos a actualizar (todos opcionales)
-        db: Sesión de base de datos
-        current_user: Usuario actual autenticado
-
-    Returns:
-        Compañía actualizada
-
-    Raises:
-        HTTPException 404: Si la compañía, país o servicio no existen
-        HTTPException 500: Si hay error al actualizar
-
-    VALIDACIONES LATCONECTA:
-    - Si se actualiza country_id, debe existir en countries
-    - Si se actualiza service_id, debe existir en services
-    - Si se actualiza company_usd_balance, se actualiza automáticamente company_usd_date_balance
-    - Si se actualiza company_local_balance, se actualiza automáticamente company_local_date_balance
-
-    Nota: Solo se actualizan los campos enviados (no None)
     """
     result = await db.execute(
         select(Company).where(Company.company_id == company_id)
@@ -337,17 +305,6 @@ async def delete_company(
 ):
     """
     Eliminar una compañía (solo admins)
-
-    Args:
-        company_id: ID de la compañía a eliminar
-        db: Sesión de base de datos
-        current_user: Usuario actual autenticado
-
-    Raises:
-        HTTPException 403: Si el usuario no es admin
-        HTTPException 404: Si la compañía no existe
-        HTTPException 400: Si hay productos asociados (ON DELETE RESTRICT)
-        HTTPException 500: Si hay error al eliminar
     """
     if current_user.user_role != "admin":
         raise HTTPException(
