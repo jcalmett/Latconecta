@@ -20,6 +20,13 @@ class PaymentChargeRequest(BaseModel):
     order_number: str = ""
     installments: int = 0               # 0 = sin cuotas
     capture: bool = True                # True = cobro inmediato
+    antifraud_details: Optional[Dict[str, Any]] = None
+    # first_name, last_name, phone_number, address, address_city, country_code
+    # (y device_finger_print_id en el segundo intento tras completar 3DS)
+    authentication_3DS: Optional[Dict[str, Any]] = None
+    # Se envía SOLO en el segundo intento, con los parámetros que devuelve
+    # Culqi3DS.initAuthentication() al completar el desafío: eci, xid, cavv,
+    # protocolVersion, directoryServerTransactionId
 
 
 class PaymentChargeResponse(BaseModel):
@@ -30,6 +37,17 @@ class PaymentChargeResponse(BaseModel):
     amount: Optional[int] = None
     currency_code: Optional[str] = None
     message: Optional[str] = None
+    requires_3ds: bool = False
+    # True cuando Culqi respondió HTTP 200 (AUTENTICAR) en vez de 201 —
+    # el frontend debe iniciar Culqi3DS.initAuthentication(token_id) y
+    # reintentar este mismo endpoint con authentication_3DS poblado.
+    culqi_status_code: Optional[int] = None
+    # Código HTTP real que devolvió Culqi — expuesto para diagnóstico,
+    # dado que la documentación oficial de Culqi se contradice entre
+    # páginas sobre si 200 o 201 es el que indica "requiere 3DS"
+    # (18/07/2026, ver DOC 37). Nuestro adapter usa 201=éxito por ser
+    # lo empíricamente comprobado en producción, pero se expone el
+    # valor real para verificar caso por caso.
     raw_response: Optional[Dict[str, Any]] = None
 
 

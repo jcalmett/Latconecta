@@ -322,6 +322,50 @@
         <input type="text" id="description" value="Recarga Bitel S/15 — Prueba Culqi" />
       </div>
 
+      <div class="separator"></div>
+      <div class="section-title">antifraud_details (opcional — sin esto Culqi no evalúa riesgo)</div>
+
+      <div class="row">
+        <div class="field">
+          <label>Nombre</label>
+          <input type="text" id="afFirstName" value="Fernando" />
+        </div>
+        <div class="field">
+          <label>Apellido</label>
+          <input type="text" id="afLastName" value="Chullo" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Teléfono (solo dígitos)</label>
+          <input type="text" id="afPhone" value="999999999" />
+        </div>
+        <div class="field">
+          <label>País (ISO)</label>
+          <input type="text" id="afCountry" value="PE" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Dirección</label>
+          <input type="text" id="afAddress" value="Cal. los Recuerdos 387" />
+        </div>
+        <div class="field">
+          <label>Ciudad</label>
+          <input type="text" id="afCity" value="Lima" />
+        </div>
+      </div>
+      <div class="field">
+        <label><input type="checkbox" id="afEnabled" checked style="width:auto;margin-right:6px" />Enviar antifraud_details en el cargo</label>
+      </div>
+
+      <div class="separator"></div>
+      <div class="section-title">customFields.card (prueba — ¿se puede recuperar el valor?)</div>
+      <div class="field">
+        <label><input type="checkbox" id="cfEnabled" style="width:auto;margin-right:6px" />Agregar Nombre, Dirección y Teléfono dentro del formulario de tarjeta</label>
+        <div class="hint">Solo aparece si el cliente elige pagar con tarjeta, nunca con Yape — se agrega vía customFields.card del Checkout</div>
+      </div>
+
       <div class="field">
         <label>URL Backend (para crear cargo)</label>
         <input type="text" id="backendUrl" value="https://77.42.92.151/api/v1/payments/charge" />
@@ -350,6 +394,44 @@
         </button>
       </div>
       <div class="hint" style="margin-top:8px">CVV: 123 · Vencimiento: cualquier fecha futura</div>
+
+      <div class="separator"></div>
+      <div class="section-title">Tarjetas de prueba 3DS — requieren correo review@culqi.com</div>
+      <div class="test-cards">
+        <button class="test-card-btn" onclick="setEmail('review@culqi.com'); log('info','Visa 3DS Challenge — usar 4456 5300 0000 1096')">
+          <span class="card-num">4456 5300 0000 1096</span>
+          <span class="card-desc">🔐 Visa — Éxito con Challenge</span>
+        </button>
+        <button class="test-card-btn" onclick="setEmail('review@culqi.com'); log('info','Visa 3DS sin Challenge — usar 4456 5300 0000 1005')">
+          <span class="card-num">4456 5300 0000 1005</span>
+          <span class="card-desc">🔐 Visa — Éxito sin Challenge</span>
+        </button>
+        <button class="test-card-btn" onclick="setEmail('review@culqi.com'); log('info','Visa 3DS timeout — usar 4456 5300 0000 1070')">
+          <span class="card-num">4456 5300 0000 1070</span>
+          <span class="card-desc">🔐 Visa — Falla por time-out</span>
+        </button>
+        <button class="test-card-btn" onclick="setEmail('review@culqi.com'); log('info','Visa 3DS error auth — usar 4456 5300 0000 1013')">
+          <span class="card-num">4456 5300 0000 1013</span>
+          <span class="card-desc">🔐 Visa — Falla autenticación</span>
+        </button>
+        <button class="test-card-btn" onclick="setEmail('review@culqi.com'); log('info','Mastercard 3DS Challenge — usar 5200 0000 0000 1096')">
+          <span class="card-num">5200 0000 0000 1096</span>
+          <span class="card-desc">🔐 MC — Éxito con Challenge</span>
+        </button>
+        <button class="test-card-btn" onclick="setEmail('review@culqi.com'); log('info','Mastercard 3DS sin Challenge — usar 5200 0000 0000 1005')">
+          <span class="card-num">5200 0000 0000 1005</span>
+          <span class="card-desc">🔐 MC — Éxito sin Challenge</span>
+        </button>
+        <button class="test-card-btn" onclick="setEmail('review@culqi.com'); log('info','Mastercard 3DS timeout — usar 5200 0000 0000 1070')">
+          <span class="card-num">5200 0000 0000 1070</span>
+          <span class="card-desc">🔐 MC — Falla por time-out</span>
+        </button>
+        <button class="test-card-btn" onclick="setEmail('review@culqi.com'); log('info','Mastercard 3DS error auth — usar 5200 0000 0000 1013')">
+          <span class="card-num">5200 0000 0000 1013</span>
+          <span class="card-desc">🔐 MC — Falla autenticación</span>
+        </button>
+      </div>
+      <div class="hint" style="margin-top:8px">CVV: 111 · Vencimiento: 07/30 (Visa y Mastercard)</div>
 
     </div>
 
@@ -414,10 +496,28 @@
       <div class="section-title" style="margin-top:14px">② Cargo creado en backend</div>
       <div class="result-block">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <div class="label">charge.id</div>
+          <div class="label">charge.id — culqi_status_code visible aquí</div>
           <span id="chargePill" class="pill pending">Pendiente</span>
         </div>
         <pre id="chargeResult">—</pre>
+      </div>
+
+      <!-- 3DS -->
+      <div class="section-title" style="margin-top:14px">②b Autenticación 3DS (si aplica)</div>
+      <div class="result-block">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="label">Culqi3DS.initAuthentication</div>
+          <span id="tdsPill" class="pill pending">No aplica</span>
+        </div>
+        <pre id="tdsResult">—</pre>
+        <div class="hint" style="margin:8px 0">
+          Si los parámetros de autenticación no se capturan automáticamente
+          (mecanismo no confirmado en la documentación de Culqi), pégalos aquí
+          manualmente para completar el cargo:
+        </div>
+        <textarea id="tds3dsManualInput" placeholder='{"eci":"05","xid":"...","cavv":"...","protocolVersion":"2.1.0","directoryServerTransactionId":"..."}'
+          style="width:100%;height:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:11px;padding:8px;margin-bottom:8px"></textarea>
+        <button class="btn btn-primary" onclick="completeCharge3DS()">🔐 Reintentar cargo con authentication_3DS</button>
       </div>
 
       <!-- Refund -->
@@ -442,6 +542,45 @@
 let lastChargeId = null;
 let culqiInstance = null;
 let currentOrderNumber = null;
+
+// Estado para el flujo 3DS
+let pending3DS = {
+  tokenId: null,
+  amountCents: null,
+  currency: null,
+  email: null,
+  description: null,
+  antifraudDetails: null,
+};
+
+// Listener genérico — Culqi3DS no documenta explícitamente cómo entrega los
+// parámetros tras completar el desafío. Registramos CUALQUIER evento
+// 'message' que llegue a la ventana mientras se hace la prueba, para
+// descubrir empíricamente el mecanismo real (útil solo para diagnóstico).
+window.addEventListener('message', (event) => {
+  log('data', `📨 window message recibido — origin: ${event.origin}`);
+  try {
+    log('data', `   data: ${JSON.stringify(event.data)}`);
+  } catch (e) {
+    log('data', `   data (no serializable): ${String(event.data)}`);
+  }
+
+  // Formato confirmado empíricamente el 20/07/2026: Culqi3DS emite mensajes
+  // con esta forma exacta. Cuando parameters3DS no es null, son los datos
+  // reales que hay que mandar en el segundo cargo — los auto-completamos.
+  if (event.data && typeof event.data === 'object' && 'parameters3DS' in event.data) {
+    if (event.data.error) {
+      log('warning', `⚠️ Culqi3DS reportó un error interno: ${event.data.error}`);
+      setPill('tdsPill', 'fail', event.data.error);
+    }
+    if (event.data.parameters3DS) {
+      log('success', '✅ parameters3DS recibidos automáticamente — campo autocompletado');
+      document.getElementById('tds3dsManualInput').value = JSON.stringify(event.data.parameters3DS);
+      setPill('tdsPill', 'ok', 'Parámetros recibidos');
+      setResult('tdsResult', event.data.parameters3DS);
+    }
+  }
+});
 
 // ═══════════════════════════════════════════════════════════
 // UTILIDADES LOG
@@ -550,6 +689,22 @@ async function openCulqiCheckout() {
     paymentMethodsSort: Object.keys(paymentMethods),
   };
 
+  // BUG CORREGIDO (21/07/2026): customFields va DENTRO de options, no como
+  // propiedad separada de config — así lo muestra el ejemplo oficial
+  // completo de Culqi. Antes se agregaba a config.customFields, fuera de
+  // options, y Culqi lo ignoraba en silencio (por eso nunca aparecía el
+  // campo en el formulario, no era un problema de recuperación del valor).
+  if (document.getElementById('cfEnabled').checked) {
+    options.customFields = {
+      card: [
+        { label: 'Nombre y apellido', placeholder: 'Ej: Juan Pérez', id: 'nombrecompleto', minLength: 5, maxLength: 100, doubleSpan: true },
+        { label: 'Dirección', placeholder: 'Ej: Av. Larco 123', id: 'direccion', minLength: 5, maxLength: 100, doubleSpan: true },
+        { label: 'Teléfono', placeholder: 'Ej: 999888777', id: 'telefonocliente', minLength: 6, maxLength: 15, doubleSpan: true },
+      ],
+    };
+    log('info', 'customFields.card agregado dentro de options — solo visible si el cliente elige tarjeta, no Yape');
+  }
+
   const clientConfig = { email: email };
 
   const appearance = {
@@ -601,19 +756,97 @@ async function handleCulqiAction() {
     log('data', `Email: ${token.email}`);
     log('data', `Card: ${token.card_number} (${token.brand})`);
 
-    setPill('tokenPill', 'ok', token.id.slice(0, 20) + '...');
-    setResult('tokenResult', {
-      id:          token.id,
-      email:       token.email,
-      card_number: token.card_number,
-      brand:       token.brand,
-      object:      token.object,
-    });
+    // Log del objeto COMPLETO — para inspeccionar si customFields.card
+    // aparece en algún lado (metadata, o una propiedad no documentada)
+    log('section', '🔍 Objeto completo del token (buscar customFields aquí) —');
+    try {
+      log('data', JSON.stringify(token, null, 2));
+    } catch (e) {
+      log('warning', `No se pudo serializar el token completo: ${e.message}`);
+    }
 
-    setStatus('loading', 'Token OK — creando cargo en backend...');
+    setPill('tokenPill', 'ok', token.id.slice(0, 20) + '...');
+    setResult('tokenResult', token);
+
+    setStatus('loading', 'Token OK — generando device fingerprint...');
+
+    // Generar device_finger_print_id ANTES del cargo — según la
+    // documentación de Culqi3DS, va dentro de antifraud_details incluso
+    // en el PRIMER intento de cargo (no solo en el segundo, tras 3DS).
+    // CORREGIDO (21/07/2026): generateDevice() también necesita
+    // Culqi3DS.settings configurado, no solo publicKey — antes solo se
+    // configuraba dentro de startCulqi3DSAuthentication(), que corre
+    // después, causando el error "Falta configurar la llave pública del
+    // comercio" en cada prueba.
+    let deviceFingerPrintId = null;
+    if (typeof Culqi3DS !== 'undefined') {
+      try {
+        const amountCentsForDevice = Math.round(parseFloat(document.getElementById('amount').value) * 100);
+        Culqi3DS.settings = {
+          charge: { totalAmount: amountCentsForDevice, returnUrl: window.location.href },
+          card:   { email: token.email },
+        };
+        deviceFingerPrintId = await Culqi3DS.generateDevice();
+        if (deviceFingerPrintId) {
+          log('success', `device_finger_print_id generado: ${deviceFingerPrintId}`);
+        } else {
+          log('warning', 'Culqi3DS.generateDevice() devolvió null — continuando sin él');
+        }
+      } catch (e) {
+        log('warning', `Error generando device fingerprint: ${e.message} — continuando sin él`);
+      }
+    } else {
+      log('warning', 'Culqi3DS no está disponible — verificar carga de https://3ds.culqi.com');
+    }
+
+    // Armar antifraud_details si el checkbox está activo
+    let antifraudDetails = null;
+    if (document.getElementById('afEnabled').checked) {
+      antifraudDetails = {
+        first_name:   document.getElementById('afFirstName').value.trim(),
+        last_name:    document.getElementById('afLastName').value.trim(),
+        phone_number: document.getElementById('afPhone').value.trim(),
+        address:      document.getElementById('afAddress').value.trim(),
+        address_city: document.getElementById('afCity').value.trim(),
+        country_code: document.getElementById('afCountry').value.trim(),
+      };
+
+      // TEMPORAL (21/07/2026): el formulario de customFields de Culqi tiene
+      // un bug/limitación real confirmado — no acepta dígitos en ningún
+      // campo (nombre, dirección, teléfono), sin importar la configuración
+      // de regex probada. Mientras se resuelve con Culqi (agregado al
+      // informe de documentación), corregimos internamente los valores
+      // capturados con datos reales conocidos, para poder seguir probando
+      // el flujo de 3DS sin quedar bloqueados por este problema del form.
+      // Quitar este bloque de corrección en cuanto Culqi confirme la causa
+      // o el formulario acepte dígitos correctamente.
+      if (token.metadata && token.metadata.nombrecompleto) {
+        antifraudDetails.first_name = 'Jorge';
+        antifraudDetails.last_name  = 'Calmett';
+        log('warning', `Nombre corregido internamente (formulario no acepta dígitos, dato capturado era ilegible): first_name="Jorge", last_name="Calmett"`);
+      }
+      if (token.metadata && token.metadata.direccion) {
+        antifraudDetails.address = 'AV Brasil 321';
+        antifraudDetails.address_city = 'Breña';
+        log('warning', `Dirección corregida internamente: "AV Brasil 321", ciudad "Breña"`);
+      }
+      if (token.metadata && token.metadata.telefonocliente) {
+        antifraudDetails.phone_number = '999888777';
+        log('warning', `Teléfono corregido internamente: "999888777"`);
+      }
+
+      if (deviceFingerPrintId) {
+        antifraudDetails.device_finger_print_id = deviceFingerPrintId;
+      }
+      log('data', `antifraud_details FINAL (el que se envía a Culqi): ${JSON.stringify(antifraudDetails)}`);
+    } else {
+      log('warning', 'antifraud_details desactivado — Culqi no evaluará riesgo de este cargo');
+    }
+
+    setStatus('loading', 'Creando cargo en backend...');
 
     // Ir al paso 3: crear cargo en backend usando el email del token
-    await createChargeInBackend(token.id, token.email);
+    await createChargeInBackend(token.id, token.email, antifraudDetails);
 
   } else if (culqiInstance.order) {
     // ── Orden creada (Yape/billeteras) ─────────────────────
@@ -642,7 +875,7 @@ async function handleCulqiAction() {
 // ═══════════════════════════════════════════════════════════
 // PASO 3: CREAR CARGO EN BACKEND
 // ═══════════════════════════════════════════════════════════
-async function createChargeInBackend(tokenId, tokenEmail) {
+async function createChargeInBackend(tokenId, tokenEmail, antifraudDetails) {
   log('section', '─── PASO 3: Crear cargo en backend ───');
 
   const backendUrl  = document.getElementById('backendUrl').value.trim();
@@ -664,7 +897,11 @@ async function createChargeInBackend(tokenId, tokenEmail) {
     email:        email,
     description:  description,
     order_number: `TEST-${Date.now()}`,
+    antifraud_details: antifraudDetails || null,
   };
+
+  // Guardar contexto por si hace falta el reintento de 3DS
+  pending3DS = { tokenId, amountCents, currency, email, description, antifraudDetails };
 
   try {
     const response = await fetch(backendUrl, {
@@ -674,15 +911,27 @@ async function createChargeInBackend(tokenId, tokenEmail) {
     });
 
     const data = await response.json();
-    log('data', `HTTP ${response.status}`);
+    log('data', `HTTP ${response.status} — culqi_status_code real: ${data.culqi_status_code}`);
 
-    if (response.ok && data.success) {
+    if (data.requires_3ds) {
+      // ─── Culqi decidió que este cargo necesita 3DS ───
+      log('section', '🔐 Culqi requiere autenticación 3DS');
+      log('warning', `culqi_status_code=${data.culqi_status_code} (verificar cuál de las 2 páginas de Culqi tenía razón)`);
+      setPill('chargePill', 'fail', `Requiere 3DS (HTTP culqi=${data.culqi_status_code})`);
+      setResult('chargeResult', data);
+      setPill('tdsPill', 'pending', 'Iniciando...');
+      setStatus('loading', 'Iniciando autenticación 3DS...');
+
+      await startCulqi3DSAuthentication(tokenId, amountCents, email);
+
+    } else if (response.ok && data.success) {
       const chargeId = data.charge_id || data.id || '(ver respuesta)';
       lastChargeId   = data.charge_id || data.id;
 
       log('success', `✅ Cargo creado: ${chargeId}`);
       log('data', `outcome.type: ${data.outcome_type || '—'}`);
       log('data', `amount: ${data.amount} ${data.currency_code}`);
+      log('data', `culqi_status_code: ${data.culqi_status_code}`);
 
       setPill('chargePill', 'ok', chargeId ? chargeId.slice(0, 20) + '...' : 'OK');
       setResult('chargeResult', data);
@@ -710,6 +959,130 @@ async function createChargeInBackend(tokenId, tokenEmail) {
     } else {
       log('error', `Error inesperado: ${err.message}`);
       setStatus('error', err.message);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PASO 3b: FLUJO 3DS — iniciar autenticación
+// ═══════════════════════════════════════════════════════════
+async function startCulqi3DSAuthentication(tokenId, amountCents, email) {
+  if (typeof Culqi3DS === 'undefined') {
+    log('error', 'Culqi3DS no está disponible — no se puede continuar con la autenticación');
+    setPill('tdsPill', 'fail', 'Culqi3DS no cargado');
+    return;
+  }
+
+  const publicKey = document.getElementById('publicKey').value.trim();
+  Culqi3DS.publicKey = publicKey;
+  Culqi3DS.settings = {
+    charge: {
+      totalAmount: amountCents,
+      returnUrl:   window.location.href,
+    },
+    card: {
+      email: email,
+    },
+  };
+
+  log('info', `Culqi3DS.publicKey configurada, settings.charge.totalAmount=${amountCents}`);
+  log('info', `Llamando a Culqi3DS.initAuthentication("${tokenId}")...`);
+
+  try {
+    await Culqi3DS.initAuthentication(tokenId);
+    log('success', 'Culqi3DS.initAuthentication() resolvió (Promise<void> — revisar log de "window message" arriba para los parámetros)');
+    setPill('tdsPill', 'pending', 'Esperando parámetros (ver log)');
+    setStatus('warning', '3DS iniciado — revisa el log y/o pega los parámetros manualmente abajo');
+
+    // Intentos defensivos de ubicar los parámetros en propiedades no
+    // documentadas — no hay garantía de que existan, es solo diagnóstico.
+    try {
+      if (Culqi3DS.parameters3DS) {
+        log('data', `Culqi3DS.parameters3DS encontrado: ${JSON.stringify(Culqi3DS.parameters3DS)}`);
+        setResult('tdsResult', Culqi3DS.parameters3DS);
+      } else {
+        log('warning', 'Culqi3DS.parameters3DS no existe como propiedad — usar el reintento manual');
+      }
+    } catch (e) {
+      log('warning', `No se pudo inspeccionar Culqi3DS.parameters3DS: ${e.message}`);
+    }
+
+  } catch (e) {
+    log('error', `Culqi3DS.initAuthentication() lanzó un error: ${e.message}`);
+    setPill('tdsPill', 'fail', 'Error en autenticación');
+    setStatus('error', `3DS falló: ${e.message}`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PASO 3c: FLUJO 3DS — completar el cargo con authentication_3DS
+// (manual, pegando el JSON — respaldo si la captura automática no aplica)
+// ═══════════════════════════════════════════════════════════
+async function completeCharge3DS() {
+  log('section', '─── PASO 3c: Completar cargo con authentication_3DS ───');
+
+  if (!pending3DS.tokenId) {
+    log('error', 'No hay un cargo 3DS pendiente — inicia un cargo primero');
+    return;
+  }
+
+  const raw = document.getElementById('tds3dsManualInput').value.trim();
+  let authentication3DS;
+  try {
+    authentication3DS = JSON.parse(raw);
+  } catch (e) {
+    log('error', `JSON inválido en el campo de parámetros 3DS: ${e.message}`);
+    return;
+  }
+
+  const backendUrl = document.getElementById('backendUrl').value.trim();
+
+  const body = {
+    token_id:      pending3DS.tokenId,
+    amount:        pending3DS.amountCents,
+    currency_code: pending3DS.currency,
+    email:         pending3DS.email,
+    description:   pending3DS.description,
+    order_number:  `TEST-3DS-${Date.now()}`,
+    antifraud_details:  pending3DS.antifraudDetails,
+    authentication_3DS: authentication3DS,
+  };
+
+  log('info', `POST ${backendUrl} (segundo intento, con authentication_3DS)`);
+  log('data', JSON.stringify(body));
+
+  try {
+    const response = await fetch(backendUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+    const data = await response.json();
+    log('data', `HTTP ${response.status} — culqi_status_code real: ${data.culqi_status_code}`);
+
+    if (response.ok && data.success) {
+      lastChargeId = data.charge_id || data.id;
+      log('success', `✅ Cargo 3DS completado: ${lastChargeId}`);
+      setPill('tdsPill', 'ok', 'Autenticado y cobrado');
+      setResult('tdsResult', data);
+      setResult('chargeResult', data);
+      setPill('chargePill', 'ok', lastChargeId ? lastChargeId.slice(0, 20) + '...' : 'OK');
+      setStatus('success', `Cargo 3DS exitoso — ${lastChargeId}`);
+      document.getElementById('btnTestRefund').disabled = false;
+    } else {
+      log('error', `❌ Cargo 3DS rechazado: ${JSON.stringify(data)}`);
+      setPill('tdsPill', 'fail', 'Rechazado');
+      setResult('tdsResult', data);
+      setStatus('error', 'Cargo 3DS fallido');
+    }
+  } catch (err) {
+    log('error', `Error completando cargo 3DS: ${err.message}`);
+    setStatus('error', err.message);
+  } finally {
+    // Limpiar instancia de Culqi3DS para el próximo intento
+    if (typeof Culqi3DS !== 'undefined' && Culqi3DS.reset) {
+      Culqi3DS.reset();
+      log('info', 'Culqi3DS.reset() ejecutado');
     }
   }
 }
@@ -811,6 +1184,18 @@ window.addEventListener('load', () => {
   } else {
     log('error', 'SDK Culqi NO disponible — verificar conectividad a js.culqi.com');
     setStatus('error', 'SDK no disponible');
+  }
+
+  // Configurar Culqi3DS.publicKey desde el arranque — generateDevice()
+  // necesita esto configurado ANTES de llamarse, no solo al momento de
+  // iniciar la autenticación (bug encontrado en la primera prueba real:
+  // "Falta configurar la llave pública del comercio").
+  if (typeof Culqi3DS !== 'undefined') {
+    const pk = document.getElementById('publicKey').value.trim();
+    Culqi3DS.publicKey = pk;
+    log('success', `Culqi3DS.publicKey configurada al arranque: ${pk.slice(0, 15)}...`);
+  } else {
+    log('error', 'Culqi3DS NO disponible — verificar conectividad a 3ds.culqi.com');
   }
 });
 </script>

@@ -40,6 +40,17 @@ async def create_charge(payload: schemas.PaymentChargeRequest):
       3. Frontend llama este endpoint con el token_id
       4. Backend crea el cargo real en Culqi
       5. Retorna charge_id para guardar en la compra
+
+    Flujo con 3DS (cuando Culqi decide AUTENTICAR):
+      1-3. Igual que arriba, idealmente incluyendo antifraud_details
+      4. Culqi responde HTTP 200 (no 201) — este endpoint retorna
+         requires_3ds=True, sin charge_id
+      5. Frontend llama a Culqi3DS.initAuthentication(token_id), el banco
+         emisor autentica al cliente (con o sin desafío visible)
+      6. Frontend reintenta este mismo endpoint, mismo token_id, agregando
+         authentication_3DS con los parámetros que devolvió Culqi3DS
+      7. Backend reintenta el cargo con esos parámetros — ahora sí 201/200
+         definitivo (aprobado o rechazado)
     """
     logger.info(
         f"💳 Charge request: token={payload.token_id[:20]}..., "
@@ -56,7 +67,8 @@ async def create_charge(payload: schemas.PaymentChargeRequest):
         "order_number": payload.order_number,
         "installments": payload.installments,
         "capture":      payload.capture,
-
+        "antifraud_details": payload.antifraud_details,
+        "authentication_3DS": payload.authentication_3DS,
     }
 
     result = await service.create_charge(charge_data)
@@ -68,6 +80,8 @@ async def create_charge(payload: schemas.PaymentChargeRequest):
         amount=result.get("amount"),
         currency_code=result.get("currency_code"),
         message=result.get("message"),
+        requires_3ds=result.get("requires_3ds", False),
+        culqi_status_code=result.get("culqi_status_code"),
         raw_response=result.get("raw_response"),
     )
 

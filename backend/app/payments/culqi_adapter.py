@@ -80,6 +80,8 @@ class CulqiAdapter:
                 "amount": None,
                 "currency_code": None,
                 "message": f"Campos requeridos faltantes: {', '.join(missing)}",
+                "requires_3ds": False,
+                "culqi_status_code": None,
                 "raw_response": {}
             }
 
@@ -95,6 +97,21 @@ class CulqiAdapter:
                 "order_number": charge_data.get('order_number', ''),
             },
         }
+
+        # antifraud_details: nombre, apellido, teléfono, dirección, ciudad,
+        # país (y device_finger_print_id en el segundo intento tras 3DS).
+        # Sin esto, Culqi no evalúa riesgo de fraude en el cargo (documentado
+        # oficialmente por Culqi) — se envía solo si el llamador lo incluye,
+        # nunca se inventa un valor por default.
+        if charge_data.get('antifraud_details'):
+            body['antifraud_details'] = charge_data['antifraud_details']
+
+        # authentication_3DS: solo presente en el segundo intento de cargo,
+        # con los parámetros que Culqi3DS.initAuthentication() devuelve al
+        # completar el desafío (eci, xid, cavv, protocolVersion,
+        # directoryServerTransactionId).
+        if charge_data.get('authentication_3DS'):
+            body['authentication_3DS'] = charge_data['authentication_3DS']
 
         logger.info(
             f"🔄 Culqi Charge: amount={body['amount']} {body['currency_code']}, "
@@ -132,8 +149,33 @@ class CulqiAdapter:
                     "amount": data.get('amount'),
                     "currency_code": data.get('currency_code'),
                     "message": outcome.get('user_message', 'Cargo exitoso'),
+                    "requires_3ds": False,
+                    "culqi_status_code": status_code,
                     "raw_response": data
                 }
+
+            elif status_code == 200:
+                # El motor antifraude de Culqi decidió AUTENTICAR — este
+                # cargo específico necesita completar 3DS antes de aprobarse.
+                # No es un error: es una respuesta intermedia. El frontend
+                # debe llamar a Culqi3DS.initAuthentication(token_id) y
+                # reintentar este mismo endpoint con authentication_3DS.
+                logger.info(
+                    f"🔐 Culqi Charge requiere 3DS (status 200) — "
+                    f"token={charge_data['token_id'][:20]}..."
+                )
+                return {
+                    "success": False,
+                    "charge_id": None,
+                    "outcome_type": None,
+                    "amount": None,
+                    "currency_code": None,
+                    "message": "Esta transacción requiere autenticación 3DS",
+                    "requires_3ds": True,
+                    "culqi_status_code": status_code,
+                    "raw_response": data
+                }
+
             else:
                 error_msg = data.get('user_message') or data.get('merchant_message') or 'Error procesando cargo'
                 logger.warning(f"⚠️ Culqi Charge rechazado: {error_msg}")
@@ -144,6 +186,8 @@ class CulqiAdapter:
                     "amount": None,
                     "currency_code": None,
                     "message": error_msg,
+                    "requires_3ds": False,
+                    "culqi_status_code": status_code,
                     "raw_response": data
                 }
 
@@ -156,6 +200,8 @@ class CulqiAdapter:
                 "amount": None,
                 "currency_code": None,
                 "message": f"Error de conexión con Culqi: {str(e)}",
+                "requires_3ds": False,
+                "culqi_status_code": None,
                 "raw_response": {}
             }
 
