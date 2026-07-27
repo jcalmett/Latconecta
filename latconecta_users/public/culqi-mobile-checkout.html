@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Culqi Checkout — Latconecta Mobile</title>
+  <!-- jQuery — requerido según el demo oficial de Culqi para Android
+       (culqi/android-demo-checkoutv4-culqi3ds): "Luego debemos cargar el
+       checkoutv4.html y el archivo jquery.min.js a nuestro webhosting."
+       Agregado el 26/07/2026 para replicar exactamente su configuración
+       documentada como funcional. -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://js.culqi.com/checkout-js"></script>
+  <script src="https://3ds.culqi.com/culqi3ds.js"></script>
+</head>
+<body style="margin:0;background:#fff;">
+  <script>
+    // Este archivo se aloja como un archivo REAL en producción
+    // (https://peruse.latconecta.com/culqi-mobile-checkout.html), a
+    // diferencia de la versión anterior (HTML embebido como texto en el
+    // WebView). Esto es necesario porque Culqi3DS hace llamadas de red
+    // reales (a secure.culqi.com) que Culqi valida contra un origen real
+    // — con HTML embebido, esas llamadas eran rechazadas con 401/CORS.
+    //
+    // La configuración dinámica (llave pública, monto, email, etc.) llega
+    // vía window.__CULQI_CONFIG__, inyectada por React Native ANTES de que
+    // esta página cargue (injectedJavaScriptBeforeContentLoaded) — no se
+    // puede incrustar directo en el archivo, ya que este es un archivo
+    // estático real, no generado dinámicamente por request.
+
+    function post(payload) {
+      window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+    }
+
+    // Captura TODA la consola (incluida la de Culqi3DS/Cardinal
+    // internamente) y la reenvía a React Native. TEMPORAL — quitar cuando
+    // el flujo esté confirmado estable en dispositivo real.
+    (function () {
+      var originalLog   = console.log;
+      var originalWarn  = console.warn;
+      var originalError = console.error;
+      function forward(level, args) {
+        try {
+          var parts = [];
+          for (var i = 0; i < args.length; i++) {
+            try { parts.push(typeof args[i] === 'string' ? args[i] : JSON.stringify(args[i])); }
+            catch (e) { parts.push(String(args[i])); }
+          }
+          post({ kind: 'consoleLog', level: level, message: parts.join(' ') });
+        } catch (e) {}
+      }
+      console.log = function () { forward('log', arguments); originalLog.apply(console, arguments); };
+      console.warn = function () { forward('warn', arguments); originalWarn.apply(console, arguments); };
+      console.error = function () { forward('error', arguments); originalError.apply(console, arguments); };
+    })();
+
+    try {
+      var CFG = window.__CULQI_CONFIG__;
+      if (!CFG) {
+        post({ kind: 'error', message: 'window.__CULQI_CONFIG__ no fue inyectada antes de cargar la página' });
+        throw new Error('Falta configuración');
+      }
+
+      // TEMPORAL — confirmar con certeza el valor exacto de la llave
+      // pública que llegó (longitud y primeros/últimos caracteres, sin
+      // exponerla completa en el log), para descartar corrupción al
+      // inyectar la configuración desde React Native.
+      post({
+        kind: 'debug',
+        message: 'publicKey recibida: "' + CFG.publicKey + '" (longitud: ' + (CFG.publicKey ? CFG.publicKey.length : 0) + ')'
+      });
+
+      var config = CFG.culqiSettings;
+      var culqi = new CulqiCheckout(CFG.publicKey, config);
+      var waitingFor3DS = false; // evita procesar mensajes fuera de una espera activa
+
+      if (typeof Culqi3DS !== 'undefined') {
+        Culqi3DS.publicKey = CFG.publicKey;
+        post({ kind: 'debug', message: 'Culqi3DS.publicKey configurada al arranque' });
+      } else {
+        post({ kind: 'debug', message: 'ADVERTENCIA: Culqi3DS no está disponible (script no cargó)' });
+      }
+
+      // Listener registrado UNA SOLA VEZ — mismo patrón que en la web y
+      // en la versión embebida anterior, para no acumular oyentes
+      // duplicados si algo se reintenta en la misma carga de la página.
+      window.addEventListener('message', function (event) {
+        var data = event.data;
+        try {
+          post({ kind: 'debug', message: 'message recibido — origin: ' + event.origin + ' | data: ' + JSON.stringify(data) });
+        } catch (e) {
+          post({ kind: 'debug', message: 'message recibido (no serializable) — origin: ' + event.origin });
+        }
+
+        if (!data || typeof data !== 'object' || !('parameters3DS' in data)) return;
+        if (!waitingFor3DS) {
+          post({ kind: 'debug', message: 'parameters3DS recibido pero NO hay espera activa — ignorado' });
+          return;
+        }
+
+        // Mensaje interno conocido, cosmético — visto consistentemente
+        // tanto en la web como en la versión anterior de mobile, siempre
+        // inofensivo. Se ignora explícitamente para no cortar el flujo.
+        if (data.error === 'Falta configurar la llave pública del comercio') {
+          post({ kind: 'debug', message: 'Mensaje cosmético conocido ignorado, seguimos esperando' });
+          return;
+        }
+
+        if (data.parameters3DS) {
+          waitingFor3DS = false;
+          post({ kind: 'parameters3DS', parameters3DS: data.parameters3DS });
+        } else if (data.error) {
+          waitingFor3DS = false;
+          post({ kind: 'parameters3DSError', error: data.error });
+        }
+        // Si ambos son null (ej. { loading: true }), seguimos esperando.
+      });
+
+      culqi.culqi = function () {
+        if (culqi.token) {
+          // device_finger_print_id ANTES de avisarle a RN — va dentro de
+          // antifraud_details desde el primer intento de cargo.
+          if (typeof Culqi3DS !== 'undefined') {
+            Culqi3DS.generateDevice().then(function (fp) {
+              post({ kind: 'token', token: culqi.token, deviceFingerPrintId: fp });
+            }).catch(function () {
+              post({ kind: 'token', token: culqi.token, deviceFingerPrintId: null });
+            });
+          } else {
+            post({ kind: 'token', token: culqi.token, deviceFingerPrintId: null });
+          }
+        } else if (culqi.order) {
+          post({ kind: 'order', order: culqi.order });
+        } else {
+          post({ kind: 'none', error: culqi.error || null });
+        }
+      };
+
+      culqi.open();
+
+      // Reporta la altura real del contenido de Culqi para que la app
+      // nativa pueda ajustar el tamaño de la ventana flotante.
+      var lastReportedHeight = 0;
+      function reportHeight() {
+        var h = Math.max(
+          document.body.scrollHeight,
+          document.documentElement.scrollHeight
+        );
+        if (h > 0 && h !== lastReportedHeight) {
+          lastReportedHeight = h;
+          post({ kind: 'contentHeight', height: h });
+        }
+      }
+      setInterval(reportHeight, 400);
+
+      // ── 3DS: función invocada desde RN vía injectJavaScript ──────────
+      window.__startCulqi3DS = function (tokenId, amountCents, email) {
+        if (typeof Culqi3DS === 'undefined') {
+          post({ kind: 'parameters3DSError', error: 'Culqi3DS no disponible en el WebView' });
+          return;
+        }
+
+        post({ kind: 'debug', message: 'Iniciando 3DS — token: ' + tokenId + ', email: ' + email });
+
+        try {
+          culqi.close();
+          post({ kind: 'debug', message: 'culqi.close() ejecutado antes de initAuthentication()' });
+        } catch (e) {
+          post({ kind: 'debug', message: 'culqi.close() lanzó un error: ' + e.message });
+        }
+
+        // Volver a configurar publicKey AQUÍ, no solo al inicio — sospecha
+        // de que culqi.close() podría resetear estado interno compartido
+        // entre Culqi y Culqi3DS, dejando esta llave vacía justo antes de
+        // que la librería arme su propio header Authorization (confirmado
+        // en pruebas reales: llega vacío, "Authorization: Bearer" sin
+        // valor, causando 401 en pci-cybersource-setup).
+        Culqi3DS.publicKey = CFG.publicKey;
+        post({ kind: 'debug', message: 'Culqi3DS.publicKey re-configurada después de close(): "' + Culqi3DS.publicKey + '"' });
+
+        Culqi3DS.settings = {
+          // returnUrl debe ser la URL EXACTA y limpia donde vive este
+          // archivo, sin parámetros extra (confirmado en la documentación
+          // oficial del demo Android de Culqi: "esto es necesario para una
+          // correcta configuración de Culqi 3DS"). NO usar
+          // window.location.href directo, porque incluye el parámetro de
+          // caché (?v=...) que agregamos del lado de React Native.
+          charge: { totalAmount: amountCents, returnUrl: 'https://peruse.latconecta.com/culqi-mobile-checkout.html' },
+          card:   { email: email },
+        };
+
+        waitingFor3DS = true;
+
+        Culqi3DS.initAuthentication(tokenId).then(function () {
+          post({ kind: 'debug', message: 'Culqi3DS.initAuthentication() resolvió (esperando parameters3DS vía message)' });
+        }).catch(function (e) {
+          waitingFor3DS = false;
+          post({ kind: 'parameters3DSError', error: e.message || String(e) });
+        });
+      };
+    } catch (e) {
+      post({ kind: 'error', message: e.message });
+    }
+  </script>
+</body>
+</html>
