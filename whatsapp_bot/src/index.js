@@ -21,6 +21,16 @@ import { startNotifyServer } from './notifyServer.js';
 const logger = pino({ level: 'info' });
 let notifyServerStarted = false;
 
+// Fix 28/07/2026 — visto un bucle de reconexión cada 1-5 segundos en
+// producción (logs solo mostraban "Conexión cerrada. Reconectar: true",
+// sin motivo real, imposible de diagnosticar). Se agregan 2 cosas:
+// (1) registrar el motivo real de cada cierre (statusCode + mensaje),
+// (2) esperar unos segundos antes de reconectar, para evitar que varios
+// sockets terminen compitiendo por la misma sesión de Baileys si el cierre
+// se repite muy seguido (Baileys solo permite una conexión activa por
+// sesión — reconectar sin pausa puede crear una condición de carrera).
+const RECONNECT_DELAY_MS = 5000;
+
 /**
  * Envía un mensaje genérico: texto solo, o imagen con texto (caption).
  * Punto único usado tanto por la conversación normal como por el
@@ -60,9 +70,29 @@ async function start() {
 
     if (connection === 'close') {
       const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
+      const errorMessage = lastDisconnect?.error?.message || 'sin mensaje';
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      logger.warn(`Conexión cerrada. Reconectar: ${shouldReconnect}`);
-      if (shouldReconnect) start();
+
+      // Log completo del motivo real — antes solo se veía "Reconectar: true/false".
+      logger.warn(
+        { statusCode, errorMessage },
+        `Conexión cerrada (código ${statusCode ?? 'desconocido'}: ${errorMessage}). Reconectar: ${shouldReconnect}`
+      );
+
+      if (shouldReconnect) {
+        // Espera antes de reconectar — evita que sockets nuevos compitan
+        // con uno anterior que Baileys todavía no terminó de cerrar del
+        // todo, lo cual puede producir un ciclo de cierres cada vez más
+        // seguido en vez de estabilizarse.
+        logger.info(`Reintentando conexión en ${RECONNECT_DELAY_MS / 1000}s...`);
+        setTimeout(() => {
+          start().catch((err) => {
+            logger.error({ err }, 'Error al reconectar');
+          });
+        }, RECONNECT_DELAY_MS);
+      } else {
+        logger.error('Sesión cerrada (logged out) — hay que volver a escanear el QR. Borra la carpeta auth/ y reinicia el servicio.');
+      }
     } else if (connection === 'open') {
       logger.info('✅ Bot Latconecta conectado a WhatsApp');
       if (!notifyServerStarted) {
