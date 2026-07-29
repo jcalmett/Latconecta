@@ -166,6 +166,14 @@ const PurchasePopup = React.memo(({
   const [paymentConfig, setPaymentConfig] = useState(null);
   const [retryData, setRetryData]         = useState(null);   // { message, retryFn }
   const [abortReason, setAbortReason]     = useState(null);   // mensaje final
+  // Contador real de reintentos — vive AQUÍ, no dentro de CulqiCheckout,
+  // porque ese componente se desmonta y remonta en cada reintento (solo
+  // se renderiza cuando paymentPhase==='open'); cualquier contador interno
+  // ahí se reiniciaría a 0 en cada ciclo. Se reinicia manualmente cada vez
+  // que arranca una compra nueva (ver donde se setea paymentPhase='open'
+  // por primera vez / se abre el popup).
+  const MAX_RETRIES = 3;
+  const retryAttemptRef = useRef(0);
 
   // Cargar config de pagos al montar el popup
   useEffect(() => {
@@ -178,6 +186,7 @@ const PurchasePopup = React.memo(({
       setRetryData(null);
       setAbortReason(null);
       isSubmitting.current = false;
+      retryAttemptRef.current = 0;
     }
   }, [showPurchasePopup]);
 
@@ -914,18 +923,24 @@ const PurchasePopup = React.memo(({
                     handlePaymentAndProvision(result);
                   }}
                   onRetry={(message, retryFn) => {
-                    setRetryData({ message, retryFn });
-                    setPaymentPhase('retry');
+                    retryAttemptRef.current += 1;
+                    if (retryAttemptRef.current >= MAX_RETRIES) {
+                      // Se acabaron los intentos — mismo tratamiento que
+                      // antes daba onAbort('max_retries'), pero decidido
+                      // aquí, donde el conteo real sí sobrevive entre
+                      // reintentos.
+                      setAbortReason(message || 'No se pudo completar el pago después de 3 intentos.');
+                      setPaymentPhase('abort');
+                    } else {
+                      setRetryData({ message, retryFn });
+                      setPaymentPhase('retry');
+                    }
                   }}
                   onAbort={(reason) => {
                     if (reason === 'user_cancel') {
                       closePurchasePopup();
                     } else {
-                      setAbortReason(
-                        reason === 'max_retries'
-                          ? 'No se pudo completar el pago después de 3 intentos.'
-                          : 'El procesador de pagos no está disponible. Intenta más tarde.'
-                      );
+                      setAbortReason('El procesador de pagos no está disponible. Intenta más tarde.');
                       setPaymentPhase('abort');
                     }
                   }}
@@ -959,10 +974,17 @@ const PurchasePopup = React.memo(({
                     </button>
                     <button
                       onClick={() => {
-                        const fn = retryData.retryFn;
+                        // NO llamar retryFn() aquí — es la función openCulqi
+                        // de la instancia YA DESTRUIDA de CulqiCheckout (se
+                        // desmonta al salir de paymentPhase='open'). Llamarla
+                        // junto con setPaymentPhase('open') abre 2 instancias
+                        // de Culqi al mismo tiempo (la nueva, automática por
+                        // autoStart=true, y esta vieja) — causaba el
+                        // formulario vacío/error interno de Culqi al
+                        // reintentar. CulqiCheckout ya se abre solo al
+                        // remontar, no hace falta llamar nada manualmente.
                         setRetryData(null);
                         setPaymentPhase('open');
-                        fn();
                       }}
                       className="flex-1 bg-bitel-blue text-white py-3 rounded-lg font-semibold hover:opacity-90"
                     >

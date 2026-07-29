@@ -29,8 +29,12 @@
  *   - Si Culqi pide 3DS: se resuelve automáticamente (con o sin desafío
  *     visible al cliente, según decida el banco emisor) antes de resolver
  *     éxito/fallo
- *   - Cargo rechazado 1ra/2da vez (o 3DS fallido): cierra Culqi → onRetry(mensaje, retryFn)
- *   - Cargo rechazado 3ra vez: cierra → onAbort('max_retries')
+ *   - Cargo rechazado (o 3DS fallido): cierra Culqi → onRetry(mensaje, retryFn)
+ *     — SIEMPRE, sin importar cuántas veces — el límite de reintentos
+ *     (y la decisión de cuándo cortar el flujo con onAbort('max_retries'))
+ *     vive en el componente padre (PurchasePopup.jsx), no aquí, porque
+ *     este componente se desmonta y remonta en cada reintento (cualquier
+ *     contador interno se perdería en cada ciclo)
  *   - Usuario cierra con X: cierra → onAbort('user_cancel')
  *   - Error técnico Culqi: cierra → onAbort('technical_error')
  *
@@ -40,14 +44,15 @@
  *   orderNumber {string}    Número de orden único
  *   user        {object}    Usuario autenticado
  *   onResult    {function}  Callback SOLO cuando el pago es exitoso
- *   onRetry     {function}  Callback con (message, retryFn) cuando cargo rechazado y quedan intentos
- *   onAbort     {function}  Callback sin pago: reason = 'user_cancel' | 'max_retries' | 'technical_error'
+ *   onRetry     {function}  Callback con (message, retryFn) en CADA cargo rechazado — el padre decide si ofrece reintentar o corta el flujo
+ *   onAbort     {function}  Callback sin pago: reason = 'user_cancel' | 'technical_error' (el padre dispara 'max_retries' por su cuenta, no este componente)
  *   autoStart   {boolean}   Si true, abre al montarse (default: true)
  */
 import { useCallback, useEffect, useRef } from "react";
 import paymentService from "../../services/paymentService";
 
-const MAX_RETRIES = 3;
+// El límite de reintentos (3) ahora vive en PurchasePopup.jsx, no aquí —
+// ver nota en resolveChargeOutcome().
 
 // TEMPORAL — datos fijos de prueba para antifraud_details (ver nota arriba).
 // Latconecta acepta compras sin registro; sin estos datos, Culqi no evalúa
@@ -116,11 +121,22 @@ export default function CulqiCheckout({
 }) {
   const hasStarted = useRef(false);
   const culqiRef   = useRef(null);
-  const retryCount = useRef(0);
   const amountCentsRef = useRef(0);
 
   const openCulqi = useCallback(async () => {
     try {
+      // Cerrar y limpiar cualquier instancia anterior de Culqi antes de
+      // crear una nueva — necesario al reintentar (2do/3er intento).
+      // Sin esto, la instancia vieja queda "viva" en el DOM/memoria
+      // mientras se crea una nueva, causando errores internos del SDK de
+      // Culqi (confirmado con evidencia real: error "CCKT-408" en el 2do
+      // intento, con el formulario regresando con los datos del intento
+      // anterior aún cargados — señal de estado interno corrupto).
+      if (culqiRef.current) {
+        try { culqiRef.current.close(); } catch (e) {}
+        culqiRef.current = null;
+      }
+
       const config = await paymentService.getConfig();
       const publicKey = config.public_key;
       if (!publicKey) throw new Error("No se obtuvo la llave pública de Culqi");
@@ -222,16 +238,16 @@ export default function CulqiCheckout({
             },
           });
         } else {
-          retryCount.current += 1;
+          // El conteo de intentos ya NO vive aquí — CulqiCheckout se
+          // desmonta y remonta en cada reintento (PurchasePopup solo lo
+          // renderiza cuando paymentPhase==='open'), así que cualquier
+          // contador interno se reiniciaría a 0 en cada intento. El
+          // conteo real vive en PurchasePopup, que sí permanece montado
+          // durante todo el ciclo. Aquí siempre se informa el rechazo;
+          // el padre decide si ofrece reintentar o corta el flujo.
           const errorMessage = chargeResp.message || "Pago rechazado";
-
-          if (retryCount.current >= MAX_RETRIES) {
-            culqi.close();
-            onAbort?.("max_retries");
-          } else {
-            culqi.close();
-            onRetry?.(errorMessage, openCulqi);
-          }
+          culqi.close();
+          onRetry?.(errorMessage, openCulqi);
         }
       };
 
@@ -364,7 +380,6 @@ export default function CulqiCheckout({
   useEffect(() => {
     if (autoStart && !hasStarted.current) {
       hasStarted.current = true;
-      retryCount.current = 0;
       openCulqi();
     }
   }, [autoStart, openCulqi]);
