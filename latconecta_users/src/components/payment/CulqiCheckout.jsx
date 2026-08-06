@@ -169,10 +169,23 @@ export default function CulqiCheckout({
         culqiSettings.rsapublickey = config.rsa_public_key;
       }
 
+      // TEMPORAL — solo para acelerar pruebas manuales, pedido por Jorge
+      // el 29/07/2026. Genera un correo único por cada apertura del
+      // checkout (formato JP<HHMMSS>@...) — evita el límite diario de
+      // intentos por correo de Culqi durante rondas de prueba seguidas.
+      // Solo se usa si no hay un usuario real logueado (mismo criterio
+      // que antes, "cliente@latconecta.com" como último recurso).
+      function generarCorreoDePrueba() {
+        const ahora = new Date();
+        const hhmmss = [ahora.getHours(), ahora.getMinutes(), ahora.getSeconds()]
+          .map(n => String(n).padStart(2, "0")).join("");
+        return `JP${hhmmss}@test.latconecta.com`;
+      }
+
       const culqiConfig = {
         settings: culqiSettings,
         client: {
-          email: user?.user_email || "cliente@latconecta.com",
+          email: user?.user_email || generarCorreoDePrueba(),
         },
         options: {
           lang:               "auto",
@@ -187,6 +200,14 @@ export default function CulqiCheckout({
           // números; "placeholder" es obligatorio. Los valores capturados
           // se descartan y sustituyen más abajo (ver TEST_ANTIFRAUD_DETAILS)
           // por el bug de Culqi que impide ingresar dígitos en estos campos.
+          //
+          // NOTA — se intentó agregar "value" aquí el 29/07/2026 para
+          // precargar nombre/dirección durante pruebas manuales (pedido
+          // por Jorge) — CONFIRMADO que Culqi lo rechaza por completo:
+          // ValidationError: "customFields.card[0].value" is not allowed,
+          // y esto bloqueaba TODO el checkout (ni siquiera abría el
+          // formulario). Revertido el mismo día. No volver a intentar
+          // "value" en customFields — no es un parámetro soportado.
           customFields: {
             card: [
               { label: "Nombre y apellido", placeholder: "Ej: Juan Pérez",   id: "nombrecompleto",  minLength: 5, maxLength: 100, doubleSpan: true },

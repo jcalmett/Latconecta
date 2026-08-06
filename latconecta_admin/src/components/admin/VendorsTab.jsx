@@ -557,9 +557,11 @@ const SyncCatalogModal = ({ vendor, onClose }) => {
 
   const exportCSV = () => {
     if (!syncResult?.changes_detail) return;
-    // Usar ; como separador y , como decimal para Excel en español
-    const SEP = ';';
-    const toDecimal = (v) => v != null ? String(v).replace('.', ',') : '';
+    // Formato internacional: , como separador y . como decimal.
+    // Antes usaba ; y , (formato Excel en español) — cambiado el
+    // 29/07/2026 a pedido de Jorge, que prefiere punto decimal.
+    const SEP = ',';
+    const toDecimal = (v) => v != null ? String(v) : '';
     const headers = ['Estado','Producto','VP Code','Precio Anterior','Precio Nuevo','Variacion %','Bs Referencial','Tipo Cambio'];
     const rows = syncResult.changes_detail.map(p => {
       const status = p.status === 'NUEVO' ? 'NO_VENDIDO' : p.status;
