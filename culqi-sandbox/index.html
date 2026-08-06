@@ -365,6 +365,10 @@
         <label><input type="checkbox" id="cfEnabled" style="width:auto;margin-right:6px" />Agregar Nombre, Dirección y Teléfono dentro del formulario de tarjeta</label>
         <div class="hint">Solo aparece si el cliente elige pagar con tarjeta, nunca con Yape — se agrega vía customFields.card del Checkout</div>
       </div>
+      <div class="field">
+        <label><input type="checkbox" id="cfRegexEnabled" style="width:auto;margin-right:6px" />Agregar también "regex" a cada campo (prueba controlada — reproduce el error reportado a Culqi el 21/07/2026)</label>
+        <div class="hint">Solo tiene efecto si el checkbox de arriba también está activo. Nombre/Dirección: ^[A-Za-zÀ-ÿ\s]+$ · Teléfono: ^[0-9]+$</div>
+      </div>
 
       <div class="field">
         <label>URL Backend (para crear cargo)</label>
@@ -695,14 +699,20 @@ async function openCulqiCheckout() {
   // options, y Culqi lo ignoraba en silencio (por eso nunca aparecía el
   // campo en el formulario, no era un problema de recuperación del valor).
   if (document.getElementById('cfEnabled').checked) {
+    const conRegex = document.getElementById('cfRegexEnabled').checked;
+    const REGEX_TEXTO = '^[A-Za-zÀ-ÿ\\s]+$';
+    const REGEX_TELEFONO = '^[0-9]+$';
+
     options.customFields = {
       card: [
-        { label: 'Nombre y apellido', placeholder: 'Ej: Juan Pérez', id: 'nombrecompleto', minLength: 5, maxLength: 100, doubleSpan: true },
-        { label: 'Dirección', placeholder: 'Ej: Av. Larco 123', id: 'direccion', minLength: 5, maxLength: 100, doubleSpan: true },
-        { label: 'Teléfono', placeholder: 'Ej: 999888777', id: 'telefonocliente', minLength: 6, maxLength: 15, doubleSpan: true },
+        { label: 'Nombre y apellido', placeholder: 'Ej: Juan Pérez', id: 'nombrecompleto', minLength: 5, maxLength: 100, doubleSpan: true, ...(conRegex ? { regex: REGEX_TEXTO } : {}) },
+        { label: 'Dirección', placeholder: 'Ej: Av. Larco 123', id: 'direccion', minLength: 5, maxLength: 100, doubleSpan: true, ...(conRegex ? { regex: REGEX_TEXTO } : {}) },
+        { label: 'Teléfono', placeholder: 'Ej: 999888777', id: 'telefonocliente', minLength: 6, maxLength: 15, doubleSpan: true, ...(conRegex ? { regex: REGEX_TELEFONO } : {}) },
       ],
     };
-    log('info', 'customFields.card agregado dentro de options — solo visible si el cliente elige tarjeta, no Yape');
+    log('info', `customFields.card agregado dentro de options — ${conRegex ? 'CON regex (' + REGEX_TEXTO + ' / ' + REGEX_TELEFONO + ')' : 'SIN regex'}`);
+    log('section', '🔍 customFields.card EXACTO enviado a Culqi —');
+    log('info', JSON.stringify(options.customFields, null, 2));
   }
 
   const clientConfig = { email: email };
