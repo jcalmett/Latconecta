@@ -710,7 +710,7 @@ async function openCulqiCheckout() {
         { label: 'Teléfono', placeholder: 'Ej: 999888777', id: 'telefonocliente', minLength: 6, maxLength: 15, doubleSpan: true, ...(conRegex ? { regex: REGEX_TELEFONO } : {}) },
       ],
     };
-    log('info', `customFields.card agregado dentro de options — ${conRegex ? 'CON regex (' + REGEX_TEXTO + ' / ' + REGEX_TELEFONO + ')' : 'SIN regex'}`);
+    log('info', `customFields.card agregado dentro de options — ${conRegex ? 'CON regex' : 'SIN regex'}`);
     log('section', '🔍 customFields.card EXACTO enviado a Culqi —');
     log('info', JSON.stringify(options.customFields, null, 2));
   }
