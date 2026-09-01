@@ -49,8 +49,6 @@ class Settings(BaseSettings):
     # Producción / UAT
     PRODUCTION_ORIGINS: List[str] = [
         "https://77.42.92.151",
-        "https://77.42.92.151/latconecta_admin",
-        "https://77.42.92.151/latconecta_users",
         "http://77.42.92.151:8100",  # Backend directo (para debugging)
         "https://77.42.92.151:5176",  # Culqi sandbox simulator
         "https://peruse.latconecta.com",
