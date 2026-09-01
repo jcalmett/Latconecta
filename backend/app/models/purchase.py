@@ -27,7 +27,7 @@ class Purchase(Base):
     # =========================================================================
     # FOREIGN KEYS
     # =========================================================================
-    purchase_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True, index=True)
+    purchase_user_id = Column(Integer, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True, index=True)
     purchase_product_id = Column(Integer, ForeignKey("products.product_id"), nullable=True, index=True)
 
     # =========================================================================
