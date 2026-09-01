@@ -140,8 +140,6 @@ def _map_purchase_to_response(purchase: Purchase) -> 'PurchaseResponse':
         purchase_provision_ref=purchase.purchase_provision_ref, purchase_reversal_ref=purchase.purchase_reversal_ref,
         purchase_barcode_code=purchase.purchase_barcode_code, purchase_barcode_image=purchase.purchase_barcode_image,
         purchase_receip_url=purchase.purchase_receip_url,
-        izipay_order_code=getattr(purchase, 'izipay_order_code', None),
-        izipay_form_token=getattr(purchase, 'izipay_form_token', None),
         purchase_balance_currency=purchase.purchase_balance_currency,
         purchase_initial_balance=Decimal(str(purchase.purchase_initial_balance)) if purchase.purchase_initial_balance else None,
         purchase_final_balance=Decimal(str(purchase.purchase_final_balance)) if purchase.purchase_final_balance else None,
@@ -243,8 +241,6 @@ class PurchaseResponse(BaseModel):
     purchase_barcode_code: Optional[str] = None
     purchase_barcode_image: Optional[str] = None
     purchase_receip_url: Optional[str] = None
-    izipay_order_code: Optional[str] = None
-    izipay_form_token: Optional[str] = None
     purchase_balance_currency: Optional[str] = None
     purchase_initial_balance: Optional[Decimal] = None
     purchase_final_balance: Optional[Decimal] = None
@@ -380,14 +376,11 @@ async def create_purchase(
         payment_status = 'Pending'
         barcode = None
         barcode_image = None
-        izipay_order_code = None
-        izipay_form_token = None
 
         if purchase_data.payment_method == 'card':
             if purchase_data.payment_gateway and purchase_data.payment_transaction_id:
                 payment_status = 'Success'
                 payment_ref = purchase_data.payment_reference_number or purchase_data.payment_transaction_id
-                izipay_order_code = purchase_data.payment_order_number
                 logger.info(f"💳 FASE 2: Card payment by {purchase_data.payment_gateway}, ref={payment_ref}")
             else:
                 sim = ops_config.simulate_response('pago_tarjeta', {'amount': float(calculation.purchase_total_amount)})
@@ -607,9 +600,6 @@ async def create_purchase(
         await db.refresh(purchase)
         logger.info(f"Purchase saved: ID={purchase.purchase_id}, REF={reference}, status={purchase_status}")
 
-        if purchase_data.payment_method == 'card' and izipay_order_code:
-            purchase.izipay_order_code = izipay_order_code
-            purchase.izipay_form_token = izipay_form_token
 
         response = _map_purchase_to_response(purchase)
         return response
