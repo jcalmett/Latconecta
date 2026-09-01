@@ -66,6 +66,7 @@ latconecta_admin/.env
 latconecta_admin/.env.local
 latconecta_users/.env
 latconecta_users/.env.local
+latconecta_users/.env.production
 .env
 .env.local
 .env.development.local
