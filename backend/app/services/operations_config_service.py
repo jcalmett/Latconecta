@@ -61,7 +61,7 @@ class OperationsConfigService:
     FASE2_DESCRIPTION = {
         'val_telefono':         'API Mapping / Backend codificado',
         'val_cuenta':           'API Mapping / Backend codificado',
-        'pago_tarjeta':         'Gateway real (IZIPAY/Conekta/Stripe)',
+        'pago_tarjeta':         'Gateway real (Culqi/Conekta/Stripe)',
         'pago_barcode':         'Gateway real de barcode',
         'anulacion_tarjeta':    'Gateway real (Cancel API)',
         'provision_topup':      'API Mapping (UniversalVendorService)',
