@@ -110,3 +110,6 @@ vendor_simulator/.venv/
 
 # WhatsApp bot - sesión de Baileys (credencial activa, nunca subir)
 whatsapp_bot/auth/
+
+# Backups de base de datos — nunca versionar
+backups/
