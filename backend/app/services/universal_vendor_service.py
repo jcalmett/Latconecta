@@ -6,6 +6,7 @@
 # ✅ ACTUALIZADO CON extra_headers en api_key_header (LATCOM)
 # ✅ ACTUALIZADO CON token_manager para auth bearer (MEGAPUNTO)
 # ✅ ACTUALIZADO CON execute_catalog_sync (catalog_sync operation_type)
+# ✅ ACTUALIZADO CON re-login y reintento único ante 401 (auth bearer)
 # 🔒 MEJORADO: Retry logic con backoff
 # 🔒 MEJORADO: Circuit breaker para vendors caídos
 # 🔒 MEJORADO: Validación de URLs
@@ -94,6 +95,22 @@ class CircuitBreaker:
 
 # Almacén de circuit breakers por vendor
 _circuit_breakers: Dict[str, CircuitBreaker] = {}
+
+
+# ========================================
+# 🔐 RE-LOGIN ANTE 401 (auth_type = bearer)
+# ========================================
+# Si el vendor rechaza el token (401) se hace login una vez y se reintenta
+# la llamada una sola vez. Un 401 garantiza que el vendor NO procesó la
+# solicitud, por lo que el reintento es seguro incluso en 'provision'.
+#
+# Protección contra exceso de logins (LATCOM: 5 logins / 5 min):
+#   - Un lock por vendor evita logins simultáneos.
+#   - Si ya hubo un re-login hace menos de _RELOGIN_COOLDOWN_SECONDS, no se
+#     vuelve a hacer login: se usa el token vigente en cache.
+_RELOGIN_COOLDOWN_SECONDS = 60
+_relogin_locks: Dict[str, asyncio.Lock] = {}
+_last_relogin: Dict[str, datetime] = {}
 
 
 def get_circuit_breaker(vendor_code: str) -> CircuitBreaker:
@@ -327,6 +344,51 @@ class UniversalVendorService:
             "is_production": row.is_production
         }
 
+    async def _relogin_vendor(self, vendor_code: str) -> Optional[str]:
+        """
+        Re-login del vendor tras un 401 (solo auth_type='bearer').
+
+        Returns:
+            Token nuevo (o el vigente en cache si hubo un re-login reciente),
+            o None si el login falla.
+        """
+        lock = _relogin_locks.setdefault(vendor_code, asyncio.Lock())
+        async with lock:
+            last = _last_relogin.get(vendor_code)
+            if last and (datetime.now() - last).total_seconds() < _RELOGIN_COOLDOWN_SECONDS:
+                logger.warning(
+                    f"🔐 {vendor_code}: re-login reciente (< {_RELOGIN_COOLDOWN_SECONDS}s), "
+                    f"se usa el token vigente en cache"
+                )
+                return await token_manager.get_token(vendor_code)
+
+            from app.models.vendor import Vendor as VendorModel
+            from app.services.vendor_login_service import VendorLoginService
+
+            v_result = await self.db.execute(
+                select(VendorModel).where(VendorModel.vendor_code == vendor_code)
+            )
+            vendor_obj = v_result.scalar_one_or_none()
+            if not vendor_obj:
+                return None
+
+            _last_relogin[vendor_code] = datetime.now()
+            token_result = await VendorLoginService(self.db).execute_login(vendor_obj)
+
+            if not token_result.get('success'):
+                logger.error(
+                    f"❌ {vendor_code}: re-login tras 401 falló: {token_result.get('error')}"
+                )
+                return None
+
+            await token_manager.set_token(
+                vendor_code,
+                token_result['access_token'],
+                expires_in_seconds=token_result.get('expires_in', 540)
+            )
+            logger.info(f"✅ {vendor_code}: token renovado tras 401")
+            return token_result['access_token']
+
     async def execute_vendor_request(
         self,
         vendor_code: str,
@@ -445,6 +507,37 @@ class UniversalVendorService:
             logger.info(
                 f"[{vendor_code}/{api_group_code}] Response status: {response.status_code}"
             )
+
+            # 6.5. Token rechazado (401) en auth bearer → re-login y UN reintento
+            if response.status_code == 401 and mapping_config.get('auth_type') == 'bearer':
+                logger.warning(
+                    f"🔐 [{vendor_code}/{api_group_code}] 401 recibido — re-login y reintento único"
+                )
+                new_token = await self._relogin_vendor(vendor_code)
+                if new_token:
+                    vendor_info['access_token'] = new_token
+                    headers = self._build_headers(
+                        mapping_config.get('auth_type', 'none'),
+                        mapping_config.get('auth_config') or {},
+                        vendor_info,
+                        mapping_config.get('headers') or {}
+                    )
+                    if settings.VENDOR_SIMULATOR_ENABLED:
+                        headers['X-Mapping-Code'] = mapping_config.get('mapping_code', 'UNKNOWN')
+                    response = await self._execute_with_retry(
+                        url=url,
+                        http_method=mapping_config['http_method'].upper(),
+                        request_body=request_body,
+                        headers=headers,
+                        timeout_seconds=mapping_config['timeout_seconds'],
+                        vendor_code=vendor_code,
+                        api_group_code=api_group_code
+                    )
+                    date_response = datetime.now()
+                    logger.info(
+                        f"[{vendor_code}/{api_group_code}] Response status (reintento tras 401): "
+                        f"{response.status_code}"
+                    )
 
             # 7. Parsear respuesta
             response_data = response.json() if response.text else {}
