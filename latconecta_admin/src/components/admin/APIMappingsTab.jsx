@@ -529,7 +529,7 @@ const APIMappingsTab = ({ showNotification, setConfirmDialog }) => {
                       <option value="reversal">Reversal</option>
                       <option value="confirmation">Confirmation</option>
                       <option value="cancellation">Cancellation</option>
-                      <option value="balance_check">Balance Check</option>
+                      <option value="balance">Balance (consulta de saldo)</option>
                     </select>
                   </div>
 

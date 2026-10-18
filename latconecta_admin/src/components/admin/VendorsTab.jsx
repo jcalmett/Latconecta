@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Pencil, Trash2, Plus, RefreshCw, Search, AlertCircle, DollarSign, CheckCircle } from 'lucide-react';
 import vendorsService from "../../services/vendorsService";
+import vendorApiMappingsService from "../../services/vendorApiMappingsService";
 import VendorForm from './VendorForm';
 
 const VendorsTab = () => {
@@ -19,11 +20,48 @@ const VendorsTab = () => {
   const [balanceSummary, setBalanceSummary] = useState(null);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncVendor, setSyncVendor] = useState(null);
+  // Vendors con mapping operation_type='balance' activo → pueden sincronizar saldo por API
+  const [balanceApiVendors, setBalanceApiVendors] = useState(new Set());
+  const [syncingBalance, setSyncingBalance] = useState(null);
 
   useEffect(() => {
     loadVendors();
     loadBalanceSummary();
   }, [filterStatus]);
+
+  useEffect(() => {
+    loadBalanceMappings();
+  }, []);
+
+  const loadBalanceMappings = async () => {
+    try {
+      const mappings = await vendorApiMappingsService.getAll();
+      const codes = (mappings || [])
+        .filter(m => m.operation_type === 'balance' && m.is_active)
+        .map(m => m.vendor_code);
+      setBalanceApiVendors(new Set(codes));
+    } catch (err) {
+      console.error('Error al cargar mappings de saldo:', err);
+    }
+  };
+
+  const handleSyncBalance = async (vendorCode) => {
+    try {
+      setSyncingBalance(vendorCode);
+      const result = await vendorsService.syncBalance(vendorCode);
+      if (result.success) {
+        alert(`✅ Saldo sincronizado con ${vendorCode}\nUSD: ${result.usd_balance ?? '-'}\nLocal: ${result.local_balance ?? '-'}`);
+        loadVendors();
+        loadBalanceSummary();
+      } else {
+        alert(`❌ ${result.message || 'Error sincronizando saldo'}\n${result.error || ''}`);
+      }
+    } catch (err) {
+      alert(`Error: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setSyncingBalance(null);
+    }
+  };
 
   const loadVendors = async () => {
     try {
@@ -285,6 +323,16 @@ const VendorsTab = () => {
                       >
                         🔌
                       </button>
+                      {balanceApiVendors.has(vendor.vendor_code) && (
+                        <button
+                          onClick={() => handleSyncBalance(vendor.vendor_code)}
+                          disabled={syncingBalance === vendor.vendor_code}
+                          className="text-emerald-600 hover:text-emerald-900 disabled:opacity-40"
+                          title="Sincronizar Saldo (API del vendor)"
+                        >
+                          {syncingBalance === vendor.vendor_code ? '⏳' : '💰'}
+                        </button>
+                      )}
                       <button
                         onClick={() => handleSyncCatalog(vendor)}
                         className="text-teal-600 hover:text-teal-900"

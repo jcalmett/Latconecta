@@ -148,7 +148,7 @@ const vendorsService = {
   syncBalance: async (vendorCode) => {
     try {
       console.log('[Vendors Service] Syncing balance for vendor:', vendorCode);
-      const response = await apiClient.post(`/vendors/${vendorCode}/sync-balance/`);
+      const response = await apiClient.post(`/vendors/${vendorCode}/sync-balance`);
       console.log('[Vendors Service] Balance synced successfully:', response.data);
       return response.data;
     } catch (error) {

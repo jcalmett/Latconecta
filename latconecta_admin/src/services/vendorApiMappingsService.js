@@ -106,21 +106,6 @@ const vendorApiMappingsService = {
       console.error(`❌ Error al eliminar API mapping ${code}:`, error);
       throw error;
     }
-  },
-
-  /**
-   * Probar mapping con datos de ejemplo
-   */
-  test: async (code, testData) => {
-    try {
-      console.log(`🔵 Probando API mapping ${code} con datos:`, testData);
-      const response = await apiClient.post(`/vendor-api-mappings/${code}/test`, testData);
-      console.log('✅ Test de API Mapping completado:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error(`❌ Error al probar API mapping ${code}:`, error);
-      throw error;
-    }
   }
 };
 
