@@ -51,6 +51,7 @@ class Settings(BaseSettings):
         "https://77.42.92.151",
         "http://77.42.92.151:8100",  # Backend directo (para debugging)
         "https://77.42.92.151:5176",  # Culqi sandbox simulator
+        "https://77.42.92.151:5177",  # Culqi sandbox 2 — medios de pago + personalización visual
         "https://peruse.latconecta.com",
         "https://peradm.latconecta.com",
     ]
