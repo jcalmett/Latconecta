@@ -17,7 +17,7 @@ class VendorLoginService:
     Servicio para ejecutar login en vendors externos
 
     Soporta:
-    - LATCOM (api_key_header — no requiere login bearer)
+    - LATCOM (bearer — login con API key / Secret key en /api/dislogin)
     - MEGAPUNTO/TISI (bearer — requiere login con userName/password)
     - Extensible para otros vendors
     """
@@ -81,19 +81,88 @@ class VendorLoginService:
 
     async def _login_latcom(self, vendor: Vendor, base_url: str) -> Dict:
         """
-        LATCOM usa auth_type=api_key_header — no requiere token bearer.
-        El api_key se envía directamente en los headers de cada request
-        via UniversalVendorService._build_headers().
-        Retorna NO_LOGIN_REQUIRED para que events.py no intente guardar token.
+        Login específico para LATCOM (plataforma propia de LATCOM, API REST v0.9)
+
+        Endpoint: POST /api/dislogin
+        Request:  {"username": "<API key>", "password": "<Secret key>"}
+        Response: {"success": true, "accessToken": "eyJ...", "refreshToken": "...",
+                   "message": "Login successful"}
+        Token vive: 1 hora (3600 segundos)
+        Renovación: se cachea por 55 minutos (3300 s); el scheduler renueva
+                    cuando faltan < 5 min → un login por hora aprox.
+        Límite LATCOM: 5 intentos de login cada 5 minutos.
+
+        Credenciales en tabla vendors:
+          vendor_username = API key   (sandbox: sbx_..., producción: gld_...)
+          vendor_password = Secret key
+        URLs:
+          vendor_url_uat  = https://apigla.mitopup.com:8090  (sandbox)
+          vendor_url_prod = https://apigla.mitopup.com       (producción)
         """
-        logger.info(
-            f"ℹ️ LATCOM usa api_key_header — no requiere login bearer. "
-            f"api_key configurado: {bool(vendor.vendor_api_key)}"
-        )
-        return {
-            'success': False,
-            'error': 'NO_LOGIN_REQUIRED'
-        }
+        try:
+            if not all([vendor.vendor_username, vendor.vendor_password]):
+                return {
+                    'success': False,
+                    'error': 'Credenciales incompletas en BD (vendor_username / vendor_password)'
+                }
+
+            url = f"{base_url.rstrip('/')}/api/dislogin"
+
+            payload = {
+                "username": vendor.vendor_username,
+                "password": vendor.vendor_password
+            }
+
+            headers = {"Content-Type": "application/json"}
+
+            logger.info(f"🔐 Ejecutando login LATCOM: {url}")
+
+            timeout = httpx.Timeout(vendor.vendor_timeout or 45.0)
+
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+                response_data = response.json()
+
+            access_token = response_data.get('accessToken')
+
+            if not response_data.get('success') or not access_token:
+                logger.error(
+                    f"❌ Login LATCOM sin token: "
+                    f"{response_data.get('message', 'respuesta sin accessToken')}"
+                )
+                return {
+                    'success': False,
+                    'error': response_data.get('message', 'Response sin accessToken')
+                }
+
+            logger.info(
+                f"✅ Login exitoso LATCOM. "
+                f"Token: {access_token[:20]}... (válido 60 min, cache 55 min)"
+            )
+
+            return {
+                'success': True,
+                'access_token': access_token,
+                'expires_in': 3300  # 55 minutos — token vive 60, renovamos antes
+            }
+
+        except httpx.HTTPStatusError as e:
+            error_msg = f"HTTP {e.response.status_code}"
+            try:
+                error_msg = f"{error_msg}: {e.response.json()}"
+            except Exception:
+                error_msg = f"{error_msg}: {e.response.text}"
+            logger.error(f"❌ Login LATCOM falló: {error_msg}")
+            return {'success': False, 'error': error_msg}
+
+        except httpx.TimeoutException:
+            logger.error("❌ Timeout en login LATCOM")
+            return {'success': False, 'error': 'Timeout'}
+
+        except Exception as e:
+            logger.error(f"❌ Error en login LATCOM: {e}", exc_info=True)
+            return {'success': False, 'error': str(e)}
 
     async def _login_megapunto(self, vendor: Vendor, base_url: str) -> Dict:
         """
