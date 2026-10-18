@@ -212,7 +212,17 @@ app.include_router(operations_config.router, prefix="/api/v1/operations", tags=[
 
 # Vendor API Mappings y Mock Vendors
 app.include_router(vendor_api_mappings.router, prefix="/api/v1/vendor-api-mappings", tags=["Vendor API Mappings"])
-app.include_router(mock_vendors.router, prefix="/api/v1/mock", tags=["Mock Vendors"])
+# Mock genérico de vendors — protegido con X-Ops-Pin (mismo PIN del OperationsPanel).
+# Si un mapping apunta a una ruta /api/v1/mock/..., debe incluir el header
+# X-Ops-Pin en su campo 'headers'. Sin OPS_PANEL_PIN en .env → 503.
+from fastapi import Depends
+from app.routers.operations_config import verify_ops_pin
+app.include_router(
+    mock_vendors.router,
+    prefix="/api/v1/mock",
+    tags=["Mock Vendors"],
+    dependencies=[Depends(verify_ops_pin)],
+)
 
 # Bot WhatsApp — endpoints exclusivos, autenticados con X-Bot-Service-Token
 app.include_router(whatsapp.router, prefix="/api/v1/whatsapp", tags=["WhatsApp Bot"])
