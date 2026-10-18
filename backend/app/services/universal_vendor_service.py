@@ -607,6 +607,10 @@ class UniversalVendorService:
         """
         Sincroniza catálogo de productos desde el vendor.
 
+        Actualiza SOLO el costo del vendor (vendor_products.vp_amount y
+        vp_metadata). Nunca modifica el precio de venta (products): ese lo
+        fija el administrador con el reporte diario de márgenes.
+
         Usa operation_type='catalog_sync' en vendor_api_mappings.
         Genérico para cualquier vendor con endpoint de catálogo.
 
@@ -980,23 +984,12 @@ class UniversalVendorService:
                     }
                 )
 
-                await self.db.execute(
-                    text("""
-                        UPDATE products
-                        SET product_base_price      = :new_price,
-                            product_discount_amount = ROUND(:new_price * product_discount_percentage / 100, 2),
-                            product_total_price     = ROUND(:new_price - (:new_price * product_discount_percentage / 100) + product_fee, 2),
-                            last_update_date    = NOW(),
-                            updated_by          = 'catalog_sync'
-                        WHERE product_vendor_code  = :vendor_code
-                          AND product_vendpro_code = :vp_code
-                    """),
-                    {
-                        "new_price": float(new_price_pen),
-                        "vendor_code": vendor_code,
-                        "vp_code": vp_code
-                    }
-                )
+                # El catalog_sync actualiza SOLO el costo del vendor
+                # (vendor_products.vp_amount). El precio de venta
+                # (products.product_*) NO se modifica: lo define el
+                # administrador, revisándolo con el reporte diario de márgenes.
+                # Motivo: los precios de venta pueden estar en otra moneda
+                # (ej. USD fuera de Perú) y pueden haber sido ajustados a mano.
 
                 products_updated += 1
                 status = "ALERTA" if alerta_precio else "ACTUALIZADO"
