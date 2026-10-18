@@ -19,6 +19,8 @@ from decimal import Decimal
 from datetime import datetime
 import logging
 import json
+import secrets
+import string
 
 from app.database import get_db
 from app.models.purchase import Purchase
@@ -37,6 +39,29 @@ from app.rate_limit import limiter, RATE_LIMITS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Alfabeto del sufijo aleatorio de la referencia: A-Z y 0-9.
+_REF_ALPHABET = string.ascii_uppercase + string.digits
+
+
+def _generate_purchase_reference(channel: str) -> str:
+    """
+    Genera la referencia ÚNICA de la compra.
+
+    Formato: REF-{CANAL}-{AAAAMMDDHHMMSS}-{6 alfanuméricos}
+    Ejemplo: REF-WEB-20261018114905-K7Q2XA (29 caracteres para WEB)
+
+    Se genera UNA sola vez por compra y se usa tanto para el vendor
+    (dist_transid en LATCOM, nro_transaccion_referencia en TISI) como para
+    purchases.purchase_reference — así la compra se puede conciliar y
+    extornar con el vendor por referencia.
+
+    Límites respetados: purchases.purchase_reference String(50) y
+    nro_transaccion_referencia de TISI (máx. 50 caracteres).
+    """
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    suffix = ''.join(secrets.choice(_REF_ALPHABET) for _ in range(6))
+    return f"REF-{channel}-{timestamp}-{suffix}"
 
 
 async def _attempt_payment_reversal(request, calculation, payment_ref: str) -> Dict[str, Any]:
@@ -352,6 +377,15 @@ async def create_purchase(
                 )
                 return _map_purchase_to_response(existing_purchase)
 
+        # REFERENCIA ÚNICA DE LA COMPRA — se genera una sola vez y se usa
+        # para el vendor (provisión) y para grabar purchase_reference.
+        # El canal se normaliza: solo alfanuméricos, mayúsculas, máx. 10.
+        channel = ''.join(
+            ch for ch in (purchase_data.channel or "WEB").upper() if ch.isalnum()
+        )[:10] or "WEB"
+        reference = _generate_purchase_reference(channel)
+        logger.info(f"🔖 Referencia de compra: {reference}")
+
         # PASO 2: CALCULAR MONTOS
         user_data = {
             'product_type': purchase_data.product_type,
@@ -470,7 +504,7 @@ async def create_purchase(
                         'purchase_account_number': purchase_data.account_number,
                         'purchase_vendor_amount': float(calculation.purchase_vendor_amount),
                         'purchase_vendor_currency': calculation.purchase_vendor_currency,
-                        'purchase_reference': f"REF-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                        'purchase_reference': reference,
                         'purchase_vendpro_code': vendor_product.vp_code,
                         'purchase_vendpro_operator': vendor_product.vp_operator,
                         'purchase_vendpro_country': vendor_product.vp_country,
@@ -544,9 +578,8 @@ async def create_purchase(
             vendor.last_update_date = datetime.now()
 
         # PASO 7: GRABAR
+        # 'reference' ya fue generada antes de la provisión (misma que conoce el vendor)
         timestamp = datetime.now()
-        channel = (purchase_data.channel or "WEB").upper()
-        reference = f"REF-{channel}-{timestamp.strftime('%Y%m%d%H%M%S')}"
 
         # ✅ OBTENER IP REAL DEL USUARIO
         forwarded = request.headers.get("X-Forwarded-For")
