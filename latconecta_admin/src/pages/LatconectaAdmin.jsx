@@ -22,6 +22,7 @@ import VendorProductsTab from '../components/admin/VendorProductsTab';
 import LatconectaTab from '../components/admin/LatconectaTab';
 import APIMappingsTab from '../components/admin/APIMappingsTab';  // ✅ NUEVO
 import ReclamacionesTab from '../components/admin/ReclamacionesTab';  // ✅ LR-001
+import MarginsTab from '../components/admin/MarginsTab';  // ✅ Reporte de márgenes
 
 
 const LatconectaAdmin = () => {
@@ -491,6 +492,7 @@ const LatconectaAdmin = () => {
     { id: 'services', label: 'Servicios' },
     { id: 'companies', label: 'Compañía' },
     { id: 'products', label: 'Productos' },
+    { id: 'margins', label: '💲 Márgenes' },
     { id: 'sales', label: 'Ventas' },
     { id: 'users', label: 'Usuarios' },
     { id: 'vendors', label: 'Vendors' },
@@ -595,6 +597,9 @@ const LatconectaAdmin = () => {
           setConfirmDialog={setConfirmDialog}
           loadProducts={loadProducts}
         />;
+
+      case 'margins':
+        return <MarginsTab showNotification={showNotification} />;
 
       case 'sales':
         return <SalesTab showNotification={showNotification} />;
