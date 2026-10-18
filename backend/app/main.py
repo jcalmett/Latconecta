@@ -189,6 +189,7 @@ from app.routers import (
     mock_vendors,
     operations_config,
     whatsapp,
+    pricing,
 )
 
 # ✅ LR-001 — Libro de Reclamaciones Virtual
@@ -206,6 +207,9 @@ app.include_router(vendors.router, prefix="/api/v1/vendors", tags=["Vendors"])
 app.include_router(vendor_products.router, prefix="/api/v1/vendor-products", tags=["Vendor Products"])
 app.include_router(latconecta.router, prefix="/api/v1/latconecta", tags=["Latconecta"])
 app.include_router(exchange_rate.router, prefix="/api/v1/exchange-rate", tags=["Exchange Rate"])
+
+# ✅ Reporte diario de márgenes y ajuste de precio base (admin)
+app.include_router(pricing.router, prefix="/api/v1/pricing", tags=["Pricing"])
 
 # ✅ Control centralizado de operaciones
 app.include_router(operations_config.router, prefix="/api/v1/operations", tags=["Operations Config"])

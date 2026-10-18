@@ -6,7 +6,7 @@ Variables de sistema únicamente - Datos de vendors están en BD
 """
 
 from pydantic_settings import BaseSettings
-from typing import Optional, List
+from typing import Optional, List, Dict
 import warnings
 
 
@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     # Token de servicio para el bot de WhatsApp (header X-Bot-Service-Token).
     # Vacío = endpoints /whatsapp/* deshabilitados. Definir en .env.
     BOT_SERVICE_TOKEN: str = ""
+
+    # =========================================================================
+    # REPORTE DE MÁRGENES (admin → pestaña Márgenes)
+    # =========================================================================
+    # Margen mínimo (%) bajo el cual un producto se marca en rojo.
+    # MARGIN_MIN_BY_VENDOR sobrescribe el valor general por vendor.
+    # En .env, MARGIN_MIN_BY_VENDOR se escribe como JSON:
+    #   MARGIN_MIN_BY_VENDOR={"MEGAPUNTO": 5, "LATCOM": 5}
+    MARGIN_MIN_DEFAULT_PCT: float = 5.0
+    MARGIN_MIN_BY_VENDOR: Dict[str, float] = {"MEGAPUNTO": 5.0, "LATCOM": 5.0}
 
     # =========================================================================
     # CONFIGURACIÓN DE CULQI - PASARELA DE PAGOS (Perú)
