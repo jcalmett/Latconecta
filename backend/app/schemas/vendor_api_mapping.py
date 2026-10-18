@@ -290,26 +290,6 @@ class AvailableFieldsResponse(BaseModel):
     response_fields: List[AvailableField]
 
 
-class TestMappingRequest(BaseModel):
-    """
-    Request para testear un mapping
-    """
-    test_data: Dict[str, Any] = Field(..., description="Datos de prueba")
-    use_real_api: bool = Field(default=False, description="Usar API real o mock")
-
-
-class TestMappingResponse(BaseModel):
-    """
-    Response del test de mapping
-    """
-    success: bool
-    request_built: Dict[str, Any]
-    response_received: Optional[Dict[str, Any]] = None
-    response_parsed: Optional[Dict[str, Any]] = None
-    errors: Optional[List[str]] = None
-    execution_time_ms: float
-
-
 # ============================================================================
 # FUNCIONES DE UTILIDAD
 # ============================================================================
