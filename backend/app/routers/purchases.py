@@ -522,7 +522,10 @@ async def create_purchase(
 
                     if prov_result.get('success'):
                         ext = prov_result.get('extracted_data', {})
-                        provision_ref = prov_result.get('provision_ref')
+                        # Los response_mapping mapean al nombre de columna
+                        # 'purchase_provision_ref'; se mantiene 'provision_ref'
+                        # como alternativa por compatibilidad.
+                        provision_ref = ext.get('purchase_provision_ref') or ext.get('provision_ref')
                         vendor_trans_id = ext.get('vendor_trans_id')
                         vendor_provider_trans_id = ext.get('vendor_provider_trans_id')
                         vendor_response_code = ext.get('purchase_vendor_response_code')
