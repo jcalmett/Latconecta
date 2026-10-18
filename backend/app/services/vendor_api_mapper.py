@@ -35,15 +35,6 @@ DANGEROUS_PATTERNS = [
     r'prompt\(',
 ]
 
-# Dominios permitidos para URLs de vendors (hardcoded por seguridad)
-ALLOWED_VENDOR_DOMAINS = [
-    'latcom-fix-production.up.railway.app',
-    'api-hub-qa-in.tisi.com.pe',
-    'api-hub-in.tisi.com.pe',
-    'localhost',
-    '127.0.0.1',
-]
-
 
 class VendorAPIMapper:
     """
