@@ -449,6 +449,21 @@ class UniversalVendorService:
                 "error_message": f"URL de vendor {vendor_code} inválida o insegura"
             }
 
+        # 1.5. Auth bearer sin token en cache (ej. credenciales recién cargadas
+        # desde el admin, o login fallido al arrancar) → login antes de llamar.
+        # Sin esto se enviaría "Authorization: Bearer " vacío, que httpx
+        # rechaza antes de salir, y nunca se llegaría al re-login por 401.
+        if mapping_config.get('auth_type') == 'bearer' and not vendor_info.get('access_token'):
+            logger.warning(f"🔐 [{vendor_code}] Sin token en cache — login antes de la llamada")
+            vendor_info['access_token'] = await self._relogin_vendor(vendor_code)
+            if not vendor_info['access_token']:
+                cb.record_failure()
+                return {
+                    "status": "error",
+                    "error_code": "AUTH_FAILED",
+                    "error_message": f"No se pudo autenticar con el vendor {vendor_code}"
+                }
+
         # 2. Crear mapper
         mapper = VendorAPIMapper(mapping_config)
 
