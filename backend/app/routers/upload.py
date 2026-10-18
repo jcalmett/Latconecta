@@ -130,6 +130,19 @@ async def upload_file(
             detail=f"Categoría inválida. Usar: {', '.join(valid_categories)}"
         )
 
+    # Categorías de catálogo: solo administradores. Cualquier usuario
+    # autenticado puede subir únicamente 'users' (foto de perfil) y 'receipts'.
+    admin_only_categories = ["products", "services", "companies", "countries"]
+    if category in admin_only_categories and current_user.user_role not in ["admin", "superadmin"]:
+        logger.warning(
+            f"Upload denegado: usuario {current_user.user_id} (rol {current_user.user_role}) "
+            f"intentó subir a '{category}'"
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Se requieren permisos de administrador para esta categoría"
+        )
+
     allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"}
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in allowed_extensions:

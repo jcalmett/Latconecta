@@ -27,7 +27,7 @@ from app.models.company import Company
 from app.models.country import Country
 from app.models.service import Service
 from app.schemas.company import CompanyCreate, CompanyUpdate, CompanyResponse
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_admin
 
 router = APIRouter(tags=["Companies"])
 
@@ -181,7 +181,7 @@ async def get_company(
 async def create_company(
     company_data: CompanyCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_admin)
 ):
     """
     Crear una nueva compañía
@@ -239,7 +239,7 @@ async def update_company(
     company_id: int,
     company_data: CompanyUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_admin)
 ):
     """
     Actualizar una compañía existente
@@ -301,17 +301,11 @@ async def update_company(
 async def delete_company(
     company_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_admin)
 ):
     """
-    Eliminar una compañía (solo admins)
+    Eliminar una compañía (solo admin / superadmin — validado por get_current_admin)
     """
-    if current_user.user_role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo administradores pueden eliminar compañías"
-        )
-
     result = await db.execute(
         select(Company).where(Company.company_id == company_id)
     )

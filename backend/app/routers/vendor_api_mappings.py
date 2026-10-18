@@ -26,7 +26,7 @@ from app.schemas.vendor_api_mapping import (
     get_available_response_fields,
     get_available_operation_types
 )
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_user, get_current_admin
 
 router = APIRouter(
     tags=["Vendor API Mappings"],
@@ -339,7 +339,7 @@ async def get_mapping(
 async def create_mapping(
     mapping: VendorApiMappingCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_admin)
 ):
     """
     Crea un nuevo mapping
@@ -418,7 +418,7 @@ async def update_mapping(
     mapping_id: int,
     mapping_update: VendorApiMappingUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_admin)
 ):
     """
     Actualiza un mapping existente
@@ -480,7 +480,7 @@ async def update_mapping(
 async def delete_mapping(
     mapping_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_admin)
 ):
     """
     Elimina un mapping
@@ -676,7 +676,7 @@ async def test_mapping(
 async def toggle_mapping_status(
     mapping_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_admin)
 ):
     """
     Activa o desactiva un mapping (toggle is_active)
