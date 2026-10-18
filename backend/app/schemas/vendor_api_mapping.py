@@ -131,7 +131,7 @@ class VendorApiMappingBase(BaseModel):
             'reversal',       # Revertir transacción
             'confirmation',   # Confirmar transacción
             'cancellation',   # Cancelar
-            'balance_check',  # Verificar saldo
+            'balance',        # Consultar saldo del vendor (sync-balance / test-connection)
             'catalog_sync'    # Sincronización de catálogo
         ]
 
@@ -256,9 +256,9 @@ def get_available_operation_types() -> List[OperationType]:
             is_critical=False
         ),
         OperationType(
-            code="balance_check",
-            name="Verificación de Saldo",
-            description="Verificar saldo disponible del vendor",
+            code="balance",
+            name="Consulta de Saldo",
+            description="Consultar saldo del vendor (usado por sync-balance y test-connection)",
             typical_order=0,  # Se ejecuta bajo demanda
             is_critical=False
         )
