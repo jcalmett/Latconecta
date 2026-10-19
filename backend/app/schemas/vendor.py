@@ -105,6 +105,12 @@ class VendorPublic(VendorBase):
     has_usd_balance_info: bool = Field(False, description="Si tiene info de balance USD")
     has_local_balance_info: bool = Field(False, description="Si tiene info de balance local")
 
+    # Sincronización de catálogo (no sensible — necesario para editar sin pisar valores)
+    auto_sync_products: Optional[bool] = None
+    sync_interval_hours: Optional[int] = None
+    sync_time: Optional[str] = None
+    last_sync_date: Optional[datetime] = None
+
     # Auditoría
     created_at: datetime
     last_update_date: datetime

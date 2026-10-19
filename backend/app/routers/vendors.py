@@ -119,6 +119,13 @@ async def create_vendor(
     return vendor
 
 
+# Campos de credenciales que no se sobrescriben con valores vacíos al editar
+_CREDENTIAL_FIELDS = (
+    'vendor_username', 'vendor_password', 'vendor_api_key', 'vendor_user_uid',
+    'vendor_access_token', 'vendor_token_expiry',
+)
+
+
 @router.put("/{vendor_code}", response_model=VendorPublic)
 async def update_vendor(
     vendor_code: str,
@@ -143,6 +150,13 @@ async def update_vendor(
         )
 
     update_data = vendor_data.dict(exclude_unset=True)
+
+    # Credenciales: la API nunca las devuelve (VendorPublic), por lo que el
+    # formulario del admin las envía vacías al editar. Vacío = "no cambiar".
+    for field in _CREDENTIAL_FIELDS:
+        if field in update_data and update_data[field] in (None, ''):
+            update_data.pop(field)
+
     for field, value in update_data.items():
         setattr(vendor, field, value)
 

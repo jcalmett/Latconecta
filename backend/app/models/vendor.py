@@ -89,6 +89,7 @@ class Vendor(Base):
     auto_sync_products = Column(Boolean, default=False)
     sync_interval_hours = Column(Integer, default=24)
     last_sync_date = Column(TIMESTAMP)
+    sync_time = Column(String(5), default='06:00')  # Hora diaria de catalog_sync (HH:MM)
 
     # =========================================================================
     # AUDITORÍA

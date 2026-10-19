@@ -210,6 +210,12 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
       };
 
       if (vendor) {
+        // Credenciales en blanco = mantener las actuales (la API no las devuelve
+        // por seguridad, así que al editar el formulario las muestra vacías).
+        ['vendor_username', 'vendor_password', 'vendor_api_key', 'vendor_user_uid',
+         'vendor_access_token', 'vendor_token_expiry'].forEach((field) => {
+          if (submitData[field] === null || submitData[field] === '') delete submitData[field];
+        });
         await vendorsService.update(vendor.vendor_code, submitData);
         alert('✅ Vendor actualizado correctamente');
       } else {
@@ -445,6 +451,11 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
             <h3 className="text-base font-semibold text-gray-900 mb-2 pb-1 border-b border-gray-200">
               🔐 Credenciales y URLs
             </h3>
+            {vendor && (
+              <p className="text-xs text-gray-500 mb-2">
+                Por seguridad las credenciales actuales no se muestran. Deja un campo en blanco para mantener su valor; escribe uno nuevo solo para cambiarlo.
+              </p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Usuario</label>
@@ -453,7 +464,7 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
                   name="vendor_username"
                   value={formData.vendor_username}
                   onChange={handleChange}
-                  placeholder="api_user"
+                  placeholder={vendor ? "Dejar en blanco para mantener" : "api_user"}
                   className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -466,7 +477,7 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
                     name="vendor_password"
                     value={formData.vendor_password}
                     onChange={handleChange}
-                    placeholder="••••••••"
+                    placeholder={vendor ? "Dejar en blanco para mantener" : "••••••••"}
                     className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-8"
                   />
                   <button
@@ -487,7 +498,7 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
                     name="vendor_api_key"
                     value={formData.vendor_api_key}
                     onChange={handleChange}
-                    placeholder="sk_live_••••"
+                    placeholder={vendor ? "Dejar en blanco para mantener" : "sk_live_••••"}
                     className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-8"
                   />
                   <button
@@ -507,7 +518,7 @@ const VendorForm = ({ vendor, onClose, onSuccess = () => {} }) => {
                   name="vendor_user_uid"
                   value={formData.vendor_user_uid}
                   onChange={handleChange}
-                  placeholder="uid_123456"
+                  placeholder={vendor ? "Dejar en blanco para mantener" : "uid_123456"}
                   className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
